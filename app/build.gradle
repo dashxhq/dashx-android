@@ -3,22 +3,15 @@ apply plugin: 'kotlin-android'
 apply plugin: 'com.apollographql.apollo'
 
 android {
-    compileSdk 31
+    compileSdkVersion 31
 
     defaultConfig {
-        minSdk 21
-        targetSdk 31
+        minSdkVersion 21
+        targetSdkVersion 31
         versionCode 1
         versionName "1.0"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
-    }
-
-    buildTypes {
-        release {
-            minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-        }
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_1_8
