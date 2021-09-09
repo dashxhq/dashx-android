@@ -7,9 +7,13 @@ import com.apollographql.apollo.api.Input
 import com.apollographql.apollo.exception.ApolloException
 import com.apollographql.apollo.ApolloCall
 import com.apollographql.apollo.ApolloClient
+import com.dashx.FetchContentQuery
 import com.dashx.IdentifyAccountMutation
+import com.dashx.SearchContentQuery
 import com.dashx.TrackEventMutation
+import com.dashx.type.FetchContentInput
 import com.dashx.type.IdentifyAccountInput
+import com.dashx.type.SearchContentInput
 import com.dashx.type.TrackEventInput
 import okhttp3.*
 import java.util.UUID
@@ -100,7 +104,7 @@ class DashXClient private constructor() {
         }
     }
 
-    fun identify(uid: String?, options: HashMap<String, String>?) {
+    fun identify(uid: String?, options: IndentifyOptions?) {
         if (uid != null) {
             this.uid = uid
             DashXLog.d(tag, "Set Uid: $uid")
@@ -112,15 +116,14 @@ class DashXClient private constructor() {
         }
 
         val identifyAccountInput = IdentifyAccountInput(
-            "environment Id",
             Input.fromNullable(accountType),
             Input.fromNullable(uid),
             Input.fromNullable(anonymousUid),
-            Input.fromNullable(options["email"]),
-            Input.fromNullable(options["phone"]),
-            Input.fromNullable(options["name"]),
-            Input.fromNullable(options["firstName"]),
-            Input.fromNullable(options["lastName"])
+            Input.fromNullable(options?.email),
+            Input.fromNullable(options?.phone),
+            Input.fromNullable(options?.name),
+            Input.fromNullable(options?.firstName),
+            Input.fromNullable(options?.lastName)
         )
         val identifyAccountMutation = IdentifyAccountMutation(identifyAccountInput)
 
@@ -142,6 +145,73 @@ class DashXClient private constructor() {
     fun reset() {
         uid = null
         generateAnonymousUid(regenerate = true)
+    }
+
+    fun fetchContent(urn: String, options: FetchContentOptions, callback: (result: Any) -> Unit) {
+        if (!urn.contains('/')) {
+            throw Exception("URN must be of form: {contentType}/{content}")
+        }
+
+        val urnArray = urn.split('/')
+        val content = urnArray[1]
+        val contentType = urnArray[0]
+
+        val fetchContentInput = FetchContentInput(
+            contentType,
+            content,
+            Input.fromNullable(options.preview),
+            Input.fromNullable(options.language),
+            Input.fromNullable(options.fields),
+            Input.fromNullable(options.include),
+            Input.fromNullable(options.exclude)
+        )
+
+        val fetchContentQuery = FetchContentQuery(fetchContentInput)
+
+        apolloClient.query(fetchContentQuery).enqueue(object : ApolloCall.Callback<FetchContentQuery.Data>() {
+            override fun onFailure(e: ApolloException) {
+                DashXLog.d(tag, "Could not get content for: $urn")
+                e.printStackTrace()
+            }
+
+            override fun onResponse(response: com.apollographql.apollo.api.Response<FetchContentQuery.Data>) {
+                val content = response.data?.fetchContent
+                if (content != null) {
+                    callback(content)
+                }
+                DashXLog.d(tag, "Got content: $content")
+            }
+        })
+    }
+
+    fun searchContent(contentType: String, options: SearchContentOptions, callback: (result: List<Any>) -> Unit) {
+        val searchContentInput = SearchContentInput(
+            contentType,
+            options.returnType ?: "all",
+            Input.fromNullable(options.filter),
+            Input.fromNullable(options.order),
+            Input.fromNullable(options.limit),
+            Input.fromNullable(options.preview),
+            Input.fromNullable(options.language),
+            Input.fromNullable(options.fields),
+            Input.fromNullable(options.include),
+            Input.fromNullable(options.exclude)
+        )
+
+        val searchContentQuery = SearchContentQuery(searchContentInput)
+
+        apolloClient.query(searchContentQuery).enqueue(object : ApolloCall.Callback<SearchContentQuery.Data>() {
+            override fun onFailure(e: ApolloException) {
+                DashXLog.d(tag, "Could not get content for: $contentType")
+                e.printStackTrace()
+            }
+
+            override fun onResponse(response: com.apollographql.apollo.api.Response<SearchContentQuery.Data>) {
+                val content = response.data?.searchContent
+                callback(content ?: listOf())
+                DashXLog.d(tag, "Got content: $content")
+            }
+        })
     }
 
     fun track(event: String, data: HashMap<String, String>?) {
