@@ -17,7 +17,7 @@ class DashXExceptionHandler(private val mainExceptionHandler: Thread.UncaughtExc
     }
 
     override fun uncaughtException(thread: Thread?, exception: Throwable?) {
-//        dashXClient.trackAppCrashed(exception)
+        dashXClient.trackAppCrashed(exception)
         mainExceptionHandler.uncaughtException(thread, exception)
     }
 }
