@@ -1,6 +1,10 @@
 apply plugin: 'com.android.library'
 apply plugin: 'kotlin-android'
 apply plugin: 'com.apollographql.apollo'
+apply plugin: 'maven-publish'
+
+group = 'com.github.dashxhq'
+version = '0.1'
 
 android {
     compileSdk 31
@@ -47,4 +51,18 @@ dependencies {
 apollo {
     // instruct the compiler to generate Kotlin models
     generateKotlinModels.set(true)
+}
+
+afterEvaluate {
+    publishing {
+        publications {
+            // Creates a Maven publication called "release".
+            release(MavenPublication) {
+                from components.release
+                groupId = 'com.github.dashxhq'
+                artifactId = 'dashx-android'
+                version = '1.0'
+            }
+        }
+    }
 }
