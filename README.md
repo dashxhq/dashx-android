@@ -2,6 +2,41 @@
 
 _DashX Android SDK_
 
+## Installation
+
+- Add jitpack repository in your `settings.gradle`
+
+```groovy
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+        maven { url "https://jitpack.io" } // <- This
+    }
+}
+```
+
+- If you are using `gradle < 7` add this to your global `build.gradle`
+
+```groovy
+allprojects {
+    repositories {
+        // ...
+        maven { url 'https://jitpack.io' }
+    }
+}
+```
+
+- Add `dashx-android` to your app dependencies:
+
+```groovy
+dependencies {
+    implementation 'com.github.dashxhq:dashx-android:main-SNAPSHOT'
+    // ...
+}
+```
+
 ## Usage
 
 ```kotlin
