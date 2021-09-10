@@ -19,7 +19,13 @@ import okhttp3.*
 import java.util.UUID
 
 
-class DashXClient private constructor() {
+class DashXClient(
+    publicKey: String,
+    baseURI: String = "https://api.dashx.com/graphql",
+    accountType: String? = null,
+    targetEnvironment: String? = null,
+    targetInstallation: String? = null
+) {
     private val tag = DashXClient::class.java.simpleName
 
     // Setup variables
@@ -37,53 +43,48 @@ class DashXClient private constructor() {
 
     var applicationContext: Context? = null
 
+    init {
+        this.baseURI = baseURI
+        this.publicKey = publicKey
+        this.targetEnvironment = targetEnvironment
+        this.targetInstallation = targetInstallation
+
+        accountType?.let { this.accountType = it }
+
+        createApolloClient()
+    }
+
     private var apolloClient = getApolloClient()
 
-    fun setBaseURI(baseURI: String) {
-        this.baseURI = baseURI
-    }
-
-    fun createApolloClient() {
+    private fun createApolloClient() {
         apolloClient = getApolloClient()
-    }
-
-    fun setTargetEnvironment(targetEnvironment: String) {
-        this.targetEnvironment = targetEnvironment
-    }
-
-    fun setTargetInstallation(targetInstallation: String) {
-        this.targetEnvironment = targetInstallation
     }
 
     fun setAccountType(accountType: String) {
         this.accountType = accountType
     }
 
-    fun setPublicKey(publicKey: String) {
-        this.publicKey = publicKey
-    }
-
     private fun getApolloClient(): ApolloClient {
         return ApolloClient.builder()
             .serverUrl(baseURI)
             .okHttpClient(OkHttpClient.Builder()
-                .addInterceptor {
-                    val requestBuilder = it.request().newBuilder()
+                .addInterceptor { chain ->
+                    val requestBuilder = chain.request().newBuilder()
                         .addHeader("X-Public-Key", publicKey!!)
 
-                    if (targetEnvironment != null) {
-                        requestBuilder.addHeader("X-Target-Environment", targetEnvironment!!)
+                    targetEnvironment?.let {
+                        requestBuilder.addHeader("X-Target-Environment", it)
                     }
 
-                    if (targetInstallation != null) {
-                        requestBuilder.addHeader("X-Target-Installation", targetInstallation!!)
+                    targetInstallation?.let {
+                        requestBuilder.addHeader("X-Target-Installation", it)
                     }
 
                     if (identityToken != null) {
                         requestBuilder.addHeader("X-Identity-Token", identityToken!!)
                     }
 
-                    return@addInterceptor it.proceed(requestBuilder.build())
+                    return@addInterceptor chain.proceed(requestBuilder.build())
                 }
                 .build())
             .build()
@@ -104,7 +105,7 @@ class DashXClient private constructor() {
         }
     }
 
-    fun identify(uid: String?, options: IndentifyOptions?) {
+    fun identify(uid: String?, options: HashMap<String, String>? = hashMapOf()) {
         if (uid != null) {
             this.uid = uid
             DashXLog.d(tag, "Set Uid: $uid")
@@ -119,11 +120,11 @@ class DashXClient private constructor() {
             Input.fromNullable(accountType),
             Input.fromNullable(uid),
             Input.fromNullable(anonymousUid),
-            Input.fromNullable(options?.email),
-            Input.fromNullable(options?.phone),
-            Input.fromNullable(options?.name),
-            Input.fromNullable(options?.firstName),
-            Input.fromNullable(options?.lastName)
+            Input.fromNullable(options["email"]),
+            Input.fromNullable(options["phone"]),
+            Input.fromNullable(options["name"]),
+            Input.fromNullable(options["firstName"]),
+            Input.fromNullable(options["lastName"])
         )
         val identifyAccountMutation = IdentifyAccountMutation(identifyAccountInput)
 
@@ -147,7 +148,16 @@ class DashXClient private constructor() {
         generateAnonymousUid(regenerate = true)
     }
 
-    fun fetchContent(urn: String, options: FetchContentOptions, callback: (result: Any) -> Unit) {
+    fun fetchContent(
+        urn: String,
+        preview: Boolean = true,
+        language: String? = null,
+        fields: List<String>? = null,
+        include: List<String>? = null,
+        exclude: List<String>? = null,
+        onSuccess: (result: Any) -> Unit,
+        onError: (error: String) -> Unit
+    ) {
         if (!urn.contains('/')) {
             throw Exception("URN must be of form: {contentType}/{content}")
         }
@@ -159,62 +169,79 @@ class DashXClient private constructor() {
         val fetchContentInput = FetchContentInput(
             contentType,
             content,
-            Input.fromNullable(options.preview),
-            Input.fromNullable(options.language),
-            Input.fromNullable(options.fields),
-            Input.fromNullable(options.include),
-            Input.fromNullable(options.exclude)
+            Input.fromNullable(preview),
+            Input.fromNullable(language),
+            Input.fromNullable(fields),
+            Input.fromNullable(include),
+            Input.fromNullable(exclude)
         )
 
         val fetchContentQuery = FetchContentQuery(fetchContentInput)
 
-        apolloClient.query(fetchContentQuery).enqueue(object : ApolloCall.Callback<FetchContentQuery.Data>() {
-            override fun onFailure(e: ApolloException) {
-                DashXLog.d(tag, "Could not get content for: $urn")
-                e.printStackTrace()
-            }
-
-            override fun onResponse(response: com.apollographql.apollo.api.Response<FetchContentQuery.Data>) {
-                val content = response.data?.fetchContent
-                if (content != null) {
-                    callback(content)
+        apolloClient.query(fetchContentQuery)
+            .enqueue(object : ApolloCall.Callback<FetchContentQuery.Data>() {
+                override fun onFailure(e: ApolloException) {
+                    DashXLog.d(tag, "Could not get content for: $urn")
+                    onError(e.message ?: "")
+                    e.printStackTrace()
                 }
-                DashXLog.d(tag, "Got content: $content")
-            }
-        })
+
+                override fun onResponse(response: com.apollographql.apollo.api.Response<FetchContentQuery.Data>) {
+                    val content = response.data?.fetchContent
+                    if (content != null) {
+                        onSuccess(content)
+                    }
+                    DashXLog.d(tag, "Got content: $content")
+                }
+            })
     }
 
-    fun searchContent(contentType: String, options: SearchContentOptions, callback: (result: List<Any>) -> Unit) {
+    fun searchContent(
+        contentType: String,
+        returnType: String = "all",
+        filter: Any? = null,
+        order: Any? = null,
+        limit: Int? = null,
+        preview: Boolean = true,
+        language: String? = null,
+        fields: List<String>? = null,
+        include: List<String>? = null,
+        exclude: List<String>? = null,
+        onSuccess: (result: List<Any>) -> Unit,
+        onError: (error: String) -> Unit
+    ) {
         val searchContentInput = SearchContentInput(
             contentType,
-            options.returnType ?: "all",
-            Input.fromNullable(options.filter),
-            Input.fromNullable(options.order),
-            Input.fromNullable(options.limit),
-            Input.fromNullable(options.preview),
-            Input.fromNullable(options.language),
-            Input.fromNullable(options.fields),
-            Input.fromNullable(options.include),
-            Input.fromNullable(options.exclude)
+            returnType,
+            Input.fromNullable(filter),
+            Input.fromNullable(order),
+            Input.fromNullable(limit),
+            Input.fromNullable(preview),
+            Input.fromNullable(language),
+            Input.fromNullable(fields),
+            Input.fromNullable(include),
+            Input.fromNullable(exclude)
         )
 
         val searchContentQuery = SearchContentQuery(searchContentInput)
 
-        apolloClient.query(searchContentQuery).enqueue(object : ApolloCall.Callback<SearchContentQuery.Data>() {
-            override fun onFailure(e: ApolloException) {
-                DashXLog.d(tag, "Could not get content for: $contentType")
-                e.printStackTrace()
-            }
+        apolloClient.query(searchContentQuery)
+            .enqueue(object : ApolloCall.Callback<SearchContentQuery.Data>() {
+                override fun onFailure(e: ApolloException) {
+                    DashXLog.d(tag, "Could not get content for: $contentType")
+                    e.printStackTrace()
+                    onError(e.message ?: "")
+                }
 
-            override fun onResponse(response: com.apollographql.apollo.api.Response<SearchContentQuery.Data>) {
-                val content = response.data?.searchContent
-                callback(content ?: listOf())
-                DashXLog.d(tag, "Got content: $content")
-            }
-        })
+                override fun onResponse(response: com.apollographql.apollo.api.Response<SearchContentQuery.Data>) {
+                    val content = response.data?.searchContent
+                    onSuccess(content ?: listOf())
+                    DashXLog.d(tag, "Got content: $content")
+                }
+            })
     }
 
-    fun track(event: String, data: HashMap<String, String>?) {
+    fun track(event: String, data: HashMap<String, String>? = hashMapOf()) {
         if (accountType == null) {
             DashXLog.d(tag, "Account type not set. Aborting request")
             return
@@ -300,11 +327,5 @@ class DashXClient private constructor() {
     fun screen(screenName: String, properties: HashMap<String, String>?) {
         properties?.set("name", screenName)
         track(INTERNAL_EVENT_APP_SCREEN_VIEWED, properties)
-    }
-
-    companion object {
-        val instance: DashXClient by lazy {
-            DashXClient()
-        }
     }
 }
