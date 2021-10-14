@@ -7,21 +7,20 @@ import com.apollographql.apollo.api.Input
 import com.apollographql.apollo.exception.ApolloException
 import com.apollographql.apollo.ApolloCall
 import com.apollographql.apollo.ApolloClient
-import com.dashx.FetchContentQuery
-import com.dashx.IdentifyAccountMutation
-import com.dashx.SearchContentQuery
-import com.dashx.TrackEventMutation
-import com.dashx.type.FetchContentInput
-import com.dashx.type.IdentifyAccountInput
-import com.dashx.type.SearchContentInput
-import com.dashx.type.TrackEventInput
+import com.apollographql.apollo.api.CustomTypeAdapter
+import com.apollographql.apollo.api.CustomTypeValue
+import com.dashx.*
+import com.dashx.type.*
+import com.google.gson.Gson
+import com.google.gson.JsonElement
+import com.google.gson.JsonObject
 import okhttp3.*
 import java.util.UUID
 
 
 class DashXClient(
     publicKey: String,
-    baseURI: String = "https://api.dashx.com/graphql",
+    baseURI: String? = null,
     accountType: String? = null,
     targetEnvironment: String? = null,
     targetInstallation: String? = null
@@ -29,7 +28,7 @@ class DashXClient(
     private val tag = DashXClient::class.java.simpleName
 
     // Setup variables
-    private var baseURI: String = "https://api.dashx.com/graphql"
+    private var baseURI: String? = null
     private var publicKey: String? = null
     private var targetEnvironment: String? = null
     private var targetInstallation: String? = null
@@ -64,9 +63,34 @@ class DashXClient(
         this.accountType = accountType
     }
 
+    fun setIdentityToken(identityToken: String) {
+        this.identityToken = identityToken
+        createApolloClient()
+    }
+
+    fun setDeviceToken(deviceToken: String) {
+        this.deviceToken = deviceToken
+        subscribe()
+    }
+
     private fun getApolloClient(): ApolloClient {
+        val gsonCustomTypeAdapter = object : CustomTypeAdapter<JsonElement> {
+            override fun decode(value: CustomTypeValue<*>): JsonElement {
+                return try {
+                    Gson().toJsonTree(value.value)
+                } catch (e: java.lang.Exception) {
+                    throw RuntimeException(e)
+                }
+            }
+
+            override fun encode(value: JsonElement): CustomTypeValue<*> {
+                return CustomTypeValue.GraphQLJsonObject(Gson().fromJson(value, Map::class.java) as Map<String, Any>)
+            }
+        }
+
         return ApolloClient.builder()
-            .serverUrl(baseURI)
+            .serverUrl(baseURI ?: "https://api.dashx.com/graphql")
+            .addCustomTypeAdapter(CustomType.JSON, gsonCustomTypeAdapter)
             .okHttpClient(OkHttpClient.Builder()
                 .addInterceptor { chain ->
                     val requestBuilder = chain.request().newBuilder()
@@ -113,7 +137,8 @@ class DashXClient(
         }
 
         if (options == null) {
-            throw Exception("Cannot be called with null, either pass uid: string or options: object")
+            DashXLog.d(tag, "Cannot be called with null, either pass uid: string or options: object")
+            return
         }
 
         val identifyAccountInput = IdentifyAccountInput(
@@ -150,12 +175,12 @@ class DashXClient(
 
     fun fetchContent(
         urn: String,
-        preview: Boolean = true,
+        preview: Boolean? = true,
         language: String? = null,
         fields: List<String>? = null,
         include: List<String>? = null,
         exclude: List<String>? = null,
-        onSuccess: (result: Any) -> Unit,
+        onSuccess: (result: Map<*, *>) -> Unit,
         onError: (error: String) -> Unit
     ) {
         if (!urn.contains('/')) {
@@ -188,9 +213,18 @@ class DashXClient(
 
                 override fun onResponse(response: com.apollographql.apollo.api.Response<FetchContentQuery.Data>) {
                     val content = response.data?.fetchContent
-                    if (content != null) {
-                        onSuccess(content)
+                    if (!response.errors.isNullOrEmpty()) {
+                        val errors = response.errors?.map { e -> e.message }.toString()
+                        DashXLog.d(tag, errors)
+                        onError(errors)
+                        return
                     }
+
+                    if (content != null) {
+                        val result = Gson().fromJson(content, Map::class.java)
+                        onSuccess(result)
+                    }
+
                     DashXLog.d(tag, "Got content: $content")
                 }
             })
@@ -199,15 +233,15 @@ class DashXClient(
     fun searchContent(
         contentType: String,
         returnType: String = "all",
-        filter: Any? = null,
-        order: Any? = null,
+        filter: JsonObject? = null,
+        order: JsonObject? = null,
         limit: Int? = null,
-        preview: Boolean = true,
+        preview: Boolean? = true,
         language: String? = null,
         fields: List<String>? = null,
         include: List<String>? = null,
         exclude: List<String>? = null,
-        onSuccess: (result: List<Any>) -> Unit,
+        onSuccess: (result: List<Map<*, *>>) -> Unit,
         onError: (error: String) -> Unit
     ) {
         val searchContentInput = SearchContentInput(
@@ -235,7 +269,15 @@ class DashXClient(
 
                 override fun onResponse(response: com.apollographql.apollo.api.Response<SearchContentQuery.Data>) {
                     val content = response.data?.searchContent
-                    onSuccess(content ?: listOf())
+                    if (!response.errors.isNullOrEmpty()) {
+                        val errors = response.errors?.map { e -> e.message }.toString()
+                        DashXLog.d(tag, errors)
+                        onError(errors)
+                        return
+                    }
+
+                    val result = content ?: listOf()
+                    onSuccess(result.map { Gson().fromJson(it, Map::class.java) })
                     DashXLog.d(tag, "Got content: $content")
                 }
             })
@@ -247,12 +289,14 @@ class DashXClient(
             return
         }
 
+        val jsonData = Gson().toJsonTree(data)
+
         val trackEventInput = TrackEventInput(
             accountType!!,
             event,
             Input.fromNullable(uid),
             Input.fromNullable(anonymousUid),
-            Input.fromNullable(data)
+            Input.fromNullable(jsonData)
         )
         val trackEventMutation = TrackEventMutation(trackEventInput)
 
@@ -260,7 +304,7 @@ class DashXClient(
             .mutate(trackEventMutation)
             .enqueue(object : ApolloCall.Callback<TrackEventMutation.Data>() {
                 override fun onFailure(e: ApolloException) {
-                    DashXLog.d(tag, "Could not track: $event $data")
+                    DashXLog.d(tag, e.message)
                     e.printStackTrace()
                 }
 
@@ -328,4 +372,35 @@ class DashXClient(
         properties?.set("name", screenName)
         track(INTERNAL_EVENT_APP_SCREEN_VIEWED, properties)
     }
+
+    private fun subscribe() {
+        if (deviceToken == null || identityToken == null) {
+            DashXLog.d(tag,
+                "Subscribe called with deviceToken: $deviceToken and identityToken: $identityToken")
+            return
+        }
+
+        val subscribeContactInput = SubscribeContactInput(
+            uid!!,
+            Input.fromNullable("Android"),
+            ContactKind.ANDROID,
+            deviceToken!!
+        )
+        val subscribeContactMutation = SubscribeContactMutation(subscribeContactInput)
+
+        apolloClient
+            .mutate(subscribeContactMutation)
+            .enqueue(object : ApolloCall.Callback<SubscribeContactMutation.Data>() {
+                override fun onFailure(e: ApolloException) {
+                    DashXLog.d(tag, e.message)
+                    e.printStackTrace()
+                }
+
+                override fun onResponse(response: com.apollographql.apollo.api.Response<SubscribeContactMutation.Data>) {
+                    val subscribeContactResponse = response.data?.subscribeContact
+                    DashXLog.d(tag, "Subscribed: $deviceToken, $subscribeContactResponse")
+                }
+            })
+    }
+
 }
