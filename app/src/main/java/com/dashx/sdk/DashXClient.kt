@@ -180,7 +180,7 @@ class DashXClient(
         fields: List<String>? = null,
         include: List<String>? = null,
         exclude: List<String>? = null,
-        onSuccess: (result: Map<*, *>) -> Unit,
+        onSuccess: (result: JsonObject) -> Unit,
         onError: (error: String) -> Unit
     ) {
         if (!urn.contains('/')) {
@@ -221,8 +221,7 @@ class DashXClient(
                     }
 
                     if (content != null) {
-                        val result = Gson().fromJson(content, Map::class.java)
-                        onSuccess(result)
+                        onSuccess(content.asJsonObject)
                     }
 
                     DashXLog.d(tag, "Got content: $content")
@@ -241,7 +240,7 @@ class DashXClient(
         fields: List<String>? = null,
         include: List<String>? = null,
         exclude: List<String>? = null,
-        onSuccess: (result: List<Map<*, *>>) -> Unit,
+        onSuccess: (result: List<JsonObject>) -> Unit,
         onError: (error: String) -> Unit
     ) {
         val searchContentInput = SearchContentInput(
@@ -277,7 +276,7 @@ class DashXClient(
                     }
 
                     val result = content ?: listOf()
-                    onSuccess(result.map { Gson().fromJson(it, Map::class.java) })
+                    onSuccess(result.map { it.asJsonObject })
                     DashXLog.d(tag, "Got content: $content")
                 }
             })
