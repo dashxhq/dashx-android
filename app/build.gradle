@@ -35,6 +35,7 @@ dependencies {
 
     implementation "com.apollographql.apollo:apollo-runtime:$apollo_version"
     implementation "com.apollographql.apollo:apollo-coroutines-support:$apollo_version"
+    implementation "com.apollographql.apollo:apollo-http-cache:$apollo_version"
 
     compileOnly 'com.google.firebase:firebase-core:17.2.1'
     compileOnly 'com.google.firebase:firebase-messaging:20.0.1'
