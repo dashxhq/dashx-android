@@ -3,31 +3,23 @@ package com.dashx.sdk
 import android.content.Context
 import android.content.SharedPreferences
 import android.os.Build
-import com.apollographql.apollo.api.Input
-import com.apollographql.apollo.exception.ApolloException
 import com.apollographql.apollo.ApolloCall
 import com.apollographql.apollo.ApolloClient
 import com.apollographql.apollo.api.CustomTypeAdapter
 import com.apollographql.apollo.api.CustomTypeValue
+import com.apollographql.apollo.api.Input
+import com.apollographql.apollo.api.cache.http.HttpCachePolicy
+import com.apollographql.apollo.cache.http.ApolloHttpCache
+import com.apollographql.apollo.cache.http.DiskLruHttpCacheStore
+import com.apollographql.apollo.exception.ApolloException
 import com.dashx.*
 import com.dashx.type.*
 import com.google.gson.Gson
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
-import com.apollographql.apollo.api.cache.http.HttpCachePolicy
-import com.apollographql.apollo.cache.http.ApolloHttpCache
-import com.apollographql.apollo.cache.http.DiskLruHttpCacheStore
-import com.dashx.FetchContentQuery
-import com.dashx.IdentifyAccountMutation
-import com.dashx.SearchContentQuery
-import com.dashx.TrackEventMutation
-import com.dashx.type.FetchContentInput
-import com.dashx.type.IdentifyAccountInput
-import com.dashx.type.SearchContentInput
-import com.dashx.type.TrackEventInput
 import okhttp3.*
 import java.io.File
-import java.util.UUID
+import java.util.*
 
 
 class DashXClient(
