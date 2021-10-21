@@ -7,6 +7,7 @@ import com.apollographql.apollo.api.Input
 import com.apollographql.apollo.exception.ApolloException
 import com.apollographql.apollo.ApolloCall
 import com.apollographql.apollo.ApolloClient
+import com.apollographql.apollo.api.cache.http.HttpCachePolicy
 import com.apollographql.apollo.cache.http.ApolloHttpCache
 import com.apollographql.apollo.cache.http.DiskLruHttpCacheStore
 import com.dashx.FetchContentQuery
@@ -77,6 +78,7 @@ class DashXClient(
         return ApolloClient.builder()
             .serverUrl(baseURI)
             .httpCache(ApolloHttpCache(cacheStore))
+            .defaultHttpCachePolicy(HttpCachePolicy.CACHE_FIRST)
             .okHttpClient(OkHttpClient.Builder()
                 .addInterceptor { chain ->
                     val requestBuilder = chain.request().newBuilder()
