@@ -7,6 +7,8 @@ import com.apollographql.apollo.api.Input
 import com.apollographql.apollo.exception.ApolloException
 import com.apollographql.apollo.ApolloCall
 import com.apollographql.apollo.ApolloClient
+import com.apollographql.apollo.cache.http.ApolloHttpCache
+import com.apollographql.apollo.cache.http.DiskLruHttpCacheStore
 import com.dashx.FetchContentQuery
 import com.dashx.IdentifyAccountMutation
 import com.dashx.SearchContentQuery
@@ -16,10 +18,12 @@ import com.dashx.type.IdentifyAccountInput
 import com.dashx.type.SearchContentInput
 import com.dashx.type.TrackEventInput
 import okhttp3.*
+import java.io.File
 import java.util.UUID
 
 
 class DashXClient(
+    context: Context,
     publicKey: String,
     baseURI: String = "https://api.dashx.com/graphql",
     accountType: String? = null,
@@ -41,13 +45,14 @@ class DashXClient(
     private var identityToken: String? = null
     private var accountType: String? = null
 
-    var applicationContext: Context? = null
+    private var context: Context? = null
 
     init {
         this.baseURI = baseURI
         this.publicKey = publicKey
         this.targetEnvironment = targetEnvironment
         this.targetInstallation = targetInstallation
+        this.context = context
 
         accountType?.let { this.accountType = it }
 
@@ -65,8 +70,13 @@ class DashXClient(
     }
 
     private fun getApolloClient(): ApolloClient {
+        val file = File(context?.cacheDir, "dashXCache")
+        val size: Long = 5 * 1024 * 1024
+        val cacheStore = DiskLruHttpCacheStore(file, size)
+
         return ApolloClient.builder()
             .serverUrl(baseURI)
+            .httpCache(ApolloHttpCache(cacheStore))
             .okHttpClient(OkHttpClient.Builder()
                 .addInterceptor { chain ->
                     val requestBuilder = chain.request().newBuilder()
@@ -92,7 +102,7 @@ class DashXClient(
 
     fun generateAnonymousUid(regenerate: Boolean = false) {
         val dashXSharedPreferences: SharedPreferences =
-            getDashXSharedPreferences(applicationContext!!)
+            getDashXSharedPreferences(context!!)
         val anonymousUid =
             dashXSharedPreferences.getString(SHARED_PREFERENCES_KEY_ANONYMOUS_UID, null)
         if (!regenerate && anonymousUid != null) {
@@ -272,7 +282,7 @@ class DashXClient(
     }
 
     fun trackAppStarted(fromBackground: Boolean = false) {
-        val context = applicationContext ?: return
+        val context = context ?: return
 
         val packageInfo = getPackageInfo(context)
         val currentBuild = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
