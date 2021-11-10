@@ -293,6 +293,84 @@ class DashXClient(
             })
     }
 
+    fun fetchCart(
+        onSuccess: (result: Map<String, Any>) -> Unit,
+        onError: (error: String) -> Unit
+    ) {
+        val fetchCartInput = FetchCartInput(
+            Input.fromNullable(accountType),
+            Input.fromNullable(uid),
+            Input.fromNullable(anonymousUid),
+        )
+        val fetchCartQuery = FetchCartQuery(fetchCartInput)
+
+        apolloClient
+            .query(fetchCartQuery)
+            .enqueue(object : ApolloCall.Callback<FetchCartQuery.Data>() {
+                override fun onFailure(e: ApolloException) {
+                    DashXLog.d(tag, e.message)
+                    e.printStackTrace()
+                }
+
+                override fun onResponse(response: com.apollographql.apollo.api.Response<FetchCartQuery.Data>) {
+                    val fetchCartResponse = response.data?.fetchCart
+
+                    if (!response.errors.isNullOrEmpty()) {
+                        val errors = response.errors?.map { e -> e.message }.toString()
+                        DashXLog.d(tag, errors)
+                        onError(errors)
+                        return
+                    }
+
+                    onSuccess(fetchCartResponse as Map<String, Any>)
+                }
+            })
+    }
+
+    fun addItemToCart(
+        itemId: String,
+        pricingId: String,
+        quantity: String,
+        reset: Boolean,
+        custom: JsonObject? = null,
+        onSuccess: (result: Map<String, Any>) -> Unit,
+        onError: (error: String) -> Unit
+    ) {
+        val addItemToCartInput = AddItemToCartInput(
+            Input.fromNullable(accountType),
+            Input.fromNullable(uid),
+            Input.fromNullable(anonymousUid),
+            itemId,
+            pricingId,
+            quantity,
+            reset,
+            Input.fromNullable(custom)
+        )
+        val addItemToCartMutation = AddItemToCartMutation(addItemToCartInput)
+
+        apolloClient
+            .mutate(addItemToCartMutation)
+            .enqueue(object : ApolloCall.Callback<AddItemToCartMutation.Data>() {
+                override fun onFailure(e: ApolloException) {
+                    DashXLog.d(tag, e.message)
+                    e.printStackTrace()
+                }
+
+                override fun onResponse(response: com.apollographql.apollo.api.Response<AddItemToCartMutation.Data>) {
+                    val addItemToCartResponse = response.data?.addItemToCart
+
+                    if (!response.errors.isNullOrEmpty()) {
+                        val errors = response.errors?.map { e -> e.message }.toString()
+                        DashXLog.d(tag, errors)
+                        onError(errors)
+                        return
+                    }
+
+                    onSuccess(addItemToCartResponse as Map<String, Any>)
+                }
+            })
+    }
+
     fun track(event: String, data: HashMap<String, String>? = hashMapOf()) {
         if (accountType == null) {
             DashXLog.d(tag, "Account type not set. Aborting request")
