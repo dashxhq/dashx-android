@@ -294,7 +294,7 @@ class DashXClient(
     }
 
     fun fetchCart(
-        onSuccess: (result: Map<String, Any>) -> Unit,
+        onSuccess: (result: JsonObject) -> Unit,
         onError: (error: String) -> Unit
     ) {
         val fetchCartInput = FetchCartInput(
@@ -322,7 +322,7 @@ class DashXClient(
                         return
                     }
 
-                    onSuccess(fetchCartResponse as Map<String, Any>)
+                    onSuccess(Gson().toJsonTree(fetchCartResponse).asJsonObject)
                 }
             })
     }
@@ -333,7 +333,7 @@ class DashXClient(
         quantity: String,
         reset: Boolean,
         custom: JsonObject? = null,
-        onSuccess: (result: Map<String, Any>) -> Unit,
+        onSuccess: (result: JsonObject) -> Unit,
         onError: (error: String) -> Unit
     ) {
         val addItemToCartInput = AddItemToCartInput(
@@ -366,7 +366,7 @@ class DashXClient(
                         return
                     }
 
-                    onSuccess(addItemToCartResponse as Map<String, Any>)
+                    onSuccess(Gson().toJsonTree(addItemToCartResponse).asJsonObject)
                 }
             })
     }
