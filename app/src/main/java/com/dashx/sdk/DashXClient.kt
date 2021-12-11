@@ -26,7 +26,6 @@ class DashXClient(
     context: Context,
     publicKey: String,
     baseURI: String? = null,
-    accountType: String? = null,
     targetEnvironment: String? = null,
     targetInstallation: String? = null
 ) {
@@ -43,7 +42,6 @@ class DashXClient(
     private var uid: String? = null
     private var deviceToken: String? = null
     private var identityToken: String? = null
-    private var accountType: String? = null
 
     private var context: Context? = null
 
@@ -54,8 +52,6 @@ class DashXClient(
         this.targetInstallation = targetInstallation
         this.context = context
 
-        accountType?.let { this.accountType = it }
-
         createApolloClient()
     }
 
@@ -63,10 +59,6 @@ class DashXClient(
 
     private fun createApolloClient() {
         apolloClient = getApolloClient()
-    }
-
-    fun setAccountType(accountType: String) {
-        this.accountType = accountType
     }
 
     fun setIdentityToken(identityToken: String) {
@@ -153,7 +145,6 @@ class DashXClient(
         }
 
         val identifyAccountInput = IdentifyAccountInput(
-            Input.fromNullable(accountType),
             Input.fromNullable(uid),
             Input.fromNullable(anonymousUid),
             Input.fromNullable(options["email"]),
@@ -298,7 +289,6 @@ class DashXClient(
         onError: (error: String) -> Unit
     ) {
         val fetchCartInput = FetchCartInput(
-            Input.fromNullable(accountType),
             Input.fromNullable(uid),
             Input.fromNullable(anonymousUid),
         )
@@ -337,7 +327,6 @@ class DashXClient(
         onError: (error: String) -> Unit
     ) {
         val addItemToCartInput = AddItemToCartInput(
-            Input.fromNullable(accountType),
             Input.fromNullable(uid),
             Input.fromNullable(anonymousUid),
             itemId,
@@ -372,15 +361,9 @@ class DashXClient(
     }
 
     fun track(event: String, data: HashMap<String, String>? = hashMapOf()) {
-        if (accountType == null) {
-            DashXLog.d(tag, "Account type not set. Aborting request")
-            return
-        }
-
         val jsonData = Gson().toJsonTree(data)
 
         val trackEventInput = TrackEventInput(
-            accountType!!,
             event,
             Input.fromNullable(uid),
             Input.fromNullable(anonymousUid),
