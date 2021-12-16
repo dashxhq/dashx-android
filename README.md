@@ -126,3 +126,102 @@ dashXClient.searchContent("contacts",
 |**`fields`**|`List<String>`|`["character", "cast"]`||
 |**`include`**|`List<String>`|`["character.createdBy", "character.birthDate"]`||
 |**`exclude`**|`List<String>`|`["directors"]`||
+
+## Development
+
+### Obtaining Graphql schema and generating Graphql operation
+
+- Make sure to install Apollo CLI via npm:
+
+```sh
+$ npm i -g apollo
+```
+- In order to generate code, Apollo requires local copy of Graphql schema, to download that:
+
+```sh
+$ apollo schema:download --endpoint="https://api.dashx.com/graphql" app/src/main/graphql/com/dashx/schema.json
+```
+
+This will save a schama.json file in your ios directory.
+
+- Add Graphql request in `src/main/graphql/com/dashx` dir.
+
+- To re-generate Kotlin models for your graphql operations, run:
+
+```sh
+./gradlew build
+```
+---
+
+For example, if you want to generate code for `FetchContent`.
+
+- Download schema
+
+```sh
+$ apollo schema:download --endpoint="https://api.dashx.com/graphql" app/src/main/graphql/com/dashx/schema.json
+```
+
+- Add request in `graphql` dir with following contents:
+
+```graphql
+query FetchContent($input: FetchContentInput!) {
+  fetchContent(input: $input)
+}
+```
+
+- Re-generate Kotlin models so it includes the `FetchContent` operation
+
+```sh
+$ ./gradlew build
+```
+
+- Now you can use FetchContent operation like so:
+
+```kotlin
+import com.dashx.type.* // Note the package name
+
+val fetchContentInput = FetchContentInput(
+    contentType,
+    content,
+    Input.fromNullable(preview),
+    Input.fromNullable(language),
+    Input.fromNullable(fields),
+    Input.fromNullable(include),
+    Input.fromNullable(exclude)
+)
+
+val fetchContentQuery = FetchContentQuery(fetchContentInput)
+
+apolloClient.query(fetchContentQuery)
+    .enqueue(object : ApolloCall.Callback<FetchContentQuery.Data>() {
+        override fun onFailure(e: ApolloException) {
+            DashXLog.d(tag, "Could not get content for: $urn")
+            onError(e.message ?: "")
+            e.printStackTrace()
+        }
+
+        override fun onResponse(response: com.apollographql.apollo.api.Response<FetchContentQuery.Data>) {
+            val content = response.data?.fetchContent
+            if (!response.errors.isNullOrEmpty()) {
+                val errors = response.errors?.map { e -> e.message }.toString()
+                DashXLog.d(tag, errors)
+                onError(errors)
+                return
+            }
+
+            if (content != null) {
+                onSuccess(content.asJsonObject)
+            }
+
+            DashXLog.d(tag, "Got content: $content")
+        }
+    })
+```
+
+## Publishing
+
+DashX Android SDK uses [Jitpack](https://jitpack.io/) to serve build artifacts(`aar` file in this case). To publish new artifact:
+
+- Go [here](https://jitpack.io/#dashxhq/dashx-android).
+- Select the version you want to build, if it's not built already, and press *Get it*.
+- Follow the steps to use the library.
