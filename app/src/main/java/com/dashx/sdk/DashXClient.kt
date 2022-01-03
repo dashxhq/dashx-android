@@ -45,12 +45,15 @@ class DashXClient(
 
     private var context: Context? = null
 
+    private var mustSubscribe: Boolean = false
+
     init {
         this.baseURI = baseURI
         this.publicKey = publicKey
         this.targetEnvironment = targetEnvironment
         this.targetInstallation = targetInstallation
         this.context = context
+        this.mustSubscribe = false
 
         createApolloClient()
     }
@@ -68,7 +71,10 @@ class DashXClient(
 
     fun setDeviceToken(deviceToken: String) {
         this.deviceToken = deviceToken
-        subscribe()
+
+        if (this.mustSubscribe) {
+            subscribe()
+        }
     }
 
     private fun getApolloClient(): ApolloClient {
@@ -447,11 +453,13 @@ class DashXClient(
     }
 
     private fun subscribe() {
-        if (deviceToken == null || identityToken == null) {
-            DashXLog.d(tag,
-                "Subscribe called with deviceToken: $deviceToken and identityToken: $identityToken")
+        if (deviceToken == null) {
+            DashXLog.d(tag, "subscribe called without deviceToken; deferring")
+            this.mustSubscribe = true
             return
         }
+
+        this.mustSubscribe = false
 
         val subscribeContactInput = SubscribeContactInput(
             uid!!,
