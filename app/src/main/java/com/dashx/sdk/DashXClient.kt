@@ -153,7 +153,7 @@ class DashXClient(
         this.uid = options["uid"]
 
         val identifyAccountInput = IdentifyAccountInput(
-            Input.fromNullable(uid),
+            Input.fromNullable(options["uid"]),
             Input.fromNullable(anonymousUid),
             Input.fromNullable(options["email"]),
             Input.fromNullable(options["phone"]),
