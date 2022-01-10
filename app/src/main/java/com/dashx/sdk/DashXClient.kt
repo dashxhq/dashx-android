@@ -99,7 +99,7 @@ class DashXClient(
             .serverUrl(baseURI ?: "https://api.dashx.com/graphql")
             .addCustomTypeAdapter(CustomType.JSON, gsonCustomTypeAdapter)
             .httpCache(ApolloHttpCache(cacheStore))
-            .defaultHttpCachePolicy(HttpCachePolicy.CACHE_FIRST)
+            .defaultHttpCachePolicy(HttpCachePolicy.NETWORK_FIRST)
             .okHttpClient(OkHttpClient.Builder()
                 .addInterceptor { chain ->
                     val requestBuilder = chain.request().newBuilder()
@@ -153,7 +153,7 @@ class DashXClient(
         this.uid = options["uid"]
 
         val identifyAccountInput = IdentifyAccountInput(
-            Input.fromNullable(uid),
+            Input.fromNullable(options["uid"]),
             Input.fromNullable(anonymousUid),
             Input.fromNullable(options["email"]),
             Input.fromNullable(options["phone"]),
