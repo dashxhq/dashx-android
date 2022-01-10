@@ -452,7 +452,7 @@ class DashXClient(
         track(INTERNAL_EVENT_APP_SCREEN_VIEWED, properties)
     }
 
-    private fun subscribe() {
+    fun subscribe() {
         if (deviceToken == null) {
             DashXLog.d(tag, "subscribe called without deviceToken; deferring")
             this.mustSubscribe = true
