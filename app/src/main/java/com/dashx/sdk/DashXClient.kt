@@ -462,7 +462,8 @@ class DashXClient(
         this.mustSubscribe = false
 
         val subscribeContactInput = SubscribeContactInput(
-            uid!!,
+            Input.fromNullable(uid!!),
+            Input.fromNullable(anonymousUid!!),
             Input.fromNullable("Android"),
             ContactKind.ANDROID,
             deviceToken!!
