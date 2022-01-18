@@ -470,19 +470,34 @@ class DashXClient(
         )
         val subscribeContactMutation = SubscribeContactMutation(subscribeContactInput)
 
-        apolloClient
-            .mutate(subscribeContactMutation)
-            .enqueue(object : ApolloCall.Callback<SubscribeContactMutation.Data>() {
-                override fun onFailure(e: ApolloException) {
-                    DashXLog.d(tag, e.message)
-                    e.printStackTrace()
-                }
+        fun saveDeviceToken(deviceToken: String) {
+            val editor: SharedPreferences.Editor = getDashXSharedPreferences(context!!).edit()
+            editor.putString(SHARED_PREFERENCES_KEY_DEVICE_TOKEN, deviceToken)
+            editor.apply()
+        }
 
-                override fun onResponse(response: com.apollographql.apollo.api.Response<SubscribeContactMutation.Data>) {
-                    val subscribeContactResponse = response.data?.subscribeContact
-                    DashXLog.d(tag, "Subscribed: $deviceToken, $subscribeContactResponse")
-                }
-            })
+        when {
+            getDashXSharedPreferences(context!!).getString(
+                SHARED_PREFERENCES_KEY_DEVICE_TOKEN,
+                null
+            ) != deviceToken
+            -> {
+                apolloClient
+                    .mutate(subscribeContactMutation)
+                    .enqueue(object : ApolloCall.Callback<SubscribeContactMutation.Data>() {
+                        override fun onFailure(e: ApolloException) {
+                            DashXLog.d(tag, e.message)
+                            e.printStackTrace()
+                        }
+
+                        override fun onResponse(response: com.apollographql.apollo.api.Response<SubscribeContactMutation.Data>) {
+                            val subscribeContactResponse = response.data?.subscribeContact
+                            saveDeviceToken(subscribeContactResponse?.value!!)
+                            DashXLog.d(tag, "Subscribed: $deviceToken, $subscribeContactResponse")
+                        }
+                    })
+            }
+        }
     }
 
 }
