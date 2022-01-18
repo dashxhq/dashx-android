@@ -492,10 +492,12 @@ class DashXClient(
 
                         override fun onResponse(response: com.apollographql.apollo.api.Response<SubscribeContactMutation.Data>) {
                             val subscribeContactResponse = response.data?.subscribeContact
-                            if (subscribeContactResponse?.value != null) {
+                            if (subscribeContactResponse != null) {
                                 saveDeviceToken(subscribeContactResponse.value)
+                                DashXLog.d(tag, "Subscribed: $subscribeContactResponse")
+                            } else if (response.errors != null) {
+                                DashXLog.d(tag, "$response.errors")
                             }
-                            DashXLog.d(tag, "Subscribed: $subscribeContactResponse")
                         }
                     })
             } else -> {
