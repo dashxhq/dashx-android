@@ -473,7 +473,6 @@ class DashXClient(
                 null
             ) != deviceToken
             -> {
-                DashXLog.d(tag, "Inside when")
                 val subscribeContactInput = SubscribeContactInput(
                     accountUid = Input.fromNullable(uid),
                     accountAnonymousUid = Input.fromNullable(anonymousUid!!),
