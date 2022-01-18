@@ -461,28 +461,49 @@ class DashXClient(
 
         this.mustSubscribe = false
 
-        val subscribeContactInput = SubscribeContactInput(
-            accountUid = Input.fromNullable(uid),
-            accountAnonymousUid = Input.fromNullable(anonymousUid!!),
-            name = Input.fromNullable("Android"),
-            kind = ContactKind.ANDROID,
-            value = deviceToken!!
-        )
-        val subscribeContactMutation = SubscribeContactMutation(subscribeContactInput)
+        fun saveDeviceToken(deviceToken: String) {
+            val editor: SharedPreferences.Editor = getDashXSharedPreferences(context!!).edit()
+            editor.putString(SHARED_PREFERENCES_KEY_DEVICE_TOKEN, deviceToken)
+            editor.apply()
+        }
 
-        apolloClient
-            .mutate(subscribeContactMutation)
-            .enqueue(object : ApolloCall.Callback<SubscribeContactMutation.Data>() {
-                override fun onFailure(e: ApolloException) {
-                    DashXLog.d(tag, e.message)
-                    e.printStackTrace()
-                }
+        when {
+            getDashXSharedPreferences(context!!).getString(
+                SHARED_PREFERENCES_KEY_DEVICE_TOKEN,
+                null
+            ) != deviceToken
+            -> {
+                val subscribeContactInput = SubscribeContactInput(
+                    accountUid = Input.fromNullable(uid),
+                    accountAnonymousUid = Input.fromNullable(anonymousUid!!),
+                    name = Input.fromNullable("Android"),
+                    kind = ContactKind.ANDROID,
+                    value = deviceToken!!
+                )
+                val subscribeContactMutation = SubscribeContactMutation(subscribeContactInput)
 
-                override fun onResponse(response: com.apollographql.apollo.api.Response<SubscribeContactMutation.Data>) {
-                    val subscribeContactResponse = response.data?.subscribeContact
-                    DashXLog.d(tag, "Subscribed: $deviceToken, $subscribeContactResponse")
-                }
-            })
+                apolloClient
+                    .mutate(subscribeContactMutation)
+                    .enqueue(object : ApolloCall.Callback<SubscribeContactMutation.Data>() {
+                        override fun onFailure(e: ApolloException) {
+                            DashXLog.d(tag, e.message)
+                            e.printStackTrace()
+                        }
+
+                        override fun onResponse(response: com.apollographql.apollo.api.Response<SubscribeContactMutation.Data>) {
+                            val subscribeContactResponse = response.data?.subscribeContact
+                            if (subscribeContactResponse != null) {
+                                saveDeviceToken(subscribeContactResponse.value)
+                                DashXLog.d(tag, "Subscribed: $subscribeContactResponse")
+                            } else if (response.errors != null) {
+                                DashXLog.d(tag, "$response.errors")
+                            }
+                        }
+                    })
+            } else -> {
+                DashXLog.d(tag, "Already subscribed: $deviceToken")
+            }
+        }
     }
 
 }
