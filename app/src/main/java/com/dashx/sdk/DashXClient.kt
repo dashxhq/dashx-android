@@ -496,6 +496,8 @@ class DashXClient(
                             DashXLog.d(tag, "Subscribed: $deviceToken, $subscribeContactResponse")
                         }
                     })
+            } else -> {
+                DashXLog.d(tag, "Already subscribed: $deviceToken")
             }
         }
     }
