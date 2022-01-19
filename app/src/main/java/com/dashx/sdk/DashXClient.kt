@@ -3,6 +3,8 @@ package com.dashx.sdk
 import android.content.Context
 import android.content.SharedPreferences
 import android.os.Build
+import android.provider.Settings
+import androidx.annotation.RequiresApi
 import com.apollographql.apollo.ApolloCall
 import com.apollographql.apollo.ApolloClient
 import com.apollographql.apollo.api.CustomTypeAdapter
@@ -473,12 +475,18 @@ class DashXClient(
                 null
             ) != deviceToken
             -> {
+                val name = Settings.Global.getString(context?.getContentResolver(), Settings.Global.DEVICE_NAME) ?: Settings.Secure.getString(context?.getContentResolver(), "bluetooth_name")
+
                 val subscribeContactInput = SubscribeContactInput(
                     accountUid = Input.fromNullable(uid),
                     accountAnonymousUid = Input.fromNullable(anonymousUid!!),
-                    name = Input.fromNullable("Android"),
+                    name = Input.fromNullable(name),
                     kind = ContactKind.ANDROID,
-                    value = deviceToken!!
+                    value = deviceToken!!,
+                    osName = Input.fromNullable("Android"),
+                    osVersion = Input.fromNullable(Build.VERSION.RELEASE),
+                    deviceManufacturer = Input.fromNullable(Build.MANUFACTURER),
+                    deviceModel = Input.fromNullable(Build.MODEL)
                 )
                 val subscribeContactMutation = SubscribeContactMutation(subscribeContactInput)
 
