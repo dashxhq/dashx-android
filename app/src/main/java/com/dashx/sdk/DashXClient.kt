@@ -484,7 +484,7 @@ class DashXClient(
                     kind = ContactKind.ANDROID,
                     value = deviceToken!!,
                     osName = Input.fromNullable("Android"),
-                    osVersion = Input.fromNullable(Build.VERSION.RELEASE_OR_CODENAME),
+                    osVersion = Input.fromNullable(Build.VERSION.RELEASE),
                     deviceManufacturer = Input.fromNullable(Build.MANUFACTURER),
                     deviceModel = Input.fromNullable(Build.MODEL)
                 )
