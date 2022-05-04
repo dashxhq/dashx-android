@@ -535,8 +535,8 @@ class DashXClient(
                 }
 
                 override fun onResponse(response: com.apollographql.apollo.api.Response<TrackNotificationMutation.Data>) {
-                    val trackResponse = response.data?.trackNotification
-                    DashXLog.d(tag, "Sent event: $event, $trackResponse")
+                    val trackNotificationResponse = response.data?.trackNotification
+                    DashXLog.d(tag, "trackNotificationResponse: $trackNotificationResponse")
                 }
             })
     }
