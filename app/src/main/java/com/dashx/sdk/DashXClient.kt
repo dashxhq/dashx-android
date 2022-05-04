@@ -5,12 +5,12 @@ import android.content.SharedPreferences
 import android.os.Build
 import android.provider.Settings
 import androidx.annotation.RequiresApi
-import com.apollographql.apollo.ApolloCall
-import com.apollographql.apollo.ApolloClient
+import com.apollographql.apollo.api.cache.http.HttpCachePolicy
 import com.apollographql.apollo.api.CustomTypeAdapter
 import com.apollographql.apollo.api.CustomTypeValue
 import com.apollographql.apollo.api.Input
-import com.apollographql.apollo.api.cache.http.HttpCachePolicy
+import com.apollographql.apollo.ApolloCall
+import com.apollographql.apollo.ApolloClient
 import com.apollographql.apollo.cache.http.ApolloHttpCache
 import com.apollographql.apollo.cache.http.DiskLruHttpCacheStore
 import com.apollographql.apollo.exception.ApolloException
@@ -19,10 +19,10 @@ import com.dashx.type.*
 import com.google.gson.Gson
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
-import okhttp3.*
 import java.io.File
+import java.time.Instant
 import java.util.*
-
+import okhttp3.*
 
 class DashXClient(
     context: Context,
@@ -204,8 +204,9 @@ class DashXClient(
         val contentType = urnArray[0]
 
         val fetchContentInput = FetchContentInput(
-            contentType,
-            content,
+            Input.fromNullable(null),
+            Input.fromNullable(contentType),
+            Input.fromNullable(content),
             Input.fromNullable(preview),
             Input.fromNullable(language),
             Input.fromNullable(fields),
@@ -224,7 +225,7 @@ class DashXClient(
                 }
 
                 override fun onResponse(response: com.apollographql.apollo.api.Response<FetchContentQuery.Data>) {
-                    val content = response.data?.fetchContent
+                    val fetchContentResponse = response.data?.fetchContent
                     if (!response.errors.isNullOrEmpty()) {
                         val errors = response.errors?.map { e -> e.message }.toString()
                         DashXLog.d(tag, errors)
@@ -232,8 +233,8 @@ class DashXClient(
                         return
                     }
 
-                    if (content != null) {
-                        onSuccess(content.asJsonObject)
+                    if (fetchContentResponse != null) {
+                        onSuccess(Gson().toJsonTree(fetchContentResponse).asJsonObject)
                     }
 
                     DashXLog.d(tag, "Got content: $content")
@@ -288,7 +289,7 @@ class DashXClient(
                     }
 
                     val result = content ?: listOf()
-                    onSuccess(result.map { it.asJsonObject })
+                    onSuccess(result.map { Gson().toJsonTree(it).asJsonObject })
                     DashXLog.d(tag, "Got content: $content")
                 }
             })
@@ -514,4 +515,29 @@ class DashXClient(
         }
     }
 
+    fun trackNotification(id: String, status: TrackNotificationStatus) {
+        val currentTime = Instant.now().toString();
+
+        val trackNotificationInput = TrackNotificationInput(
+            id,
+            status,
+            currentTime
+        )
+
+        val trackNotificationMutation = TrackNotificationMutation(trackNotificationInput)
+
+        apolloClient
+            .mutate(trackNotificationMutation)
+            .enqueue(object : ApolloCall.Callback<TrackNotificationMutation.Data>() {
+                override fun onFailure(e: ApolloException) {
+                    DashXLog.d(tag, e.message)
+                    e.printStackTrace()
+                }
+
+                override fun onResponse(response: com.apollographql.apollo.api.Response<TrackNotificationMutation.Data>) {
+                    val trackNotificationResponse = response.data?.trackNotification
+                    DashXLog.d(tag, "trackNotificationResponse: $trackNotificationResponse")
+                }
+            })
+    }
 }
