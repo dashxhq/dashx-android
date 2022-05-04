@@ -515,12 +515,12 @@ class DashXClient(
         }
     }
 
-    fun trackNotification(id: String, event: TrackNotificationStatus) {
+    fun trackNotification(id: String, status: TrackNotificationStatus) {
         val currentTime = Instant.now().toString();
 
         val trackNotificationInput = TrackNotificationInput(
             id,
-            event,
+            status,
             currentTime
         )
 
