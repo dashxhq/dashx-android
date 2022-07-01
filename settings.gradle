@@ -9,4 +9,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "DashX"
-include ':app'
+include ':library'

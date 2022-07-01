@@ -3,8 +3,8 @@ apply plugin: 'kotlin-android'
 apply plugin: 'com.apollographql.apollo'
 apply plugin: 'maven-publish'
 
-group = 'com.github.dashxhq'
-version = '0.1'
+group = 'com.dashx'
+version = '1.0.0'
 
 android {
     compileSdk 31
@@ -13,7 +13,7 @@ android {
         minSdk 21
         targetSdk 31
         versionCode 1
-        versionName "1.0"
+        versionName "1.0.0"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -63,9 +63,9 @@ afterEvaluate {
             // Creates a Maven publication called "release".
             release(MavenPublication) {
                 from components.release
-                groupId = 'com.github.dashxhq'
+                groupId = 'com.dashx'
                 artifactId = 'dashx-android'
-                version = '0.1'
+                version = '1.0.0'
             }
         }
     }
