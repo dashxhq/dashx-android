@@ -4,9 +4,8 @@ dependencyResolutionManagement {
         google()
         mavenCentral()
         gradlePluginPortal()
-        jcenter() // Warning: this repository is going to shut down soon
     }
 }
 
-rootProject.name = "DashX"
+rootProject.name = 'DashX'
 include ':app'

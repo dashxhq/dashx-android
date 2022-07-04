@@ -13,9 +13,9 @@ android {
         minSdk 21
         targetSdk 31
         versionCode 1
-        versionName "1.0.0"
+        versionName '1.0.0'
 
-        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
 
     buildTypes {
@@ -53,7 +53,7 @@ apollo {
     // instruct the compiler to generate Kotlin models
     generateKotlinModels.set(true)
     customTypeMapping = [
-        "Json" : "com.google.gson.JsonElement"
+        'Json': 'com.google.gson.JsonElement'
     ]
 }
 
