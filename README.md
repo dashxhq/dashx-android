@@ -1,8 +1,28 @@
+<p align="center">
+    <br />
+    <a href="https://dashx.com"><img src="https://raw.githubusercontent.com/dashxhq/brand-book/master/assets/logo-black-text-color-icon@2x.png" alt="DashX" height="40" /></a>
+    <br />
+    <br />
+    <strong>Your All-in-One Product Stack</strong>
+</p>
+
+<div align="center">
+  <h4>
+    <a href="https://dashx.com">Website</a>
+    <span> | </span>
+    <a href="https://dashxdemo.com">Demos</a>
+    <span> | </span>
+    <a href="https://docs.dashx.com/developer">Documentation</a>
+  </h4>
+</div>
+
+<br />
+
 # dashx-android
 
-_DashX Android SDK_
+_DashX SDK for Android_
 
-## Installation
+## Install
 
 - Add jitpack repository in your `settings.gradle`
 
@@ -39,95 +59,9 @@ dependencies {
 
 ## Usage
 
-```kotlin
-val dashXClient = DashXClient("Your Public Key")
-```
+For detailed usage, refer to the [documentation](https://docs.dashx.com/developer).
 
-DashXClient can be initialised with:
-
-|Name|Type|
-|:---:|:--:|
-|**`publicKey`**|`String` _(Required)_ |
-|**`accountType`**|`String`|
-|**`baseURI`**|`String`|
-|**`targetInstallation`**|`String`|
-|**`targetEnvironment`**|`String`|
-
-### Identify User
-
-```kotlin
-dashXClient.identify(uid, hashMapOf("name" to "John Doe") /* identifyOptions */)
-```
-
-`identifyOptions` can accept `HashMap<String, String>` with
-
-|Name|Type|
-|:---:|:--:|
-|**`firstName`**|`String`|
-|**`lastName`**|`String`|
-|**`name`**|`String`|
-|**`email`**|`String`|
-|**`phone`**|`String`|
-
-### Track Events
-
-```kotlin
-dashXClient.track(event, hashMapOf("page" to "index") /* trackData */)
-```
-
-`trackData` accepts `HashMap<String, String>`
-
-### Fetch Content
-
-```kotlin
-dashXClient.fetchContent("contacts/user", language = "en_US", onSuccess = {
-    println(it)
-}, onError = {
-    println(it)
-})
-```
-
-`fetchContent` accepts following arguments
-
-|Name|Type|Example|
-|:--:|:--:|:-----:|
-|**`preview`**|`Boolean`||
-|**`language`**|`String`|`"en_US"`||
-|**`fields`**|`List<String>`|`["character", "cast"]`||
-|**`include`**|`List<String>`|`["character.createdBy", "character.birthDate"]`||
-|**`exclude`**|`List<String>`|`["directors"]`||
-
-### Search Content
-
-```kotlin
-dashXClient.searchContent("contacts",
-    language = "en_US", returnType = "all",
-    filter = hashMapOf("name_eq" to "John"),
-    order = hashMapOf("created_at" to "DESC"),
-    limit = 10,
-    preview = true,
-    onSuccess = {
-        println(it)
-    }, onError = {
-        println(it)
-    })
-```
-
-`searchContent` accepts following arguments
-
-|Name|Type|Example|
-|:--:|:--:|:-----:|
-|**`returnType`**|`"all"` or `"one"`||
-|**`filter`**|`HashMap<String, String>`|`["name_eq": "John"]`|
-|**`order`**|`HashMap<String, String>`|`["created_at": "DESC"]`|
-|**`limit`**|`Int`||
-|**`preview`**|`Boolean`||
-|**`language`**|`String`|`"en_US"`||
-|**`fields`**|`List<String>`|`["character", "cast"]`||
-|**`include`**|`List<String>`|`["character.createdBy", "character.birthDate"]`||
-|**`exclude`**|`List<String>`|`["directors"]`||
-
-## Development
+## Contributing
 
 ### Obtaining Graphql schema and generating Graphql operation
 
