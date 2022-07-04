@@ -4,13 +4,12 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.os.Build
 import android.provider.Settings
-import androidx.annotation.RequiresApi
-import com.apollographql.apollo.api.cache.http.HttpCachePolicy
+import com.apollographql.apollo.ApolloCall
+import com.apollographql.apollo.ApolloClient
 import com.apollographql.apollo.api.CustomTypeAdapter
 import com.apollographql.apollo.api.CustomTypeValue
 import com.apollographql.apollo.api.Input
-import com.apollographql.apollo.ApolloCall
-import com.apollographql.apollo.ApolloClient
+import com.apollographql.apollo.api.cache.http.HttpCachePolicy
 import com.apollographql.apollo.cache.http.ApolloHttpCache
 import com.apollographql.apollo.cache.http.DiskLruHttpCacheStore
 import com.apollographql.apollo.exception.ApolloException
@@ -19,18 +18,12 @@ import com.dashx.type.*
 import com.google.gson.Gson
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
+import okhttp3.OkHttpClient
 import java.io.File
 import java.time.Instant
 import java.util.*
-import okhttp3.*
 
-class DashXClient(
-    context: Context,
-    publicKey: String,
-    baseURI: String? = null,
-    targetEnvironment: String? = null,
-    targetInstallation: String? = null
-) {
+class DashXClient {
     private val tag = DashXClient::class.java.simpleName
 
     // Setup variables
@@ -49,7 +42,41 @@ class DashXClient(
 
     private var mustSubscribe: Boolean = false
 
-    init {
+    companion object {
+
+        private var INSTANCE: DashXClient? = null
+
+        fun createInstance(
+            context: Context,
+            publicKey: String,
+            baseURI: String? = null,
+            targetEnvironment: String? = null,
+            targetInstallation: String? = null
+        ): DashXClient {
+            if (INSTANCE == null) {
+                INSTANCE = DashXClient()
+                INSTANCE?.init(context, publicKey, baseURI, targetEnvironment, targetInstallation)
+            }
+            return INSTANCE!!
+        }
+
+        @JvmName("getDashXInstance")
+        fun getInstance(): DashXClient {
+            try {
+                return INSTANCE!!
+            } catch (exception: Exception) {
+                throw NullPointerException("Create DashXClient before accessing it.")
+            }
+        }
+    }
+
+    private fun init(
+        context: Context,
+        publicKey: String,
+        baseURI: String? = null,
+        targetEnvironment: String? = null,
+        targetInstallation: String? = null
+    ) {
         this.baseURI = baseURI
         this.publicKey = publicKey
         this.targetEnvironment = targetEnvironment
@@ -93,7 +120,12 @@ class DashXClient(
             }
 
             override fun encode(value: JsonElement): CustomTypeValue<*> {
-                return CustomTypeValue.GraphQLJsonObject(Gson().fromJson(value, Map::class.java) as Map<String, Any>)
+                return CustomTypeValue.GraphQLJsonObject(
+                    Gson().fromJson(
+                        value,
+                        Map::class.java
+                    ) as Map<String, Any>
+                )
             }
         }
 
@@ -148,7 +180,10 @@ class DashXClient(
         }
 
         if (options == null) {
-            DashXLog.d(tag, "Cannot be called with null, either pass uid: string or options: object")
+            DashXLog.d(
+                tag,
+                "Cannot be called with null, either pass uid: string or options: object"
+            )
             return
         }
 
@@ -476,7 +511,10 @@ class DashXClient(
                 null
             ) != deviceToken
             -> {
-                val name = Settings.Global.getString(context?.getContentResolver(), Settings.Global.DEVICE_NAME) ?: Settings.Secure.getString(context?.getContentResolver(), "bluetooth_name")
+                val name = Settings.Global.getString(
+                    context?.getContentResolver(),
+                    Settings.Global.DEVICE_NAME
+                ) ?: Settings.Secure.getString(context?.getContentResolver(), "bluetooth_name")
 
                 val subscribeContactInput = SubscribeContactInput(
                     accountUid = Input.fromNullable(uid),
@@ -509,7 +547,8 @@ class DashXClient(
                             }
                         }
                     })
-            } else -> {
+            }
+            else -> {
                 DashXLog.d(tag, "Already subscribed: $deviceToken")
             }
         }
