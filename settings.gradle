@@ -27,5 +27,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = 'DashX'
-include ':app'
+rootProject.name = "DashX"
+include ':dashx'
