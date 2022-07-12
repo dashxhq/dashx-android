@@ -30,7 +30,6 @@ class DashXClient {
     private var baseURI: String? = null
     private var publicKey: String? = null
     private var targetEnvironment: String? = null
-    private var targetInstallation: String? = null
 
     // Account variables
     private var anonymousUid: String? = null
@@ -51,11 +50,10 @@ class DashXClient {
             publicKey: String,
             baseURI: String? = null,
             targetEnvironment: String? = null,
-            targetInstallation: String? = null
         ): DashXClient {
             if (INSTANCE == null) {
                 INSTANCE = DashXClient()
-                INSTANCE?.init(context, publicKey, baseURI, targetEnvironment, targetInstallation)
+                INSTANCE?.init(context, publicKey, baseURI, targetEnvironment)
             }
             return INSTANCE!!
         }
@@ -75,12 +73,10 @@ class DashXClient {
         publicKey: String,
         baseURI: String? = null,
         targetEnvironment: String? = null,
-        targetInstallation: String? = null
     ) {
         this.baseURI = baseURI
         this.publicKey = publicKey
         this.targetEnvironment = targetEnvironment
-        this.targetInstallation = targetInstallation
         this.context = context
         this.mustSubscribe = false
 
@@ -141,10 +137,6 @@ class DashXClient {
 
                     targetEnvironment?.let {
                         requestBuilder.addHeader("X-Target-Environment", it)
-                    }
-
-                    targetInstallation?.let {
-                        requestBuilder.addHeader("X-Target-Installation", it)
                     }
 
                     if (identityToken != null) {
