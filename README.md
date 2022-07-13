@@ -50,7 +50,6 @@ DashXClient can be initialised with:
 |**`publicKey`**|`String` _(Required)_ |
 |**`accountType`**|`String`|
 |**`baseURI`**|`String`|
-|**`targetInstallation`**|`String`|
 |**`targetEnvironment`**|`String`|
 
 ### Identify User
