@@ -24,7 +24,7 @@ _DashX SDK for Android_
 
 ## Install
 
-- Add jitpack repository in your `settings.gradle`
+- Add maven repository in your `settings.gradle`
 
 ```groovy
 dependencyResolutionManagement {
@@ -32,7 +32,6 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        maven { url "https://jitpack.io" } // <- This
     }
 }
 ```
@@ -43,7 +42,7 @@ dependencyResolutionManagement {
 allprojects {
     repositories {
         // ...
-        maven { url 'https://jitpack.io' }
+        mavenCentral()
     }
 }
 ```
@@ -52,7 +51,7 @@ allprojects {
 
 ```groovy
 dependencies {
-    implementation 'com.github.dashxhq:dashx-android:main-SNAPSHOT'
+    implementation 'com.dashx:dashx-android:1.0.0'
     // ...
 }
 ```
@@ -227,8 +226,8 @@ apolloClient.query(fetchContentQuery)
 
 ## Publishing
 
-DashX Android SDK uses [Jitpack](https://jitpack.io/) to serve build artifacts(`aar` file in this case). To publish new artifact:
+DashX Android SDK uses [Maven](https://mvnrepository.com/) to serve build artifacts. This repository uses [GitHub Actions](https://github.com/features/actions) and any push to **main** will automatically publish to Maven. Here are the rough steps:
 
-- Go [here](https://jitpack.io/#dashxhq/dashx-android).
-- Select the version you want to build, if it's not built already, and press *Get it*.
-- Follow the steps to use the library.
+- Bump up the `version`, `versionCode` and `versionName` in **dashx/build.gradle**
+- Commit the version bump to **develop** (`git push origin develop`)
+- Merge the latest code in **develop** into **main**
