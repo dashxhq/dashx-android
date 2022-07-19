@@ -33,17 +33,13 @@ android {
     }
 }
 
-ext {
-    APOLLO_VERSION = '2.5.12'
-}
-
 dependencies {
     implementation 'com.squareup.okhttp3:okhttp:4.9.3'
     implementation 'com.google.code.gson:gson:2.9.0'
 
-    implementation "com.apollographql.apollo:apollo-runtime:$APOLLO_VERSION"
-    implementation "com.apollographql.apollo:apollo-coroutines-support:$APOLLO_VERSION"
-    implementation "com.apollographql.apollo:apollo-http-cache:$APOLLO_VERSION"
+    implementation "com.apollographql.apollo:apollo-runtime:$apolloVersion"
+    implementation "com.apollographql.apollo:apollo-coroutines-support:$apolloVersion"
+    implementation "com.apollographql.apollo:apollo-http-cache:$apolloVersion"
 
     compileOnly 'com.google.firebase:firebase-core:17.2.1'
     compileOnly 'com.google.firebase:firebase-messaging:20.0.1'
