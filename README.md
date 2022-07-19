@@ -32,7 +32,6 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-    
     }
 }
 ```
@@ -154,7 +153,8 @@ apolloClient.query(fetchContentQuery)
 
 ## Publishing
 
-DashX Android SDK uses [Maven](https://mvnrepository.com/) to serve build artifacts(`aar` file in this case). To publish new artifact:
+DashX Android SDK uses [Maven](https://mvnrepository.com/) to serve build artifacts. This repository uses [GitHub Actions](https://github.com/features/actions) and any push to **main** will automatically publish to Maven. Here are the rough steps:
 
-- Raise a pull request and got that merged.
-- Merging to main branch will publish the SDK into maven using CI/CD
+- Bump up the `version`, `versionCode` and `versionName` in **dashx/build.gradle**
+- Commit the version bump to **develop** (`git push origin develop`)
+- Merge the latest code in **develop** into **main**
