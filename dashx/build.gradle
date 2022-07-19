@@ -3,8 +3,8 @@ apply plugin: 'kotlin-android'
 apply plugin: 'com.apollographql.apollo'
 apply plugin: 'maven-publish'
 
-group = 'com.github.dashxhq'
-version = '0.1'
+group = 'com.dashx'
+version = '1.0.0'
 
 android {
     compileSdk 31
@@ -13,9 +13,9 @@ android {
         minSdk 21
         targetSdk 31
         versionCode 1
-        versionName "1.0"
+        versionName '1.0.0'
 
-        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
 
     buildTypes {
@@ -34,12 +34,12 @@ android {
 }
 
 dependencies {
-    implementation 'com.squareup.okhttp3:okhttp:4.2.2'
-    implementation 'com.google.code.gson:gson:2.8.6'
+    implementation 'com.squareup.okhttp3:okhttp:4.9.3'
+    implementation 'com.google.code.gson:gson:2.9.0'
 
-    implementation "com.apollographql.apollo:apollo-runtime:$apollo_version"
-    implementation "com.apollographql.apollo:apollo-coroutines-support:$apollo_version"
-    implementation "com.apollographql.apollo:apollo-http-cache:$apollo_version"
+    implementation "com.apollographql.apollo:apollo-runtime:$apolloVersion"
+    implementation "com.apollographql.apollo:apollo-coroutines-support:$apolloVersion"
+    implementation "com.apollographql.apollo:apollo-http-cache:$apolloVersion"
 
     compileOnly 'com.google.firebase:firebase-core:17.2.1'
     compileOnly 'com.google.firebase:firebase-messaging:20.0.1'
@@ -53,20 +53,8 @@ apollo {
     // instruct the compiler to generate Kotlin models
     generateKotlinModels.set(true)
     customTypeMapping = [
-        "Json" : "com.google.gson.JsonElement"
+        'Json': 'com.google.gson.JsonElement'
     ]
 }
 
-afterEvaluate {
-    publishing {
-        publications {
-            // Creates a Maven publication called "release".
-            release(MavenPublication) {
-                from components.release
-                groupId = 'com.github.dashxhq'
-                artifactId = 'dashx-android'
-                version = '0.1'
-            }
-        }
-    }
-}
+apply from: "${rootProject.projectDir}/scripts/publish-module.gradle"
