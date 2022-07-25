@@ -370,7 +370,7 @@ class DashXClient {
             .query(fetchStoredPreferencesQuery)
             .enqueue(object : ApolloCall.Callback<FetchStoredPreferencesQuery.Data>() {
                 override fun onResponse(response: Response<FetchStoredPreferencesQuery.Data>) {
-                    val fetchStoredPreferencesResponse = response.data?.fetchStoredPreferences
+                    val fetchStoredPreferencesResponse = response.data?.fetchStoredPreferences?.preferenceData
 
                     if (!response.errors.isNullOrEmpty()) {
                         val errors = response.errors?.map { e -> e.message }.toString()
@@ -392,22 +392,22 @@ class DashXClient {
     }
 
     fun saveStoredPreferences(
-        preference: Any,
+        preferenceData: Any,
         onSuccess: (result: JsonObject) -> Unit,
         onError: (error: String) -> Unit
     ) {
 
         val saveStoredPreferencesInput = SaveStoredPreferencesInput(
             Input.fromNullable(this.uid),
-            preference
+            preferenceData
         )
-        val fetchStoredPreferencesQuery = SaveStoredPreferencesMutation(saveStoredPreferencesInput)
+        val saveStoredPreferencesMutation = SaveStoredPreferencesMutation(saveStoredPreferencesInput)
 
         apolloClient
-            .mutate(fetchStoredPreferencesQuery)
+            .mutate(saveStoredPreferencesMutation)
             .enqueue(object : ApolloCall.Callback<SaveStoredPreferencesMutation.Data>() {
                 override fun onResponse(response: Response<SaveStoredPreferencesMutation.Data>) {
-                    val fetchStoredPreferencesResponse = response.data?.saveStoredPreferences
+                    val saveStoredPreferencesResponse = response.data?.saveStoredPreferences
 
                     if (!response.errors.isNullOrEmpty()) {
                         val errors = response.errors?.map { e -> e.message }.toString()
@@ -416,7 +416,7 @@ class DashXClient {
                         return
                     }
 
-                    onSuccess(Gson().toJsonTree(fetchStoredPreferencesResponse).asJsonObject)
+                    onSuccess(Gson().toJsonTree(saveStoredPreferencesResponse).asJsonObject)
                 }
 
                 override fun onFailure(e: ApolloException) {
@@ -425,7 +425,7 @@ class DashXClient {
                 }
             })
     }
-    
+
     fun addItemToCart(
         itemId: String,
         pricingId: String,

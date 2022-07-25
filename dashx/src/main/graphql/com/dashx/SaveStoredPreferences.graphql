@@ -1,4 +1,4 @@
-mutation SaveStoredPreferences($input: SaveStoredPreferencesInput!){
+mutation SaveStoredPreferences($input: SaveStoredPreferencesInput!) {
     saveStoredPreferences(input:$input) {
         success
     }
