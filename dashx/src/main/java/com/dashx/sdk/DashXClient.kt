@@ -362,7 +362,7 @@ class DashXClient {
     ) {
 
         val fetchStoredPreferencesInput = FetchStoredPreferencesInput(
-            Input.fromNullable("19"),
+            Input.fromNullable(this.uid),
         )
         val fetchStoredPreferencesQuery = FetchStoredPreferencesQuery(fetchStoredPreferencesInput)
 
