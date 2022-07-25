@@ -423,12 +423,9 @@ class DashXClient {
                     DashXLog.d(tag, e.message)
                     e.printStackTrace()
                 }
-
             })
-
     }
-
-
+    
     fun addItemToCart(
         itemId: String,
         pricingId: String,
