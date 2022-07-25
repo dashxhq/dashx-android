@@ -12052,20 +12052,16 @@
         "description": null,
         "fields": null,
         "inputFields": [
-          {
-            "name": "accountUid",
-            "description": null,
-            "type": {
-              "kind": "NON_NULL",
-              "name": null,
-              "ofType": {
-                "kind": "SCALAR",
-                "name": "String",
-                "ofType": null
-              }
-            },
-            "defaultValue": null
-          }
+            {
+                "name": "accountUid",
+                "description": null,
+                "type": {
+                    "kind": "SCALAR",
+                    "name": "String",
+                    "ofType": null
+                },
+                "defaultValue": null
+            }
         ],
         "interfaces": null,
         "enumValues": null,
@@ -28127,15 +28123,11 @@
           {
             "name": "accountUid",
             "description": null,
-            "type": {
-              "kind": "NON_NULL",
-              "name": null,
-              "ofType": {
-                "kind": "SCALAR",
-                "name": "String",
-                "ofType": null
-              }
-            },
+              "type": {
+                  "kind": "SCALAR",
+                  "name": "String",
+                  "ofType": null
+              },
             "defaultValue": null
           },
           {

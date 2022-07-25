@@ -9,6 +9,7 @@ import com.apollographql.apollo.ApolloClient
 import com.apollographql.apollo.api.CustomTypeAdapter
 import com.apollographql.apollo.api.CustomTypeValue
 import com.apollographql.apollo.api.Input
+import com.apollographql.apollo.api.Response
 import com.apollographql.apollo.api.cache.http.HttpCachePolicy
 import com.apollographql.apollo.cache.http.ApolloHttpCache
 import com.apollographql.apollo.cache.http.DiskLruHttpCacheStore
@@ -351,6 +352,76 @@ class DashXClient {
                     }
 
                     onSuccess(Gson().toJsonTree(fetchCartResponse).asJsonObject)
+                }
+            })
+    }
+
+    fun fetchStoredPreferences(
+        onSuccess: (result: JsonObject) -> Unit,
+        onError: (error: String) -> Unit
+    ) {
+
+        val fetchStoredPreferencesInput = FetchStoredPreferencesInput(
+            Input.fromNullable(this.uid),
+        )
+        val fetchStoredPreferencesQuery = FetchStoredPreferencesQuery(fetchStoredPreferencesInput)
+
+        apolloClient
+            .query(fetchStoredPreferencesQuery)
+            .enqueue(object : ApolloCall.Callback<FetchStoredPreferencesQuery.Data>() {
+                override fun onResponse(response: Response<FetchStoredPreferencesQuery.Data>) {
+                    val fetchStoredPreferencesResponse = response.data?.fetchStoredPreferences?.preferenceData
+
+                    if (!response.errors.isNullOrEmpty()) {
+                        val errors = response.errors?.map { e -> e.message }.toString()
+                        DashXLog.d(tag, errors)
+                        onError(errors)
+                        return
+                    }
+
+                    onSuccess(Gson().toJsonTree(fetchStoredPreferencesResponse).asJsonObject)
+                }
+
+                override fun onFailure(e: ApolloException) {
+                    DashXLog.d(tag, e.message)
+                    e.printStackTrace()
+                }
+
+            })
+
+    }
+
+    fun saveStoredPreferences(
+        preferenceData: Any,
+        onSuccess: (result: JsonObject) -> Unit,
+        onError: (error: String) -> Unit
+    ) {
+
+        val saveStoredPreferencesInput = SaveStoredPreferencesInput(
+            Input.fromNullable(this.uid),
+            preferenceData
+        )
+        val saveStoredPreferencesMutation = SaveStoredPreferencesMutation(saveStoredPreferencesInput)
+
+        apolloClient
+            .mutate(saveStoredPreferencesMutation)
+            .enqueue(object : ApolloCall.Callback<SaveStoredPreferencesMutation.Data>() {
+                override fun onResponse(response: Response<SaveStoredPreferencesMutation.Data>) {
+                    val saveStoredPreferencesResponse = response.data?.saveStoredPreferences
+
+                    if (!response.errors.isNullOrEmpty()) {
+                        val errors = response.errors?.map { e -> e.message }.toString()
+                        DashXLog.d(tag, errors)
+                        onError(errors)
+                        return
+                    }
+
+                    onSuccess(Gson().toJsonTree(saveStoredPreferencesResponse).asJsonObject)
+                }
+
+                override fun onFailure(e: ApolloException) {
+                    DashXLog.d(tag, e.message)
+                    e.printStackTrace()
                 }
             })
     }

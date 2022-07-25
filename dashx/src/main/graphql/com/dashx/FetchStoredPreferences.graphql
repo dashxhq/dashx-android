@@ -1,0 +1,5 @@
+query FetchStoredPreferences($input: FetchStoredPreferencesInput!) {
+    fetchStoredPreferences(input: $input) {
+        preferenceData
+    }
+}
