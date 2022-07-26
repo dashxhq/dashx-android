@@ -4,7 +4,7 @@ apply plugin: 'com.apollographql.apollo'
 apply plugin: 'maven-publish'
 
 group = 'com.dashx'
-version = '1.0.0'
+version = '1.0.1'
 
 android {
     compileSdk 31
@@ -13,7 +13,7 @@ android {
         minSdk 21
         targetSdk 31
         versionCode 1
-        versionName '1.0.0'
+        versionName version
 
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
