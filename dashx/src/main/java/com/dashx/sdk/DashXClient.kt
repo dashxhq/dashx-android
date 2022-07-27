@@ -33,8 +33,8 @@ class DashXClient {
     private var targetEnvironment: String? = null
 
     // Account variables
-    private var anonymousUid: String? = null
-    private var uid: String? = null
+    private var accountAnonymousUid: String? = null
+    private var accountUid: String? = null
     private var deviceToken: String? = null
     private var identityToken: String? = null
 
@@ -156,34 +156,38 @@ class DashXClient {
         val anonymousUid =
             dashXSharedPreferences.getString(SHARED_PREFERENCES_KEY_ANONYMOUS_UID, null)
         if (!regenerate && anonymousUid != null) {
-            this.anonymousUid = anonymousUid
+            this.accountAnonymousUid = anonymousUid
         } else {
-            this.anonymousUid = UUID.randomUUID().toString()
+            this.accountAnonymousUid = UUID.randomUUID().toString()
             dashXSharedPreferences.edit()
-                .putString(SHARED_PREFERENCES_KEY_ANONYMOUS_UID, this.anonymousUid)
+                .putString(SHARED_PREFERENCES_KEY_ANONYMOUS_UID, this.accountAnonymousUid)
                 .apply()
         }
     }
 
-    fun identify(uid: String?, options: HashMap<String, String>? = hashMapOf()) {
-        if (uid != null) {
-            this.uid = uid
-            DashXLog.d(tag, "Set Uid: $uid")
-            return
-        }
+    fun identify(options: HashMap<String, String>? = null) {
 
         if (options == null) {
-            DashXLog.d(
-                tag,
-                "Cannot be called with null, either pass uid: string or options: object"
-            )
+            DashXLog.d(tag, "Cannot be called with null, either pass uid: string or options: object")
             return
         }
 
-        this.uid = options["uid"]
+        val uid = if(options.containsKey("uid")){
+            options["uid"]
+        }
+        else{
+            this.accountUid
+        }
+
+        val anonymousUid = if(options.containsKey("anonymousUid")){
+            options["anonymousUid"]
+        }
+        else{
+            this.accountAnonymousUid
+        }
 
         val identifyAccountInput = IdentifyAccountInput(
-            Input.fromNullable(options["uid"]),
+            Input.fromNullable(uid),
             Input.fromNullable(anonymousUid),
             Input.fromNullable(options["email"]),
             Input.fromNullable(options["phone"]),
@@ -208,8 +212,14 @@ class DashXClient {
             })
     }
 
+    fun setIdentity(uid:String?, token: String?){
+        this.accountUid = uid
+        this.identityToken = token
+        createApolloClient()
+    }
+
     fun reset() {
-        uid = null
+        accountUid = null
         generateAnonymousUid(regenerate = true)
     }
 
@@ -328,8 +338,8 @@ class DashXClient {
         onError: (error: String) -> Unit
     ) {
         val fetchCartInput = FetchCartInput(
-            Input.fromNullable(uid),
-            Input.fromNullable(anonymousUid),
+            Input.fromNullable(accountUid),
+            Input.fromNullable(accountAnonymousUid),
         )
         val fetchCartQuery = FetchCartQuery(fetchCartInput)
 
@@ -362,7 +372,7 @@ class DashXClient {
     ) {
 
         val fetchStoredPreferencesInput = FetchStoredPreferencesInput(
-            Input.fromNullable(this.uid),
+            Input.fromNullable(this.accountUid),
         )
         val fetchStoredPreferencesQuery = FetchStoredPreferencesQuery(fetchStoredPreferencesInput)
 
@@ -398,7 +408,7 @@ class DashXClient {
     ) {
 
         val saveStoredPreferencesInput = SaveStoredPreferencesInput(
-            Input.fromNullable(this.uid),
+            Input.fromNullable(this.accountUid),
             preferenceData
         )
         val saveStoredPreferencesMutation = SaveStoredPreferencesMutation(saveStoredPreferencesInput)
@@ -436,8 +446,8 @@ class DashXClient {
         onError: (error: String) -> Unit
     ) {
         val addItemToCartInput = AddItemToCartInput(
-            Input.fromNullable(uid),
-            Input.fromNullable(anonymousUid),
+            Input.fromNullable(accountUid),
+            Input.fromNullable(accountAnonymousUid),
             itemId,
             pricingId,
             quantity,
@@ -474,8 +484,8 @@ class DashXClient {
 
         val trackEventInput = TrackEventInput(
             event,
-            Input.fromNullable(uid),
-            Input.fromNullable(anonymousUid),
+            Input.fromNullable(accountUid),
+            Input.fromNullable(accountAnonymousUid),
             Input.fromNullable(jsonData)
         )
         val trackEventMutation = TrackEventMutation(trackEventInput)
@@ -580,8 +590,8 @@ class DashXClient {
                 ) ?: Settings.Secure.getString(context?.getContentResolver(), "bluetooth_name")
 
                 val subscribeContactInput = SubscribeContactInput(
-                    accountUid = Input.fromNullable(uid),
-                    accountAnonymousUid = Input.fromNullable(anonymousUid!!),
+                    accountUid = Input.fromNullable(accountUid),
+                    accountAnonymousUid = Input.fromNullable(accountAnonymousUid!!),
                     name = Input.fromNullable(name),
                     kind = ContactKind.ANDROID,
                     value = deviceToken!!,
