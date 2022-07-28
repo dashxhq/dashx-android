@@ -404,7 +404,7 @@ class DashXClient {
     ) {
 
         val saveStoredPreferencesInput = SaveStoredPreferencesInput(
-            accountUid =this.accountUid ?: "",
+            accountUid = this.accountUid ?: "",
             preferenceData
         )
         val saveStoredPreferencesMutation = SaveStoredPreferencesMutation(saveStoredPreferencesInput)
