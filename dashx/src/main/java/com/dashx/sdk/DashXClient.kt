@@ -172,26 +172,26 @@ class DashXClient {
             return
         }
 
-        val uid = if (options.containsKey("uid")) {
-            options["uid"]
+        val uid = if (options.containsKey(UserAttributes.UID)) {
+            options[UserAttributes.UID]
         } else {
             this.accountUid
         }
 
-        val anonymousUid = if (options.containsKey("anonymousUid")) {
-            options["anonymousUid"]
+        val anonymousUid = if (options.containsKey(UserAttributes.ANONYMOUS_UID)) {
+            options[UserAttributes.ANONYMOUS_UID]
         } else {
             this.accountAnonymousUid
         }
 
         val identifyAccountInput = IdentifyAccountInput(
-            Input.fromNullable(uid),
-            Input.fromNullable(anonymousUid),
-            Input.fromNullable(options["email"]),
-            Input.fromNullable(options["phone"]),
-            Input.fromNullable(options["name"]),
-            Input.fromNullable(options["firstName"]),
-            Input.fromNullable(options["lastName"])
+            uid = Input.fromNullable(uid),
+            anonymousUid = Input.fromNullable(anonymousUid),
+            email = Input.fromNullable(options[UserAttributes.EMAIL]),
+            phone = Input.fromNullable(options[UserAttributes.PHONE]),
+            name = Input.fromNullable(options[UserAttributes.NAME]),
+            firstName = Input.fromNullable(options[UserAttributes.FIRST_NAME]),
+            lastName = Input.fromNullable(options[UserAttributes.LAST_NAME])
         )
         val identifyAccountMutation = IdentifyAccountMutation(identifyAccountInput)
 
@@ -240,14 +240,14 @@ class DashXClient {
         val contentType = urnArray[0]
 
         val fetchContentInput = FetchContentInput(
-            Input.fromNullable(null),
-            Input.fromNullable(contentType),
-            Input.fromNullable(content),
-            Input.fromNullable(preview),
-            Input.fromNullable(language),
-            Input.fromNullable(fields),
-            Input.fromNullable(include),
-            Input.fromNullable(exclude)
+            installationId = Input.fromNullable(null),
+            contentType = Input.fromNullable(contentType),
+            content = Input.fromNullable(content),
+            preview = Input.fromNullable(preview),
+            language = Input.fromNullable(language),
+            fields = Input.fromNullable(fields),
+            include = Input.fromNullable(include),
+            exclude = Input.fromNullable(exclude)
         )
 
         val fetchContentQuery = FetchContentQuery(fetchContentInput)
@@ -369,7 +369,7 @@ class DashXClient {
         onError: (error: String) -> Unit
     ) {
 
-        val fetchStoredPreferencesInput = FetchStoredPreferencesInput(Input.fromNullable(this.accountUid))
+        val fetchStoredPreferencesInput = FetchStoredPreferencesInput(this.accountUid ?: "")
         val fetchStoredPreferencesQuery = FetchStoredPreferencesQuery(fetchStoredPreferencesInput)
 
         apolloClient
@@ -404,7 +404,7 @@ class DashXClient {
     ) {
 
         val saveStoredPreferencesInput = SaveStoredPreferencesInput(
-            Input.fromNullable(this.accountUid),
+            accountUid = this.accountUid ?: "",
             preferenceData
         )
         val saveStoredPreferencesMutation = SaveStoredPreferencesMutation(saveStoredPreferencesInput)
