@@ -1,6 +1,6 @@
 package com.dashx.sdk.data
 
-data class PreferenceData(
+data class Preference(
     var enabled: Boolean,
     var email: Boolean,
     var push: Boolean,
