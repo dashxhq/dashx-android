@@ -168,21 +168,19 @@ class DashXClient {
     fun identify(options: HashMap<String, String>? = null) {
 
         if (options == null) {
-            DashXLog.d(tag, "Cannot be called with null, either pass uid: string or options: object")
+            DashXLog.d(tag, "Cannot be called with null, pass options: object")
             return
         }
 
-        val uid = if(options.containsKey("uid")){
+        val uid = if (options.containsKey("uid")) {
             options["uid"]
-        }
-        else{
+        } else {
             this.accountUid
         }
 
-        val anonymousUid = if(options.containsKey("anonymousUid")){
+        val anonymousUid = if (options.containsKey("anonymousUid")) {
             options["anonymousUid"]
-        }
-        else{
+        } else {
             this.accountAnonymousUid
         }
 
@@ -212,7 +210,7 @@ class DashXClient {
             })
     }
 
-    fun setIdentity(uid:String?, token: String?){
+    fun setIdentity(uid: String?, token: String?) {
         this.accountUid = uid
         this.identityToken = token
         createApolloClient()
@@ -371,9 +369,7 @@ class DashXClient {
         onError: (error: String) -> Unit
     ) {
 
-        val fetchStoredPreferencesInput = FetchStoredPreferencesInput(
-            Input.fromNullable(this.accountUid),
-        )
+        val fetchStoredPreferencesInput = FetchStoredPreferencesInput(Input.fromNullable(this.accountUid))
         val fetchStoredPreferencesQuery = FetchStoredPreferencesQuery(fetchStoredPreferencesInput)
 
         apolloClient
