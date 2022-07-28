@@ -400,8 +400,7 @@ class DashXClient {
             .query(fetchStoredPreferencesQuery)
             .enqueue(object : ApolloCall.Callback<FetchStoredPreferencesQuery.Data>() {
                 override fun onResponse(response: Response<FetchStoredPreferencesQuery.Data>) {
-                    val fetchStoredPreferencesResponse =
-                        response.data?.fetchStoredPreferences?.preferenceData
+                    val fetchStoredPreferencesResponse = response.data?.fetchStoredPreferences?.preferenceData
 
                     if (!response.errors.isNullOrEmpty()) {
                         val errors = response.errors?.map { e -> e.message }.toString()
@@ -429,7 +428,7 @@ class DashXClient {
     ) {
 
         val saveStoredPreferencesInput = SaveStoredPreferencesInput(
-            this.accountUid ?: "",
+            accountUid= this.accountUid ?: "",
             preferenceData
         )
         val saveStoredPreferencesMutation = SaveStoredPreferencesMutation(saveStoredPreferencesInput)
