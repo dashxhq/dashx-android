@@ -81,7 +81,20 @@ class DashXClient {
         this.context = context
         this.mustSubscribe = false
 
+        loadIdentity()
         createApolloClient()
+    }
+
+    private fun loadIdentity() {
+        getDashXSharedPreferences(context!!).apply {
+            if (contains(SHARED_PREFERENCES_KEY_ACCOUNT_UID)) {
+                this@DashXClient.accountUid = getString(SHARED_PREFERENCES_KEY_ACCOUNT_UID, "")
+            }
+            if (contains(SHARED_PREFERENCES_KEY_IDENTITY_TOKEN)) {
+                this@DashXClient.identityToken =
+                    getString(SHARED_PREFERENCES_KEY_IDENTITY_TOKEN, "")
+            }
+        }
     }
 
     private var apolloClient = getApolloClient()
@@ -213,11 +226,22 @@ class DashXClient {
     fun setIdentity(uid: String?, token: String?) {
         this.accountUid = uid
         this.identityToken = token
+
+        getDashXSharedPreferences(context!!).edit().apply {
+            putString(SHARED_PREFERENCES_KEY_ACCOUNT_UID, uid)
+            putString(SHARED_PREFERENCES_KEY_IDENTITY_TOKEN, token)
+        }.apply()
+
         createApolloClient()
     }
 
     fun reset() {
+        getDashXSharedPreferences(context!!).edit().apply {
+            remove(SHARED_PREFERENCES_KEY_ACCOUNT_UID)
+            remove(SHARED_PREFERENCES_KEY_IDENTITY_TOKEN)
+        }.apply()
         accountUid = null
+        identityToken = null
         generateAnonymousUid(regenerate = true)
     }
 
@@ -240,14 +264,14 @@ class DashXClient {
         val contentType = urnArray[0]
 
         val fetchContentInput = FetchContentInput(
-            Input.fromNullable(null),
-            Input.fromNullable(contentType),
-            Input.fromNullable(content),
-            Input.fromNullable(preview),
-            Input.fromNullable(language),
-            Input.fromNullable(fields),
-            Input.fromNullable(include),
-            Input.fromNullable(exclude)
+            installationId = Input.fromNullable(null),
+            contentType = Input.fromNullable(contentType),
+            content = Input.fromNullable(content),
+            preview = Input.fromNullable(preview),
+            language = Input.fromNullable(language),
+            fields = Input.fromNullable(fields),
+            include = Input.fromNullable(include),
+            exclude = Input.fromNullable(exclude)
         )
 
         val fetchContentQuery = FetchContentQuery(fetchContentInput)
@@ -369,14 +393,15 @@ class DashXClient {
         onError: (error: String) -> Unit
     ) {
 
-        val fetchStoredPreferencesInput = FetchStoredPreferencesInput(Input.fromNullable(this.accountUid))
+        val fetchStoredPreferencesInput = FetchStoredPreferencesInput(this.accountUid ?: "")
         val fetchStoredPreferencesQuery = FetchStoredPreferencesQuery(fetchStoredPreferencesInput)
 
         apolloClient
             .query(fetchStoredPreferencesQuery)
             .enqueue(object : ApolloCall.Callback<FetchStoredPreferencesQuery.Data>() {
                 override fun onResponse(response: Response<FetchStoredPreferencesQuery.Data>) {
-                    val fetchStoredPreferencesResponse = response.data?.fetchStoredPreferences?.preferenceData
+                    val fetchStoredPreferencesResponse =
+                        response.data?.fetchStoredPreferences?.preferenceData
 
                     if (!response.errors.isNullOrEmpty()) {
                         val errors = response.errors?.map { e -> e.message }.toString()
@@ -404,7 +429,7 @@ class DashXClient {
     ) {
 
         val saveStoredPreferencesInput = SaveStoredPreferencesInput(
-            Input.fromNullable(this.accountUid),
+            this.accountUid ?: "",
             preferenceData
         )
         val saveStoredPreferencesMutation = SaveStoredPreferencesMutation(saveStoredPreferencesInput)

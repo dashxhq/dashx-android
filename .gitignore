@@ -65,4 +65,4 @@ Temporary Items
 .apdisk
 
 # GraphQL Schema
-dashx/main/graphql/com/dashx/schema.json
+dashx/src/main/graphql/com/dashx/schema.json
