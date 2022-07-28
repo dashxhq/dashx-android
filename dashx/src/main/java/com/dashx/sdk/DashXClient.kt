@@ -185,26 +185,26 @@ class DashXClient {
             return
         }
 
-        val uid = if (options.containsKey("uid")) {
-            options["uid"]
+        val uid = if (options.containsKey(UserAttributes.UID)) {
+            options[UserAttributes.UID]
         } else {
             this.accountUid
         }
 
-        val anonymousUid = if (options.containsKey("anonymousUid")) {
-            options["anonymousUid"]
+        val anonymousUid = if (options.containsKey(UserAttributes.ANONYMOUS_UID)) {
+            options[UserAttributes.ANONYMOUS_UID]
         } else {
             this.accountAnonymousUid
         }
 
         val identifyAccountInput = IdentifyAccountInput(
-            Input.fromNullable(uid),
-            Input.fromNullable(anonymousUid),
-            Input.fromNullable(options["email"]),
-            Input.fromNullable(options["phone"]),
-            Input.fromNullable(options["name"]),
-            Input.fromNullable(options["firstName"]),
-            Input.fromNullable(options["lastName"])
+            uid = Input.fromNullable(uid),
+            anonymousUid = Input.fromNullable(anonymousUid),
+            email = Input.fromNullable(options[UserAttributes.EMAIL]),
+            phone = Input.fromNullable(options[UserAttributes.PHONE]),
+            name = Input.fromNullable(options[UserAttributes.NAME]),
+            firstName = Input.fromNullable(options[UserAttributes.FIRST_NAME]),
+            lastName = Input.fromNullable(options[UserAttributes.LAST_NAME])
         )
         val identifyAccountMutation = IdentifyAccountMutation(identifyAccountInput)
 

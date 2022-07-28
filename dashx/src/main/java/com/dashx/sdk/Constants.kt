@@ -18,3 +18,13 @@ const val INTERNAL_EVENT_APP_OPENED = "Application Opened"
 const val INTERNAL_EVENT_APP_BACKGROUNDED = "Application Backgrounded"
 const val INTERNAL_EVENT_APP_CRASHED = "Application Crashed"
 const val INTERNAL_EVENT_APP_SCREEN_VIEWED = "Screen Viewed"
+
+object UserAttributes {
+    const val UID = "uid"
+    const val ANONYMOUS_UID = "anonymousUid"
+    const val EMAIL = "email"
+    const val PHONE = "phone"
+    const val NAME = "name"
+    const val FIRST_NAME = "firstName"
+    const val LAST_NAME = "lastName"
+}
