@@ -648,4 +648,20 @@ class DashXClient {
                 }
             })
     }
+
+    fun getBaseUri(): String? {
+        return baseURI
+    }
+
+    fun getPublicKey(): String? {
+        return publicKey
+    }
+
+    fun getTargetEnvironment(): String? {
+        return targetEnvironment
+    }
+
+    fun getIdentityToken(): String? {
+        return identityToken
+    }
 }
