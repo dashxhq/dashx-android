@@ -376,7 +376,8 @@ class DashXClient {
             .query(fetchStoredPreferencesQuery)
             .enqueue(object : ApolloCall.Callback<FetchStoredPreferencesQuery.Data>() {
                 override fun onResponse(response: Response<FetchStoredPreferencesQuery.Data>) {
-                    val fetchStoredPreferencesResponse = response.data?.fetchStoredPreferences?.preferenceData
+                    val fetchStoredPreferencesResponse =
+                        response.data?.fetchStoredPreferences?.preferenceData
 
                     if (!response.errors.isNullOrEmpty()) {
                         val errors = response.errors?.map { e -> e.message }.toString()
@@ -397,6 +398,36 @@ class DashXClient {
 
     }
 
+    fun uploadExternalAsset(
+        file: File, externalColumnId: String,
+        onSuccess: (result: JsonObject) -> Unit,
+        onError: (error: String) -> Unit
+    ) {
+        val prepareExternalAssetInput = PrepareExternalAssetInput(externalColumnId)
+
+        val prepareExternalAssetMutation = PrepareExternalAssetMutation(prepareExternalAssetInput)
+        
+        apolloClient.mutate(prepareExternalAssetMutation)
+            .enqueue(object : ApolloCall.Callback<PrepareExternalAssetMutation.Data>() {
+                override fun onResponse(response: Response<PrepareExternalAssetMutation.Data>) {
+                    val prepareExternalAssetResponse = response.data?.prepareExternalAsset
+
+                    if (!response.errors.isNullOrEmpty()) {
+                        val errors = response.errors?.map { e -> e.message }.toString()
+                        DashXLog.d(tag, errors)
+                        onError(errors)
+                        return
+                    }
+                    onSuccess(Gson().toJsonTree(prepareExternalAssetResponse).asJsonObject)
+                }
+
+                override fun onFailure(e: ApolloException) {
+                    DashXLog.d(tag, e.message)
+                    e.printStackTrace()
+                }
+            })
+    }
+
     fun saveStoredPreferences(
         preferenceData: Any,
         onSuccess: (result: JsonObject) -> Unit,
@@ -407,7 +438,8 @@ class DashXClient {
             accountUid = this.accountUid ?: "",
             preferenceData
         )
-        val saveStoredPreferencesMutation = SaveStoredPreferencesMutation(saveStoredPreferencesInput)
+        val saveStoredPreferencesMutation =
+            SaveStoredPreferencesMutation(saveStoredPreferencesInput)
 
         apolloClient
             .mutate(saveStoredPreferencesMutation)
