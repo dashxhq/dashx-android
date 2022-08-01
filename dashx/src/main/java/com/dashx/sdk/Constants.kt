@@ -26,3 +26,18 @@ object UserAttributes {
     const val FIRST_NAME = "firstName"
     const val LAST_NAME = "lastName"
 }
+
+object Request{
+    const val PUT = "PUT"
+}
+
+object File{
+    const val CONTENT_TYPE = "Content-Type"
+
+    enum class FileType(val contentType: String) {
+        IMAGE("image/*"),
+        VIDEO("video/*")
+    }
+}
+
+

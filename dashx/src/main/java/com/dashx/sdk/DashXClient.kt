@@ -2,8 +2,9 @@ package com.dashx.sdk
 
 import android.content.Context
 import android.content.SharedPreferences
-import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.media.MediaFormat
+import android.media.MediaMuxer
 import android.os.Build
 import android.provider.Settings
 import android.util.Log
@@ -23,13 +24,13 @@ import com.dashx.type.*
 import com.google.gson.Gson
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
 import java.io.*
 import java.net.HttpURLConnection
 import java.net.URL
+import java.nio.file.spi.FileTypeDetector
 import java.time.Instant
 import java.util.*
 
@@ -54,6 +55,8 @@ class DashXClient {
     companion object {
 
         private var INSTANCE: DashXClient? = null
+
+        private const val MAX_SAMPLE_SIZE = 256 * 1024
 
         fun createInstance(
             context: Context,
@@ -430,11 +433,15 @@ class DashXClient {
 //                    onSuccess(Gson().toJsonTree(prepareExternalAssetResponse).asJsonObject)
                     Log.d("asd", prepareExternalAssetResponse.toString())
                     writeFileToUrl(
-                        file, (Gson().fromJson(
+                        file,
+                        (Gson().fromJson(
                             Gson().toJsonTree
                                 (prepareExternalAssetResponse?.data).asJsonObject,
                             PrepareExternalAssetResponse::class.java
-                        )).upload.url,prepareExternalAssetResponse?.id.toString(), onSuccess, onError
+                        )).upload.url,
+                        prepareExternalAssetResponse?.id.toString(),
+                        onSuccess,
+                        onError
                     )
                 }
 
@@ -445,65 +452,66 @@ class DashXClient {
             })
     }
 
-    fun writeFileToUrl(file: File, url: String, id: String, onSuccess: (result: JsonObject) -> Unit,
-                       onError: (error: String) -> Unit) {
+    fun writeFileToUrl(
+        file: File, url: String, id: String, onSuccess: (result: JsonObject) -> Unit,
+        onError: (error: String) -> Unit
+    ) {
 
+        val options = BitmapFactory.Options()
+        options.inJustDecodeBounds = true
         val connection = URL(url).openConnection() as HttpURLConnection
         connection.doOutput = true
-        connection.requestMethod = "PUT"
-        connection.setRequestProperty("Content-Type", "image/*")
+        connection.requestMethod = Request.PUT
+
+        connection.setRequestProperty(File.CONTENT_TYPE, fileType.contentType)
 
         val out = connection.outputStream
-        val iStream = bitmap2InputStream(BitmapFactory.decodeFile(file.path))
-        val boundaryBytes = getBytes(iStream!!)
+        val iStream = FileInputStream(file)
+        val boundaryBytes = getBytes(iStream)
         out.write(boundaryBytes)
         out.close()
-        if(connection.responseCode == HttpURLConnection.HTTP_OK){
-externalAsset(id, onSuccess, onError)
+        if (connection.responseCode == HttpURLConnection.HTTP_OK) {
+            externalAsset(id, onSuccess, onError)
         }
-
         Log.d("dsas", connection.responseCode.toString() + " " + connection.responseMessage)
-
     }
 
-    fun externalAsset(id: String,onSuccess: (result: JsonObject) -> Unit,onError: (error: String) -> Unit){
+    fun externalAsset(
+        id: String,
+        onSuccess: (result: JsonObject) -> Unit,
+        onError: (error: String) -> Unit
+    ) {
         val externalAssetQuery = ExternalAssetQuery(id)
 
-        apolloClient.query(externalAssetQuery).enqueue(object : ApolloCall.Callback<ExternalAssetQuery.Data>() {
-            override fun onResponse(response: Response<ExternalAssetQuery.Data>) {
-                val externalAssetResponse = response.data?.externalAsset
+        apolloClient.query(externalAssetQuery)
+            .enqueue(object : ApolloCall.Callback<ExternalAssetQuery.Data>() {
+                override fun onResponse(response: Response<ExternalAssetQuery.Data>) {
+                    val externalAssetResponse = response.data?.externalAsset
 
-                Log.d("dsaasaasdsa",externalAssetResponse.toString())
-                if (!response.errors.isNullOrEmpty()) {
-                    val errors = response.errors?.map { e -> e.message }.toString()
-                    DashXLog.d(tag, errors)
-                    onError(errors)
-                    return
-                }
-
-                if(externalAssetResponse?.status != "ready"){
-                    runBlocking {
-                        delay(3000)
-                        externalAsset(id,onSuccess, onError)
+                    Log.d("dsaasaasdsa", externalAssetResponse.toString())
+                    if (!response.errors.isNullOrEmpty()) {
+                        val errors = response.errors?.map { e -> e.message }.toString()
+                        DashXLog.d(tag, errors)
+                        onError(errors)
+                        return
                     }
+
+                    if (externalAssetResponse?.status != "ready") {
+                        runBlocking {
+                            delay(3000)
+                            externalAsset(id, onSuccess, onError)
+                        }
+                    } else {
+                        onSuccess(Gson().toJsonTree(externalAssetResponse).asJsonObject)
+                    }
+
                 }
-                else{
-                    onSuccess(Gson().toJsonTree(externalAssetResponse).asJsonObject)
+
+                override fun onFailure(e: ApolloException) {
+
                 }
 
-            }
-
-            override fun onFailure(e: ApolloException) {
-
-            }
-
-        })
-    }
-
-    private fun bitmap2InputStream(bitmap: Bitmap): InputStream? {
-        val byteArrayOutputStream = ByteArrayOutputStream()
-        bitmap.compress(Bitmap.CompressFormat.JPEG, 100, byteArrayOutputStream)
-        return ByteArrayInputStream(byteArrayOutputStream.toByteArray())
+            })
     }
 
     private fun getBytes(inputStream: InputStream): ByteArray {
