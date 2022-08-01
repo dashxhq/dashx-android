@@ -2,8 +2,11 @@ package com.dashx.sdk
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.os.Build
 import android.provider.Settings
+import android.util.Log
 import com.apollographql.apollo.ApolloCall
 import com.apollographql.apollo.ApolloClient
 import com.apollographql.apollo.api.CustomTypeAdapter
@@ -15,12 +18,18 @@ import com.apollographql.apollo.cache.http.ApolloHttpCache
 import com.apollographql.apollo.cache.http.DiskLruHttpCacheStore
 import com.apollographql.apollo.exception.ApolloException
 import com.dashx.*
+import com.dashx.sdk.data.PrepareExternalAssetResponse
 import com.dashx.type.*
 import com.google.gson.Gson
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
-import java.io.File
+import java.io.*
+import java.net.HttpURLConnection
+import java.net.URL
 import java.time.Instant
 import java.util.*
 
@@ -406,7 +415,7 @@ class DashXClient {
         val prepareExternalAssetInput = PrepareExternalAssetInput(externalColumnId)
 
         val prepareExternalAssetMutation = PrepareExternalAssetMutation(prepareExternalAssetInput)
-        
+
         apolloClient.mutate(prepareExternalAssetMutation)
             .enqueue(object : ApolloCall.Callback<PrepareExternalAssetMutation.Data>() {
                 override fun onResponse(response: Response<PrepareExternalAssetMutation.Data>) {
@@ -418,7 +427,15 @@ class DashXClient {
                         onError(errors)
                         return
                     }
-                    onSuccess(Gson().toJsonTree(prepareExternalAssetResponse).asJsonObject)
+//                    onSuccess(Gson().toJsonTree(prepareExternalAssetResponse).asJsonObject)
+                    Log.d("asd", prepareExternalAssetResponse.toString())
+                    writeFileToUrl(
+                        file, (Gson().fromJson(
+                            Gson().toJsonTree
+                                (prepareExternalAssetResponse?.data).asJsonObject,
+                            PrepareExternalAssetResponse::class.java
+                        )).upload.url,prepareExternalAssetResponse?.id.toString(), onSuccess, onError
+                    )
                 }
 
                 override fun onFailure(e: ApolloException) {
@@ -426,6 +443,81 @@ class DashXClient {
                     e.printStackTrace()
                 }
             })
+    }
+
+    fun writeFileToUrl(file: File, url: String, id: String, onSuccess: (result: JsonObject) -> Unit,
+                       onError: (error: String) -> Unit) {
+
+        val connection = URL(url).openConnection() as HttpURLConnection
+        connection.doOutput = true
+        connection.requestMethod = "PUT"
+        connection.setRequestProperty("Content-Type", "image/*")
+
+        val out = connection.outputStream
+        val iStream = bitmap2InputStream(BitmapFactory.decodeFile(file.path))
+        val boundaryBytes = getBytes(iStream!!)
+        out.write(boundaryBytes)
+        out.close()
+        if(connection.responseCode == HttpURLConnection.HTTP_OK){
+externalAsset(id, onSuccess, onError)
+        }
+
+        Log.d("dsas", connection.responseCode.toString() + " " + connection.responseMessage)
+
+    }
+
+    fun externalAsset(id: String,onSuccess: (result: JsonObject) -> Unit,onError: (error: String) -> Unit){
+        val externalAssetQuery = ExternalAssetQuery(id)
+
+        apolloClient.query(externalAssetQuery).enqueue(object : ApolloCall.Callback<ExternalAssetQuery.Data>() {
+            override fun onResponse(response: Response<ExternalAssetQuery.Data>) {
+                val externalAssetResponse = response.data?.externalAsset
+
+                Log.d("dsaasaasdsa",externalAssetResponse.toString())
+                if (!response.errors.isNullOrEmpty()) {
+                    val errors = response.errors?.map { e -> e.message }.toString()
+                    DashXLog.d(tag, errors)
+                    onError(errors)
+                    return
+                }
+
+                if(externalAssetResponse?.status != "ready"){
+                    runBlocking {
+                        delay(3000)
+                        externalAsset(id,onSuccess, onError)
+                    }
+                }
+                else{
+                    onSuccess(Gson().toJsonTree(externalAssetResponse).asJsonObject)
+                }
+
+            }
+
+            override fun onFailure(e: ApolloException) {
+
+            }
+
+        })
+    }
+
+    private fun bitmap2InputStream(bitmap: Bitmap): InputStream? {
+        val byteArrayOutputStream = ByteArrayOutputStream()
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 100, byteArrayOutputStream)
+        return ByteArrayInputStream(byteArrayOutputStream.toByteArray())
+    }
+
+    private fun getBytes(inputStream: InputStream): ByteArray {
+        val byteBuffer = ByteArrayOutputStream()
+        val bufferSize = 1024
+        val buffer = ByteArray(bufferSize)
+        var len = inputStream.read(buffer)
+        while (len != -1) {
+            if (len == -1)
+                break
+            byteBuffer.write(buffer, 0, len)
+            len = inputStream.read(buffer)
+        }
+        return byteBuffer.toByteArray()
     }
 
     fun saveStoredPreferences(
