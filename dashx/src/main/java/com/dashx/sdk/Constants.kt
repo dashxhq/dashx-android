@@ -27,17 +27,23 @@ object UserAttributes {
     const val LAST_NAME = "lastName"
 }
 
-object Request{
+object RequestType {
     const val PUT = "PUT"
 }
 
-object File{
+object FileConstants {
     const val CONTENT_TYPE = "Content-Type"
+    const val IMAGE_CONTENT_TYPE = "image/*"
+    const val VIDEO_CONTENT_TYPE = "video/*"
+    const val FILE_CONTENT = "*/*"
+}
 
-    enum class FileType(val contentType: String) {
-        IMAGE("image/*"),
-        VIDEO("video/*")
-    }
+object UploadConstants {
+    const val POLL_INTERVAL: Long = 3000
+    const val POLL_TIME_OUT = 10
+
+    const val READY = "ready"
+    const val WAITING = "waiting"
 }
 
 
