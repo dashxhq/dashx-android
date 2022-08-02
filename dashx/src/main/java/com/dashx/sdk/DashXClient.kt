@@ -15,12 +15,18 @@ import com.apollographql.apollo.cache.http.ApolloHttpCache
 import com.apollographql.apollo.cache.http.DiskLruHttpCacheStore
 import com.apollographql.apollo.exception.ApolloException
 import com.dashx.*
+import com.dashx.sdk.data.PrepareExternalAssetResponse
 import com.dashx.type.*
 import com.google.gson.Gson
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
 import java.io.File
+import java.io.FileInputStream
+import java.net.HttpURLConnection
+import java.net.URL
 import java.time.Instant
 import java.util.*
 
@@ -41,6 +47,9 @@ class DashXClient {
     private var context: Context? = null
 
     private var mustSubscribe: Boolean = false
+
+    private var pollCounter = 1
+    private val gson by lazy { Gson() }
 
     companion object {
 
@@ -131,7 +140,7 @@ class DashXClient {
         val gsonCustomTypeAdapter = object : CustomTypeAdapter<JsonElement> {
             override fun decode(value: CustomTypeValue<*>): JsonElement {
                 return try {
-                    Gson().toJsonTree(value.value)
+                    gson.toJsonTree(value.value)
                 } catch (e: java.lang.Exception) {
                     throw RuntimeException(e)
                 }
@@ -139,7 +148,7 @@ class DashXClient {
 
             override fun encode(value: JsonElement): CustomTypeValue<*> {
                 return CustomTypeValue.GraphQLJsonObject(
-                    Gson().fromJson(
+                    gson.fromJson(
                         value,
                         Map::class.java
                     ) as Map<String, Any>
@@ -284,7 +293,7 @@ class DashXClient {
                     }
 
                     if (fetchContentResponse != null) {
-                        onSuccess(Gson().toJsonTree(fetchContentResponse).asJsonObject)
+                        onSuccess(gson.toJsonTree(fetchContentResponse).asJsonObject)
                     }
 
                     DashXLog.d(tag, "Got content: $content")
@@ -339,7 +348,7 @@ class DashXClient {
                     }
 
                     val result = content ?: listOf()
-                    onSuccess(result.map { Gson().toJsonTree(it).asJsonObject })
+                    onSuccess(result.map { gson.toJsonTree(it).asJsonObject })
                     DashXLog.d(tag, "Got content: $content")
                 }
             })
@@ -398,7 +407,7 @@ class DashXClient {
                         return
                     }
 
-                    onSuccess(Gson().toJsonTree(fetchStoredPreferencesResponse).asJsonObject)
+                    onSuccess(gson.toJsonTree(fetchStoredPreferencesResponse).asJsonObject)
                 }
 
                 override fun onFailure(e: ApolloException) {
@@ -408,6 +417,104 @@ class DashXClient {
 
             })
 
+    }
+
+    fun uploadExternalAsset(
+        file: File, externalColumnId: String,
+        onSuccess: (result: JsonObject) -> Unit,
+        onError: (error: String) -> Unit
+    ) {
+        val prepareExternalAssetInput = PrepareExternalAssetInput(externalColumnId)
+
+        val prepareExternalAssetMutation = PrepareExternalAssetMutation(prepareExternalAssetInput)
+
+        apolloClient.mutate(prepareExternalAssetMutation)
+            .enqueue(object : ApolloCall.Callback<PrepareExternalAssetMutation.Data>() {
+                override fun onResponse(response: Response<PrepareExternalAssetMutation.Data>) {
+                    val prepareExternalAssetResponse = response.data?.prepareExternalAsset
+
+                    if (!response.errors.isNullOrEmpty()) {
+                        val errors = response.errors?.map { e -> e.message }.toString()
+                        DashXLog.d(tag, errors)
+                        onError(errors)
+                        return
+                    }
+
+                    val url = (gson.fromJson(
+                        gson.toJsonTree(prepareExternalAssetResponse?.data).asJsonObject,
+                        PrepareExternalAssetResponse::class.java
+                    )).upload.url
+
+                    writeFileToUrl(file, url, prepareExternalAssetResponse?.id.toString(), onSuccess, onError)
+                }
+
+                override fun onFailure(e: ApolloException) {
+                    DashXLog.d(tag, e.message)
+                    e.printStackTrace()
+                }
+            })
+    }
+
+    fun writeFileToUrl(
+        file: File, url: String, id: String, onSuccess: (result: JsonObject) -> Unit,
+        onError: (error: String) -> Unit
+    ) {
+        val connection = URL(url).openConnection() as HttpURLConnection
+        connection.apply {
+            doOutput = true
+            requestMethod = RequestType.PUT
+            setRequestProperty(FileConstants.CONTENT_TYPE, getFileContentType(context, file))
+        }
+
+        val outputStream = connection.outputStream
+        val fileInputStream = FileInputStream(file)
+        val boundaryBytes = getBytes(fileInputStream)
+        outputStream.write(boundaryBytes)
+        outputStream.close()
+
+        if (connection.responseCode == HttpURLConnection.HTTP_OK) {
+            externalAsset(id, onSuccess, onError)
+        } else {
+            onError(connection.errorStream.toString())
+        }
+    }
+
+    fun externalAsset(
+        id: String,
+        onSuccess: (result: JsonObject) -> Unit,
+        onError: (error: String) -> Unit
+    ) {
+        val externalAssetQuery = ExternalAssetQuery(id)
+
+        apolloClient.query(externalAssetQuery)
+            .enqueue(object : ApolloCall.Callback<ExternalAssetQuery.Data>() {
+                override fun onResponse(response: Response<ExternalAssetQuery.Data>) {
+                    val externalAssetResponse = response.data?.externalAsset
+
+                    if (!response.errors.isNullOrEmpty()) {
+                        val errors = response.errors?.map { e -> e.message }.toString()
+                        DashXLog.d(tag, errors)
+                        onError(errors)
+                        return
+                    }
+
+                    if (externalAssetResponse?.status != UploadConstants.READY && pollCounter <= UploadConstants.POLL_TIME_OUT) {
+                        runBlocking {
+                            delay(UploadConstants.POLL_INTERVAL)
+                            externalAsset(id, onSuccess, onError)
+                            pollCounter += 1
+                        }
+                    } else {
+                        pollCounter = 1
+                        onSuccess(gson.toJsonTree(externalAssetResponse).asJsonObject)
+                    }
+                }
+
+                override fun onFailure(e: ApolloException) {
+                    DashXLog.d(tag, e.message)
+                    e.printStackTrace()
+                }
+            })
     }
 
     fun saveStoredPreferences(
@@ -434,8 +541,7 @@ class DashXClient {
                         onError(errors)
                         return
                     }
-
-                    onSuccess(Gson().toJsonTree(saveStoredPreferencesResponse).asJsonObject)
+                    onSuccess(gson.toJsonTree(saveStoredPreferencesResponse).asJsonObject)
                 }
 
                 override fun onFailure(e: ApolloException) {
@@ -482,14 +588,13 @@ class DashXClient {
                         onError(errors)
                         return
                     }
-
-                    onSuccess(Gson().toJsonTree(addItemToCartResponse).asJsonObject)
+                    onSuccess(gson.toJsonTree(addItemToCartResponse).asJsonObject)
                 }
             })
     }
 
     fun track(event: String, data: HashMap<String, String>? = hashMapOf()) {
-        val jsonData = Gson().toJsonTree(data)
+        val jsonData = gson.toJsonTree(data)
 
         val trackEventInput = TrackEventInput(
             event,
