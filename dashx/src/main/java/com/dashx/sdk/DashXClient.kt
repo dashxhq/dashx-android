@@ -90,7 +90,28 @@ class DashXClient {
         this.context = context
         this.mustSubscribe = false
 
+        loadFromStorage()
         createApolloClient()
+    }
+
+    private fun loadFromStorage() {
+        val dashXSharedPreferences = getDashXSharedPreferences(context!!)
+        accountUid = dashXSharedPreferences.getString(SHARED_PREFERENCES_KEY_ACCOUNT_UID, null)
+        accountAnonymousUid = dashXSharedPreferences.getString(SHARED_PREFERENCES_KEY_ACCOUNT_ANONYMOUS_UID, null)
+        identityToken = dashXSharedPreferences.getString(SHARED_PREFERENCES_KEY_IDENTITY_TOKEN, null)
+
+        if (accountAnonymousUid.isNullOrEmpty()) {
+            accountAnonymousUid = generateAccountAnonymousUid()
+            saveToStorage()
+        }
+    }
+
+    private fun saveToStorage() {
+        getDashXSharedPreferences(context!!).edit().apply {
+            putString(SHARED_PREFERENCES_KEY_ACCOUNT_UID, accountUid)
+            putString(SHARED_PREFERENCES_KEY_ACCOUNT_ANONYMOUS_UID, accountAnonymousUid)
+            putString(SHARED_PREFERENCES_KEY_IDENTITY_TOKEN, identityToken)
+        }.apply()
     }
 
     private var apolloClient = getApolloClient()
@@ -159,19 +180,8 @@ class DashXClient {
             .build()
     }
 
-    fun generateAnonymousUid(regenerate: Boolean = false) {
-        val dashXSharedPreferences: SharedPreferences =
-            getDashXSharedPreferences(context!!)
-        val anonymousUid =
-            dashXSharedPreferences.getString(SHARED_PREFERENCES_KEY_ANONYMOUS_UID, null)
-        if (!regenerate && anonymousUid != null) {
-            this.accountAnonymousUid = anonymousUid
-        } else {
-            this.accountAnonymousUid = UUID.randomUUID().toString()
-            dashXSharedPreferences.edit()
-                .putString(SHARED_PREFERENCES_KEY_ANONYMOUS_UID, this.accountAnonymousUid)
-                .apply()
-        }
+    fun generateAccountAnonymousUid(): String {
+        return UUID.randomUUID().toString()
     }
 
     fun identify(options: HashMap<String, String>? = null) {
@@ -222,12 +232,16 @@ class DashXClient {
     fun setIdentity(uid: String?, token: String?) {
         this.accountUid = uid
         this.identityToken = token
+        saveToStorage()
+
         createApolloClient()
     }
 
     fun reset() {
         accountUid = null
-        generateAnonymousUid(regenerate = true)
+        identityToken = null
+        accountAnonymousUid = generateAccountAnonymousUid()
+        saveToStorage()
     }
 
     fun fetchContent(
@@ -367,8 +381,7 @@ class DashXClient {
                         onError(errors)
                         return
                     }
-
-                    onSuccess(gson.toJsonTree(fetchCartResponse).asJsonObject)
+                    onSuccess(Gson().toJsonTree(fetchCartResponse).asJsonObject)
                 }
             })
     }
