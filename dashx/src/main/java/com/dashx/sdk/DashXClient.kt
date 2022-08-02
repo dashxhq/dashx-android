@@ -229,11 +229,7 @@ class DashXClient {
     fun setIdentity(uid: String?, token: String?) {
         this.accountUid = uid
         this.identityToken = token
-
-        getDashXSharedPreferences(context!!).edit().apply {
-            putString(SHARED_PREFERENCES_KEY_ACCOUNT_UID, uid)
-            putString(SHARED_PREFERENCES_KEY_IDENTITY_TOKEN, token)
-        }.apply()
+        saveToStorage(accountUid, accountAnonymousUid, identityToken)
 
         createApolloClient()
     }
@@ -427,7 +423,7 @@ class DashXClient {
     ) {
 
         val saveStoredPreferencesInput = SaveStoredPreferencesInput(
-            accountUid= this.accountUid ?: "",
+            accountUid = this.accountUid ?: "",
             preferenceData
         )
         val saveStoredPreferencesMutation = SaveStoredPreferencesMutation(saveStoredPreferencesInput)
