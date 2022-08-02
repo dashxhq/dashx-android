@@ -93,11 +93,11 @@ class DashXClient {
 
         if (accountAnonymousUid.isNullOrEmpty()) {
             accountAnonymousUid = generateAccountAnonymousUid()
-            saveToStorage(accountUid, accountAnonymousUid, identityToken)
+            saveToStorage()
         }
     }
 
-    private fun saveToStorage(accountUid: String? = null, accountAnonymousUid: String? = null, identityToken: String? = null) {
+    private fun saveToStorage() {
         getDashXSharedPreferences(context!!).edit().apply {
             putString(SHARED_PREFERENCES_KEY_ACCOUNT_UID, accountUid)
             putString(SHARED_PREFERENCES_KEY_ACCOUNT_ANONYMOUS_UID, accountAnonymousUid)
@@ -171,14 +171,8 @@ class DashXClient {
             .build()
     }
 
-    fun generateAccountAnonymousUid(regenerate: Boolean = false):String {
-        val dashXSharedPreferences: SharedPreferences = getDashXSharedPreferences(context!!)
-        val anonymousUid = dashXSharedPreferences.getString(SHARED_PREFERENCES_KEY_ACCOUNT_ANONYMOUS_UID, null)
-        if (!regenerate && anonymousUid != null) {
-            return anonymousUid
-        } else {
-            return UUID.randomUUID().toString()
-        }
+    fun generateAccountAnonymousUid(): String {
+        return UUID.randomUUID().toString()
     }
 
     fun identify(options: HashMap<String, String>? = null) {
@@ -229,7 +223,7 @@ class DashXClient {
     fun setIdentity(uid: String?, token: String?) {
         this.accountUid = uid
         this.identityToken = token
-        saveToStorage(accountUid, accountAnonymousUid, identityToken)
+        saveToStorage()
 
         createApolloClient()
     }
@@ -237,8 +231,8 @@ class DashXClient {
     fun reset() {
         accountUid = null
         identityToken = null
-        accountAnonymousUid = generateAccountAnonymousUid(regenerate = true)
-        saveToStorage(accountAnonymousUid = accountAnonymousUid)
+        accountAnonymousUid = generateAccountAnonymousUid()
+        saveToStorage()
     }
 
     fun fetchContent(
