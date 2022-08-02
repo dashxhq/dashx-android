@@ -97,7 +97,7 @@ class DashXClient {
         }
     }
 
-    private fun saveToStorage(accountUid: String? = null, accountAnonymousUid: String? = null, identityToken: String? = null){
+    private fun saveToStorage(accountUid: String? = null, accountAnonymousUid: String? = null, identityToken: String? = null) {
         getDashXSharedPreferences(context!!).edit().apply {
             putString(SHARED_PREFERENCES_KEY_ACCOUNT_UID, accountUid)
             putString(SHARED_PREFERENCES_KEY_ACCOUNT_ANONYMOUS_UID, accountAnonymousUid)
