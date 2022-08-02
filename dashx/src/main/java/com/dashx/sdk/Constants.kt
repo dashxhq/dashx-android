@@ -45,5 +45,3 @@ object UploadConstants {
     const val READY = "ready"
     const val WAITING = "waiting"
 }
-
-

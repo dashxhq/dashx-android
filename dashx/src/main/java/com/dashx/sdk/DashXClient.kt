@@ -47,14 +47,13 @@ class DashXClient {
     private var context: Context? = null
 
     private var mustSubscribe: Boolean = false
-    private var pollCounter = 1
 
+    private var pollCounter = 1
     private val gson by lazy { Gson() }
 
     companion object {
 
         private var INSTANCE: DashXClient? = null
-
 
         fun createInstance(
             context: Context,
@@ -386,8 +385,7 @@ class DashXClient {
             .query(fetchStoredPreferencesQuery)
             .enqueue(object : ApolloCall.Callback<FetchStoredPreferencesQuery.Data>() {
                 override fun onResponse(response: Response<FetchStoredPreferencesQuery.Data>) {
-                    val fetchStoredPreferencesResponse =
-                        response.data?.fetchStoredPreferences?.preferenceData
+                    val fetchStoredPreferencesResponse = response.data?.fetchStoredPreferences?.preferenceData
 
                     if (!response.errors.isNullOrEmpty()) {
                         val errors = response.errors?.map { e -> e.message }.toString()
@@ -463,8 +461,7 @@ class DashXClient {
 
         if (connection.responseCode == HttpURLConnection.HTTP_OK) {
             externalAsset(id, onSuccess, onError)
-            return
-        }else{
+        } else {
             onError(connection.errorStream.toString())
         }
     }
@@ -504,7 +501,6 @@ class DashXClient {
                     DashXLog.d(tag, e.message)
                     e.printStackTrace()
                 }
-
             })
     }
 
@@ -518,8 +514,7 @@ class DashXClient {
             accountUid = this.accountUid ?: "",
             preferenceData
         )
-        val saveStoredPreferencesMutation =
-            SaveStoredPreferencesMutation(saveStoredPreferencesInput)
+        val saveStoredPreferencesMutation = SaveStoredPreferencesMutation(saveStoredPreferencesInput)
 
         apolloClient
             .mutate(saveStoredPreferencesMutation)
