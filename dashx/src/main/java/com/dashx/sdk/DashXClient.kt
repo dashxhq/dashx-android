@@ -81,20 +81,28 @@ class DashXClient {
         this.context = context
         this.mustSubscribe = false
 
-        loadIdentity()
+        loadFromStorage()
         createApolloClient()
     }
 
-    private fun loadIdentity() {
-        getDashXSharedPreferences(context!!).apply {
-            if (contains(SHARED_PREFERENCES_KEY_ACCOUNT_UID)) {
-                this@DashXClient.accountUid = getString(SHARED_PREFERENCES_KEY_ACCOUNT_UID, "")
-            }
-            if (contains(SHARED_PREFERENCES_KEY_IDENTITY_TOKEN)) {
-                this@DashXClient.identityToken =
-                    getString(SHARED_PREFERENCES_KEY_IDENTITY_TOKEN, "")
-            }
+    private fun loadFromStorage() {
+        val dashXSharedPreferences = getDashXSharedPreferences(context!!)
+        accountUid = dashXSharedPreferences.getString(SHARED_PREFERENCES_KEY_ACCOUNT_UID, null)
+        accountAnonymousUid = dashXSharedPreferences.getString(SHARED_PREFERENCES_KEY_ACCOUNT_ANONYMOUS_UID, null)
+        identityToken = dashXSharedPreferences.getString(SHARED_PREFERENCES_KEY_IDENTITY_TOKEN, null)
+
+        if (accountAnonymousUid.isNullOrEmpty()) {
+            accountAnonymousUid = generateAccountAnonymousUid()
+            saveToStorage(accountUid, accountAnonymousUid, identityToken)
         }
+    }
+
+    private fun saveToStorage(accountUid: String? = null, accountAnonymousUid: String? = null, identityToken: String? = null){
+        getDashXSharedPreferences(context!!).edit().apply {
+            putString(SHARED_PREFERENCES_KEY_ACCOUNT_UID, accountUid)
+            putString(SHARED_PREFERENCES_KEY_ACCOUNT_ANONYMOUS_UID, accountAnonymousUid)
+            putString(SHARED_PREFERENCES_KEY_IDENTITY_TOKEN, identityToken)
+        }.apply()
     }
 
     private var apolloClient = getApolloClient()
@@ -163,18 +171,13 @@ class DashXClient {
             .build()
     }
 
-    fun generateAnonymousUid(regenerate: Boolean = false) {
-        val dashXSharedPreferences: SharedPreferences =
-            getDashXSharedPreferences(context!!)
-        val anonymousUid =
-            dashXSharedPreferences.getString(SHARED_PREFERENCES_KEY_ANONYMOUS_UID, null)
+    fun generateAccountAnonymousUid(regenerate: Boolean = false):String {
+        val dashXSharedPreferences: SharedPreferences = getDashXSharedPreferences(context!!)
+        val anonymousUid = dashXSharedPreferences.getString(SHARED_PREFERENCES_KEY_ACCOUNT_ANONYMOUS_UID, null)
         if (!regenerate && anonymousUid != null) {
-            this.accountAnonymousUid = anonymousUid
+            return anonymousUid
         } else {
-            this.accountAnonymousUid = UUID.randomUUID().toString()
-            dashXSharedPreferences.edit()
-                .putString(SHARED_PREFERENCES_KEY_ANONYMOUS_UID, this.accountAnonymousUid)
-                .apply()
+            return UUID.randomUUID().toString()
         }
     }
 
@@ -216,7 +219,7 @@ class DashXClient {
                     e.printStackTrace()
                 }
 
-                override fun onResponse(response: com.apollographql.apollo.api.Response<IdentifyAccountMutation.Data>) {
+                override fun onResponse(response: Response<IdentifyAccountMutation.Data>) {
                     val identifyResponse = response.data?.identifyAccount
                     DashXLog.d(tag, "Sent identify: $identifyResponse")
                 }
@@ -236,13 +239,10 @@ class DashXClient {
     }
 
     fun reset() {
-        getDashXSharedPreferences(context!!).edit().apply {
-            remove(SHARED_PREFERENCES_KEY_ACCOUNT_UID)
-            remove(SHARED_PREFERENCES_KEY_IDENTITY_TOKEN)
-        }.apply()
         accountUid = null
         identityToken = null
-        generateAnonymousUid(regenerate = true)
+        accountAnonymousUid = generateAccountAnonymousUid(regenerate = true)
+        saveToStorage(accountAnonymousUid = accountAnonymousUid)
     }
 
     fun fetchContent(
@@ -284,7 +284,7 @@ class DashXClient {
                     e.printStackTrace()
                 }
 
-                override fun onResponse(response: com.apollographql.apollo.api.Response<FetchContentQuery.Data>) {
+                override fun onResponse(response: Response<FetchContentQuery.Data>) {
                     val fetchContentResponse = response.data?.fetchContent
                     if (!response.errors.isNullOrEmpty()) {
                         val errors = response.errors?.map { e -> e.message }.toString()
@@ -339,7 +339,7 @@ class DashXClient {
                     onError(e.message ?: "")
                 }
 
-                override fun onResponse(response: com.apollographql.apollo.api.Response<SearchContentQuery.Data>) {
+                override fun onResponse(response: Response<SearchContentQuery.Data>) {
                     val content = response.data?.searchContent
                     if (!response.errors.isNullOrEmpty()) {
                         val errors = response.errors?.map { e -> e.message }.toString()
@@ -373,7 +373,7 @@ class DashXClient {
                     e.printStackTrace()
                 }
 
-                override fun onResponse(response: com.apollographql.apollo.api.Response<FetchCartQuery.Data>) {
+                override fun onResponse(response: Response<FetchCartQuery.Data>) {
                     val fetchCartResponse = response.data?.fetchCart
 
                     if (!response.errors.isNullOrEmpty()) {
@@ -382,7 +382,6 @@ class DashXClient {
                         onError(errors)
                         return
                     }
-
                     onSuccess(Gson().toJsonTree(fetchCartResponse).asJsonObject)
                 }
             })
@@ -484,7 +483,7 @@ class DashXClient {
                     e.printStackTrace()
                 }
 
-                override fun onResponse(response: com.apollographql.apollo.api.Response<AddItemToCartMutation.Data>) {
+                override fun onResponse(response: Response<AddItemToCartMutation.Data>) {
                     val addItemToCartResponse = response.data?.addItemToCart
 
                     if (!response.errors.isNullOrEmpty()) {
@@ -518,7 +517,7 @@ class DashXClient {
                     e.printStackTrace()
                 }
 
-                override fun onResponse(response: com.apollographql.apollo.api.Response<TrackEventMutation.Data>) {
+                override fun onResponse(response: Response<TrackEventMutation.Data>) {
                     val trackResponse = response.data?.trackEvent
                     DashXLog.d(tag, "Sent event: $event, $trackResponse")
                 }
@@ -630,7 +629,7 @@ class DashXClient {
                             e.printStackTrace()
                         }
 
-                        override fun onResponse(response: com.apollographql.apollo.api.Response<SubscribeContactMutation.Data>) {
+                        override fun onResponse(response: Response<SubscribeContactMutation.Data>) {
                             val subscribeContactResponse = response.data?.subscribeContact
                             if (subscribeContactResponse != null) {
                                 saveDeviceToken(subscribeContactResponse.value)
@@ -666,7 +665,7 @@ class DashXClient {
                     e.printStackTrace()
                 }
 
-                override fun onResponse(response: com.apollographql.apollo.api.Response<TrackNotificationMutation.Data>) {
+                override fun onResponse(response: Response<TrackNotificationMutation.Data>) {
                     val trackNotificationResponse = response.data?.trackNotification
                     DashXLog.d(tag, "trackNotificationResponse: $trackNotificationResponse")
                 }
