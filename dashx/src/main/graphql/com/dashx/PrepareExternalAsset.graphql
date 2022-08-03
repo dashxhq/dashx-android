@@ -1,0 +1,12 @@
+mutation PrepareExternalAsset($input: PrepareExternalAssetInput!) {
+    prepareExternalAsset(input: $input) {
+        id
+        installationId
+        externalColumnId
+        storageProviderId
+        status
+        data
+        createdAt
+        updatedAt
+    }
+}

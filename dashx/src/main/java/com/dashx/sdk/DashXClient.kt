@@ -15,12 +15,18 @@ import com.apollographql.apollo.cache.http.ApolloHttpCache
 import com.apollographql.apollo.cache.http.DiskLruHttpCacheStore
 import com.apollographql.apollo.exception.ApolloException
 import com.dashx.*
+import com.dashx.sdk.data.PrepareExternalAssetResponse
 import com.dashx.type.*
 import com.google.gson.Gson
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
 import java.io.File
+import java.io.FileInputStream
+import java.net.HttpURLConnection
+import java.net.URL
 import java.time.Instant
 import java.util.*
 
@@ -33,14 +39,17 @@ class DashXClient {
     private var targetEnvironment: String? = null
 
     // Account variables
-    private var anonymousUid: String? = null
-    private var uid: String? = null
+    private var accountAnonymousUid: String? = null
+    private var accountUid: String? = null
     private var deviceToken: String? = null
     private var identityToken: String? = null
 
     private var context: Context? = null
 
     private var mustSubscribe: Boolean = false
+
+    private var pollCounter = 1
+    private val gson by lazy { Gson() }
 
     companion object {
 
@@ -81,7 +90,28 @@ class DashXClient {
         this.context = context
         this.mustSubscribe = false
 
+        loadFromStorage()
         createApolloClient()
+    }
+
+    private fun loadFromStorage() {
+        val dashXSharedPreferences = getDashXSharedPreferences(context!!)
+        accountUid = dashXSharedPreferences.getString(SHARED_PREFERENCES_KEY_ACCOUNT_UID, null)
+        accountAnonymousUid = dashXSharedPreferences.getString(SHARED_PREFERENCES_KEY_ACCOUNT_ANONYMOUS_UID, null)
+        identityToken = dashXSharedPreferences.getString(SHARED_PREFERENCES_KEY_IDENTITY_TOKEN, null)
+
+        if (accountAnonymousUid.isNullOrEmpty()) {
+            accountAnonymousUid = generateAccountAnonymousUid()
+            saveToStorage()
+        }
+    }
+
+    private fun saveToStorage() {
+        getDashXSharedPreferences(context!!).edit().apply {
+            putString(SHARED_PREFERENCES_KEY_ACCOUNT_UID, accountUid)
+            putString(SHARED_PREFERENCES_KEY_ACCOUNT_ANONYMOUS_UID, accountAnonymousUid)
+            putString(SHARED_PREFERENCES_KEY_IDENTITY_TOKEN, identityToken)
+        }.apply()
     }
 
     private var apolloClient = getApolloClient()
@@ -110,7 +140,7 @@ class DashXClient {
         val gsonCustomTypeAdapter = object : CustomTypeAdapter<JsonElement> {
             override fun decode(value: CustomTypeValue<*>): JsonElement {
                 return try {
-                    Gson().toJsonTree(value.value)
+                    gson.toJsonTree(value.value)
                 } catch (e: java.lang.Exception) {
                     throw RuntimeException(e)
                 }
@@ -118,7 +148,7 @@ class DashXClient {
 
             override fun encode(value: JsonElement): CustomTypeValue<*> {
                 return CustomTypeValue.GraphQLJsonObject(
-                    Gson().fromJson(
+                    gson.fromJson(
                         value,
                         Map::class.java
                     ) as Map<String, Any>
@@ -150,46 +180,37 @@ class DashXClient {
             .build()
     }
 
-    fun generateAnonymousUid(regenerate: Boolean = false) {
-        val dashXSharedPreferences: SharedPreferences =
-            getDashXSharedPreferences(context!!)
-        val anonymousUid =
-            dashXSharedPreferences.getString(SHARED_PREFERENCES_KEY_ANONYMOUS_UID, null)
-        if (!regenerate && anonymousUid != null) {
-            this.anonymousUid = anonymousUid
-        } else {
-            this.anonymousUid = UUID.randomUUID().toString()
-            dashXSharedPreferences.edit()
-                .putString(SHARED_PREFERENCES_KEY_ANONYMOUS_UID, this.anonymousUid)
-                .apply()
-        }
+    fun generateAccountAnonymousUid(): String {
+        return UUID.randomUUID().toString()
     }
 
-    fun identify(uid: String?, options: HashMap<String, String>? = hashMapOf()) {
-        if (uid != null) {
-            this.uid = uid
-            DashXLog.d(tag, "Set Uid: $uid")
-            return
-        }
+    fun identify(options: HashMap<String, String>? = null) {
 
         if (options == null) {
-            DashXLog.d(
-                tag,
-                "Cannot be called with null, either pass uid: string or options: object"
-            )
+            DashXLog.d(tag, "Cannot be called with null, pass options: object")
             return
         }
 
-        this.uid = options["uid"]
+        val uid = if (options.containsKey(UserAttributes.UID)) {
+            options[UserAttributes.UID]
+        } else {
+            this.accountUid
+        }
+
+        val anonymousUid = if (options.containsKey(UserAttributes.ANONYMOUS_UID)) {
+            options[UserAttributes.ANONYMOUS_UID]
+        } else {
+            this.accountAnonymousUid
+        }
 
         val identifyAccountInput = IdentifyAccountInput(
-            Input.fromNullable(options["uid"]),
-            Input.fromNullable(anonymousUid),
-            Input.fromNullable(options["email"]),
-            Input.fromNullable(options["phone"]),
-            Input.fromNullable(options["name"]),
-            Input.fromNullable(options["firstName"]),
-            Input.fromNullable(options["lastName"])
+            uid = Input.fromNullable(uid),
+            anonymousUid = Input.fromNullable(anonymousUid),
+            email = Input.fromNullable(options[UserAttributes.EMAIL]),
+            phone = Input.fromNullable(options[UserAttributes.PHONE]),
+            name = Input.fromNullable(options[UserAttributes.NAME]),
+            firstName = Input.fromNullable(options[UserAttributes.FIRST_NAME]),
+            lastName = Input.fromNullable(options[UserAttributes.LAST_NAME])
         )
         val identifyAccountMutation = IdentifyAccountMutation(identifyAccountInput)
 
@@ -201,16 +222,26 @@ class DashXClient {
                     e.printStackTrace()
                 }
 
-                override fun onResponse(response: com.apollographql.apollo.api.Response<IdentifyAccountMutation.Data>) {
+                override fun onResponse(response: Response<IdentifyAccountMutation.Data>) {
                     val identifyResponse = response.data?.identifyAccount
                     DashXLog.d(tag, "Sent identify: $identifyResponse")
                 }
             })
     }
 
+    fun setIdentity(uid: String?, token: String?) {
+        this.accountUid = uid
+        this.identityToken = token
+        saveToStorage()
+
+        createApolloClient()
+    }
+
     fun reset() {
-        uid = null
-        generateAnonymousUid(regenerate = true)
+        accountUid = null
+        identityToken = null
+        accountAnonymousUid = generateAccountAnonymousUid()
+        saveToStorage()
     }
 
     fun fetchContent(
@@ -232,14 +263,14 @@ class DashXClient {
         val contentType = urnArray[0]
 
         val fetchContentInput = FetchContentInput(
-            Input.fromNullable(null),
-            Input.fromNullable(contentType),
-            Input.fromNullable(content),
-            Input.fromNullable(preview),
-            Input.fromNullable(language),
-            Input.fromNullable(fields),
-            Input.fromNullable(include),
-            Input.fromNullable(exclude)
+            installationId = Input.fromNullable(null),
+            contentType = Input.fromNullable(contentType),
+            content = Input.fromNullable(content),
+            preview = Input.fromNullable(preview),
+            language = Input.fromNullable(language),
+            fields = Input.fromNullable(fields),
+            include = Input.fromNullable(include),
+            exclude = Input.fromNullable(exclude)
         )
 
         val fetchContentQuery = FetchContentQuery(fetchContentInput)
@@ -252,7 +283,7 @@ class DashXClient {
                     e.printStackTrace()
                 }
 
-                override fun onResponse(response: com.apollographql.apollo.api.Response<FetchContentQuery.Data>) {
+                override fun onResponse(response: Response<FetchContentQuery.Data>) {
                     val fetchContentResponse = response.data?.fetchContent
                     if (!response.errors.isNullOrEmpty()) {
                         val errors = response.errors?.map { e -> e.message }.toString()
@@ -262,7 +293,7 @@ class DashXClient {
                     }
 
                     if (fetchContentResponse != null) {
-                        onSuccess(Gson().toJsonTree(fetchContentResponse).asJsonObject)
+                        onSuccess(gson.toJsonTree(fetchContentResponse).asJsonObject)
                     }
 
                     DashXLog.d(tag, "Got content: $content")
@@ -307,7 +338,7 @@ class DashXClient {
                     onError(e.message ?: "")
                 }
 
-                override fun onResponse(response: com.apollographql.apollo.api.Response<SearchContentQuery.Data>) {
+                override fun onResponse(response: Response<SearchContentQuery.Data>) {
                     val content = response.data?.searchContent
                     if (!response.errors.isNullOrEmpty()) {
                         val errors = response.errors?.map { e -> e.message }.toString()
@@ -317,7 +348,7 @@ class DashXClient {
                     }
 
                     val result = content ?: listOf()
-                    onSuccess(result.map { Gson().toJsonTree(it).asJsonObject })
+                    onSuccess(result.map { gson.toJsonTree(it).asJsonObject })
                     DashXLog.d(tag, "Got content: $content")
                 }
             })
@@ -328,8 +359,8 @@ class DashXClient {
         onError: (error: String) -> Unit
     ) {
         val fetchCartInput = FetchCartInput(
-            Input.fromNullable(uid),
-            Input.fromNullable(anonymousUid),
+            Input.fromNullable(accountUid),
+            Input.fromNullable(accountAnonymousUid),
         )
         val fetchCartQuery = FetchCartQuery(fetchCartInput)
 
@@ -341,7 +372,7 @@ class DashXClient {
                     e.printStackTrace()
                 }
 
-                override fun onResponse(response: com.apollographql.apollo.api.Response<FetchCartQuery.Data>) {
+                override fun onResponse(response: Response<FetchCartQuery.Data>) {
                     val fetchCartResponse = response.data?.fetchCart
 
                     if (!response.errors.isNullOrEmpty()) {
@@ -350,7 +381,6 @@ class DashXClient {
                         onError(errors)
                         return
                     }
-
                     onSuccess(Gson().toJsonTree(fetchCartResponse).asJsonObject)
                 }
             })
@@ -361,9 +391,7 @@ class DashXClient {
         onError: (error: String) -> Unit
     ) {
 
-        val fetchStoredPreferencesInput = FetchStoredPreferencesInput(
-            Input.fromNullable(this.uid),
-        )
+        val fetchStoredPreferencesInput = FetchStoredPreferencesInput(this.accountUid ?: "")
         val fetchStoredPreferencesQuery = FetchStoredPreferencesQuery(fetchStoredPreferencesInput)
 
         apolloClient
@@ -379,7 +407,7 @@ class DashXClient {
                         return
                     }
 
-                    onSuccess(Gson().toJsonTree(fetchStoredPreferencesResponse).asJsonObject)
+                    onSuccess(gson.toJsonTree(fetchStoredPreferencesResponse).asJsonObject)
                 }
 
                 override fun onFailure(e: ApolloException) {
@@ -391,6 +419,104 @@ class DashXClient {
 
     }
 
+    fun uploadExternalAsset(
+        file: File, externalColumnId: String,
+        onSuccess: (result: JsonObject) -> Unit,
+        onError: (error: String) -> Unit
+    ) {
+        val prepareExternalAssetInput = PrepareExternalAssetInput(externalColumnId)
+
+        val prepareExternalAssetMutation = PrepareExternalAssetMutation(prepareExternalAssetInput)
+
+        apolloClient.mutate(prepareExternalAssetMutation)
+            .enqueue(object : ApolloCall.Callback<PrepareExternalAssetMutation.Data>() {
+                override fun onResponse(response: Response<PrepareExternalAssetMutation.Data>) {
+                    val prepareExternalAssetResponse = response.data?.prepareExternalAsset
+
+                    if (!response.errors.isNullOrEmpty()) {
+                        val errors = response.errors?.map { e -> e.message }.toString()
+                        DashXLog.d(tag, errors)
+                        onError(errors)
+                        return
+                    }
+
+                    val url = (gson.fromJson(
+                        gson.toJsonTree(prepareExternalAssetResponse?.data).asJsonObject,
+                        PrepareExternalAssetResponse::class.java
+                    )).upload.url
+
+                    writeFileToUrl(file, url, prepareExternalAssetResponse?.id.toString(), onSuccess, onError)
+                }
+
+                override fun onFailure(e: ApolloException) {
+                    DashXLog.d(tag, e.message)
+                    e.printStackTrace()
+                }
+            })
+    }
+
+    fun writeFileToUrl(
+        file: File, url: String, id: String, onSuccess: (result: JsonObject) -> Unit,
+        onError: (error: String) -> Unit
+    ) {
+        val connection = URL(url).openConnection() as HttpURLConnection
+        connection.apply {
+            doOutput = true
+            requestMethod = RequestType.PUT
+            setRequestProperty(FileConstants.CONTENT_TYPE, getFileContentType(context, file))
+        }
+
+        val outputStream = connection.outputStream
+        val fileInputStream = FileInputStream(file)
+        val boundaryBytes = getBytes(fileInputStream)
+        outputStream.write(boundaryBytes)
+        outputStream.close()
+
+        if (connection.responseCode == HttpURLConnection.HTTP_OK) {
+            externalAsset(id, onSuccess, onError)
+        } else {
+            onError(connection.errorStream.toString())
+        }
+    }
+
+    fun externalAsset(
+        id: String,
+        onSuccess: (result: JsonObject) -> Unit,
+        onError: (error: String) -> Unit
+    ) {
+        val externalAssetQuery = ExternalAssetQuery(id)
+
+        apolloClient.query(externalAssetQuery)
+            .enqueue(object : ApolloCall.Callback<ExternalAssetQuery.Data>() {
+                override fun onResponse(response: Response<ExternalAssetQuery.Data>) {
+                    val externalAssetResponse = response.data?.externalAsset
+
+                    if (!response.errors.isNullOrEmpty()) {
+                        val errors = response.errors?.map { e -> e.message }.toString()
+                        DashXLog.d(tag, errors)
+                        onError(errors)
+                        return
+                    }
+
+                    if (externalAssetResponse?.status != UploadConstants.READY && pollCounter <= UploadConstants.POLL_TIME_OUT) {
+                        runBlocking {
+                            delay(UploadConstants.POLL_INTERVAL)
+                            externalAsset(id, onSuccess, onError)
+                            pollCounter += 1
+                        }
+                    } else {
+                        pollCounter = 1
+                        onSuccess(gson.toJsonTree(externalAssetResponse).asJsonObject)
+                    }
+                }
+
+                override fun onFailure(e: ApolloException) {
+                    DashXLog.d(tag, e.message)
+                    e.printStackTrace()
+                }
+            })
+    }
+
     fun saveStoredPreferences(
         preferenceData: Any,
         onSuccess: (result: JsonObject) -> Unit,
@@ -398,7 +524,7 @@ class DashXClient {
     ) {
 
         val saveStoredPreferencesInput = SaveStoredPreferencesInput(
-            Input.fromNullable(this.uid),
+            accountUid = this.accountUid ?: "",
             preferenceData
         )
         val saveStoredPreferencesMutation = SaveStoredPreferencesMutation(saveStoredPreferencesInput)
@@ -415,8 +541,7 @@ class DashXClient {
                         onError(errors)
                         return
                     }
-
-                    onSuccess(Gson().toJsonTree(saveStoredPreferencesResponse).asJsonObject)
+                    onSuccess(gson.toJsonTree(saveStoredPreferencesResponse).asJsonObject)
                 }
 
                 override fun onFailure(e: ApolloException) {
@@ -436,8 +561,8 @@ class DashXClient {
         onError: (error: String) -> Unit
     ) {
         val addItemToCartInput = AddItemToCartInput(
-            Input.fromNullable(uid),
-            Input.fromNullable(anonymousUid),
+            Input.fromNullable(accountUid),
+            Input.fromNullable(accountAnonymousUid),
             itemId,
             pricingId,
             quantity,
@@ -454,7 +579,7 @@ class DashXClient {
                     e.printStackTrace()
                 }
 
-                override fun onResponse(response: com.apollographql.apollo.api.Response<AddItemToCartMutation.Data>) {
+                override fun onResponse(response: Response<AddItemToCartMutation.Data>) {
                     val addItemToCartResponse = response.data?.addItemToCart
 
                     if (!response.errors.isNullOrEmpty()) {
@@ -463,19 +588,18 @@ class DashXClient {
                         onError(errors)
                         return
                     }
-
-                    onSuccess(Gson().toJsonTree(addItemToCartResponse).asJsonObject)
+                    onSuccess(gson.toJsonTree(addItemToCartResponse).asJsonObject)
                 }
             })
     }
 
     fun track(event: String, data: HashMap<String, String>? = hashMapOf()) {
-        val jsonData = Gson().toJsonTree(data)
+        val jsonData = gson.toJsonTree(data)
 
         val trackEventInput = TrackEventInput(
             event,
-            Input.fromNullable(uid),
-            Input.fromNullable(anonymousUid),
+            Input.fromNullable(accountUid),
+            Input.fromNullable(accountAnonymousUid),
             Input.fromNullable(jsonData)
         )
         val trackEventMutation = TrackEventMutation(trackEventInput)
@@ -488,7 +612,7 @@ class DashXClient {
                     e.printStackTrace()
                 }
 
-                override fun onResponse(response: com.apollographql.apollo.api.Response<TrackEventMutation.Data>) {
+                override fun onResponse(response: Response<TrackEventMutation.Data>) {
                     val trackResponse = response.data?.trackEvent
                     DashXLog.d(tag, "Sent event: $event, $trackResponse")
                 }
@@ -580,8 +704,8 @@ class DashXClient {
                 ) ?: Settings.Secure.getString(context?.getContentResolver(), "bluetooth_name")
 
                 val subscribeContactInput = SubscribeContactInput(
-                    accountUid = Input.fromNullable(uid),
-                    accountAnonymousUid = Input.fromNullable(anonymousUid!!),
+                    accountUid = Input.fromNullable(accountUid),
+                    accountAnonymousUid = Input.fromNullable(accountAnonymousUid!!),
                     name = Input.fromNullable(name),
                     kind = ContactKind.ANDROID,
                     value = deviceToken!!,
@@ -600,7 +724,7 @@ class DashXClient {
                             e.printStackTrace()
                         }
 
-                        override fun onResponse(response: com.apollographql.apollo.api.Response<SubscribeContactMutation.Data>) {
+                        override fun onResponse(response: Response<SubscribeContactMutation.Data>) {
                             val subscribeContactResponse = response.data?.subscribeContact
                             if (subscribeContactResponse != null) {
                                 saveDeviceToken(subscribeContactResponse.value)
@@ -636,7 +760,7 @@ class DashXClient {
                     e.printStackTrace()
                 }
 
-                override fun onResponse(response: com.apollographql.apollo.api.Response<TrackNotificationMutation.Data>) {
+                override fun onResponse(response: Response<TrackNotificationMutation.Data>) {
                     val trackNotificationResponse = response.data?.trackNotification
                     DashXLog.d(tag, "trackNotificationResponse: $trackNotificationResponse")
                 }

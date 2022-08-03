@@ -63,3 +63,6 @@ Icon
 Network Trash Folder
 Temporary Items
 .apdisk
+
+# GraphQL Schema
+dashx/src/main/graphql/com/dashx/schema.json
