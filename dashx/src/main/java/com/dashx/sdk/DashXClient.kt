@@ -16,6 +16,7 @@ import com.apollographql.apollo.cache.http.ApolloHttpCache
 import com.apollographql.apollo.cache.http.DiskLruHttpCacheStore
 import com.apollographql.apollo.exception.ApolloException
 import com.dashx.*
+import com.dashx.sdk.data.ExternalAsset
 import com.dashx.sdk.data.ExternalAssetResponse
 import com.dashx.sdk.data.PrepareExternalAssetResponse
 import com.dashx.type.*
@@ -420,7 +421,7 @@ class DashXClient {
 
     fun uploadExternalAsset(
         file: File, externalColumnId: String,
-        onSuccess: (result: ExternalAssetResponse) -> Unit,
+        onSuccess: (result: ExternalAsset) -> Unit,
         onError: (error: String) -> Unit
     ) {
         val prepareExternalAssetInput = PrepareExternalAssetInput(externalColumnId)
@@ -456,7 +457,7 @@ class DashXClient {
     }
 
     fun writeFileToUrl(
-        file: File, url: String, id: String, onSuccess: (result: ExternalAssetResponse) -> Unit,
+        file: File, url: String, id: String, onSuccess: (result: ExternalAsset) -> Unit,
         onError: (error: String) -> Unit
     ) {
         Log.d("bjhbjb",url)
@@ -483,7 +484,7 @@ class DashXClient {
 
     fun externalAsset(
         id: String,
-        onSuccess: (result: ExternalAssetResponse) -> Unit,
+        onSuccess: (result: ExternalAsset) -> Unit,
         onError: (error: String) -> Unit
     ) {
         val externalAssetQuery = ExternalAssetQuery(id)
@@ -510,7 +511,7 @@ class DashXClient {
                     } else {
                         pollCounter = 1
                         val responseJsonObject = gson.toJson(externalAssetResponse)
-                        onSuccess(gson.fromJson(responseJsonObject,ExternalAssetResponse::class.java))
+                        onSuccess(gson.fromJson(responseJsonObject, ExternalAsset::class.java))
                     }
                 }
 
