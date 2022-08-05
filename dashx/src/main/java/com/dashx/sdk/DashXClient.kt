@@ -432,7 +432,6 @@ class DashXClient {
             .enqueue(object : ApolloCall.Callback<PrepareExternalAssetMutation.Data>() {
                 override fun onResponse(response: Response<PrepareExternalAssetMutation.Data>) {
                     val prepareExternalAssetResponse = response.data?.prepareExternalAsset
-                    Log.d("prepare",prepareExternalAssetResponse.toString())
 
                     if (!response.errors.isNullOrEmpty()) {
                         val errors = response.errors?.map { e -> e.message }.toString()
@@ -460,7 +459,6 @@ class DashXClient {
         file: File, url: String, id: String, onSuccess: (result: ExternalAsset) -> Unit,
         onError: (error: String) -> Unit
     ) {
-        Log.d("bjhbjb",url)
         val connection = URL(url).openConnection() as HttpURLConnection
         connection.apply {
             doOutput = true
@@ -494,7 +492,6 @@ class DashXClient {
                 override fun onResponse(response: Response<ExternalAssetQuery.Data>) {
                     val externalAssetResponse = response.data?.externalAsset
 
-                    Log.d("ExternalAsset", externalAssetResponse.toString())
                     if (!response.errors.isNullOrEmpty()) {
                         val errors = response.errors?.map { e -> e.message }.toString()
                         DashXLog.d(tag, errors)
