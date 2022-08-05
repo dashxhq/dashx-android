@@ -3,5 +3,6 @@ query ExternalAsset($id: UUID!) {
         id
         externalColumnId
         status
+        data
     }
 }
