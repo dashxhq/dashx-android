@@ -17,7 +17,6 @@ import com.apollographql.apollo.cache.http.DiskLruHttpCacheStore
 import com.apollographql.apollo.exception.ApolloException
 import com.dashx.*
 import com.dashx.sdk.data.ExternalAsset
-import com.dashx.sdk.data.ExternalAssetResponse
 import com.dashx.sdk.data.PrepareExternalAssetResponse
 import com.dashx.type.*
 import com.google.gson.Gson
