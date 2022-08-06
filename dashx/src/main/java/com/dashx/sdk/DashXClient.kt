@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.os.Build
 import android.provider.Settings
+import android.util.Log
 import com.apollographql.apollo.ApolloCall
 import com.apollographql.apollo.ApolloClient
 import com.apollographql.apollo.api.CustomTypeAdapter
@@ -15,6 +16,7 @@ import com.apollographql.apollo.cache.http.ApolloHttpCache
 import com.apollographql.apollo.cache.http.DiskLruHttpCacheStore
 import com.apollographql.apollo.exception.ApolloException
 import com.dashx.*
+import com.dashx.sdk.data.ExternalAsset
 import com.dashx.sdk.data.PrepareExternalAssetResponse
 import com.dashx.type.*
 import com.google.gson.Gson
@@ -390,7 +392,6 @@ class DashXClient {
         onSuccess: (result: JsonObject) -> Unit,
         onError: (error: String) -> Unit
     ) {
-
         val fetchStoredPreferencesInput = FetchStoredPreferencesInput(this.accountUid ?: "")
         val fetchStoredPreferencesQuery = FetchStoredPreferencesQuery(fetchStoredPreferencesInput)
 
@@ -414,14 +415,12 @@ class DashXClient {
                     DashXLog.d(tag, e.message)
                     e.printStackTrace()
                 }
-
             })
-
     }
 
     fun uploadExternalAsset(
         file: File, externalColumnId: String,
-        onSuccess: (result: JsonObject) -> Unit,
+        onSuccess: (result: ExternalAsset) -> Unit,
         onError: (error: String) -> Unit
     ) {
         val prepareExternalAssetInput = PrepareExternalAssetInput(externalColumnId)
@@ -456,7 +455,7 @@ class DashXClient {
     }
 
     fun writeFileToUrl(
-        file: File, url: String, id: String, onSuccess: (result: JsonObject) -> Unit,
+        file: File, url: String, id: String, onSuccess: (result: ExternalAsset) -> Unit,
         onError: (error: String) -> Unit
     ) {
         val connection = URL(url).openConnection() as HttpURLConnection
@@ -464,6 +463,7 @@ class DashXClient {
             doOutput = true
             requestMethod = RequestType.PUT
             setRequestProperty(FileConstants.CONTENT_TYPE, getFileContentType(context, file))
+            setRequestProperty("x-goog-meta-origin-id",id)
         }
 
         val outputStream = connection.outputStream
@@ -481,7 +481,7 @@ class DashXClient {
 
     fun externalAsset(
         id: String,
-        onSuccess: (result: JsonObject) -> Unit,
+        onSuccess: (result: ExternalAsset) -> Unit,
         onError: (error: String) -> Unit
     ) {
         val externalAssetQuery = ExternalAssetQuery(id)
@@ -506,7 +506,8 @@ class DashXClient {
                         }
                     } else {
                         pollCounter = 1
-                        onSuccess(gson.toJsonTree(externalAssetResponse).asJsonObject)
+                        val responseJsonObject = gson.toJson(externalAssetResponse)
+                        onSuccess(gson.fromJson(responseJsonObject, ExternalAsset::class.java))
                     }
                 }
 
