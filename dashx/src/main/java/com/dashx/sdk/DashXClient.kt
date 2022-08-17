@@ -56,7 +56,7 @@ class DashXClient {
 
     companion object {
 
-        var INSTANCE: DashXClient = DashXClient()
+        private var INSTANCE: DashXClient = DashXClient()
 
         fun configure(
             context: Context,
