@@ -20,7 +20,7 @@ data class DashXPayload(
 
 class DashXMessagingService : FirebaseMessagingService() {
     private val tag = DashXMessagingService::class.java.simpleName
-    private val dashXClient = DashXClient.getInstance()
+    private val dashXClient = DashX
     private val notificationReceiverClass: Class<*> = NotificationReceiver::class.java
 
     override fun onNewToken(token: String) {

@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.os.Build
 import android.provider.Settings
-import android.util.Log
 import com.apollographql.apollo.ApolloCall
 import com.apollographql.apollo.ApolloClient
 import com.apollographql.apollo.api.CustomTypeAdapter
@@ -32,6 +31,8 @@ import java.net.URL
 import java.time.Instant
 import java.util.*
 
+val DashX = DashXClient.getInstance()
+
 class DashXClient {
     private val tag = DashXClient::class.java.simpleName
 
@@ -55,30 +56,30 @@ class DashXClient {
 
     companion object {
 
-        private var INSTANCE: DashXClient? = null
+        private var INSTANCE: DashXClient = DashXClient()
 
-        fun createInstance(
+        fun configure(
             context: Context,
             publicKey: String,
             baseURI: String? = null,
             targetEnvironment: String? = null,
         ): DashXClient {
-            if (INSTANCE == null) {
-                INSTANCE = DashXClient()
-                INSTANCE?.init(context, publicKey, baseURI, targetEnvironment)
-            }
-            return INSTANCE!!
+            INSTANCE.init(context, publicKey, baseURI, targetEnvironment)
+            return INSTANCE
         }
 
         @JvmName("getDashXInstance")
         fun getInstance(): DashXClient {
             try {
-                return INSTANCE!!
+                return INSTANCE
             } catch (exception: Exception) {
                 throw NullPointerException("Create DashXClient before accessing it.")
             }
         }
     }
+
+    fun configure(context: Context, publicKey: String, baseURI: String? = null, targetEnvironment: String? = null): DashXClient =
+        DashXClient.configure(context, publicKey, baseURI, targetEnvironment)
 
     private fun init(
         context: Context,
@@ -177,9 +178,7 @@ class DashXClient {
                     }
 
                     return@addInterceptor chain.proceed(requestBuilder.build())
-                }
-                .build())
-            .build()
+                }.build()).build()
     }
 
     fun generateAccountAnonymousUid(): String {
