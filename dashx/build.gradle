@@ -2,6 +2,8 @@ apply plugin: 'com.android.library'
 apply plugin: 'kotlin-android'
 apply plugin: 'com.apollographql.apollo'
 apply plugin: 'maven-publish'
+apply plugin: "com.expediagroup.graphql"
+
 
 group = 'com.dashx'
 version = '1.0.3'
@@ -41,6 +43,14 @@ dependencies {
     implementation "com.apollographql.apollo:apollo-coroutines-support:$apolloVersion"
     implementation "com.apollographql.apollo:apollo-http-cache:$apolloVersion"
 
+    // Kotlin Graphql
+//    implementation "com.expediagroup:graphql-kotlin-spring-client:$latestGraphQLKotlinVersion"
+    implementation "com.expediagroup:graphql-kotlin-ktor-client:$latestGraphQLKotlinVersion"
+//    implementation("com.expediagroup", "graphql-kotlin-ktor-client")
+//    implementation("io.ktor:ktor-client-okhttp:$ktorVersion")
+//    implementation("io.ktor:ktor-client-logging-jvm:$ktorVersion")
+
+
     compileOnly 'com.google.firebase:firebase-core:17.2.1'
     compileOnly 'com.google.firebase:firebase-messaging:20.0.1'
 
@@ -57,4 +67,11 @@ apollo {
     ]
 }
 
-apply from: "${rootProject.projectDir}/scripts/publish-module.gradle"
+graphql {
+    client {
+        endpoint = "https://api.dashx-staging.com/graphql"
+        packageName = group
+    }
+}
+
+//apply from: "${rootProject.projectDir}/scripts/publish-module.gradle"

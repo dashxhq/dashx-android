@@ -1,0 +1,8 @@
+query ExternalAsset($id: UUID!) {
+    externalAsset(id: $id) {
+        id
+        externalColumnId
+        status
+        data
+    }
+}

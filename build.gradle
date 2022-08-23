@@ -4,6 +4,8 @@ plugins {
     id 'org.jetbrains.kotlin.android' version '1.6.10' apply false
     id 'io.github.gradle-nexus.publish-plugin' version '1.1.0'
     id 'com.apollographql.apollo' version "$apolloVersion" apply false
+    id 'com.expediagroup.graphql' version "$latestGraphQLKotlinVersion" apply false
+
 }
 apply from: "${rootDir}/scripts/publish-root.gradle"
 

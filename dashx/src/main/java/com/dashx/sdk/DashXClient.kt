@@ -18,18 +18,25 @@ import com.dashx.*
 import com.dashx.sdk.data.ExternalAsset
 import com.dashx.sdk.data.PrepareExternalAssetResponse
 import com.dashx.type.*
+import com.expediagroup.graphql.client.GraphQLClient
+import com.expediagroup.graphql.client.ktor.GraphQLKtorClient
 import com.google.gson.Gson
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
+import io.ktor.client.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import okhttp3.OkHttp
 import okhttp3.OkHttpClient
+import okhttp3.internal.concurrent.TaskRunner.Companion.logger
 import java.io.File
 import java.io.FileInputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.time.Instant
 import java.util.*
+import java.util.UUID
+import java.util.concurrent.TimeUnit
 
 val DashX = DashXClient.getInstance()
 
@@ -393,6 +400,14 @@ class DashXClient {
     ) {
         val fetchStoredPreferencesInput = FetchStoredPreferencesInput(this.accountUid ?: "")
         val fetchStoredPreferencesQuery = FetchStoredPreferencesQuery(fetchStoredPreferencesInput)
+
+        val ql = GraphQLKtorClient(url = URL("https://api.dashx-staging.com/graphql"))
+        val query = FetchStoredPreferences(variables = FetchStoredPreferences.Variables(com.dashx.inputs.FetchStoredPreferencesInput(this.accountUid ?: "")))
+        runBlocking {
+            val result = ql.execute(query)
+            println("\tquery without parameters result: ${result.data.toString()}")
+        }
+
 
         apolloClient
             .query(fetchStoredPreferencesQuery)
