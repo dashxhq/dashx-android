@@ -15,15 +15,17 @@ import com.apollographql.apollo.cache.http.ApolloHttpCache
 import com.apollographql.apollo.cache.http.DiskLruHttpCacheStore
 import com.apollographql.apollo.exception.ApolloException
 import com.dashx.*
+import com.dashx.graphql.generated.FetchStoredPreferences
 import com.dashx.sdk.data.ExternalAsset
 import com.dashx.sdk.data.PrepareExternalAssetResponse
 import com.dashx.type.*
-import com.expediagroup.graphql.client.GraphQLClient
 import com.expediagroup.graphql.client.ktor.GraphQLKtorClient
+import com.expediagroup.graphql.client.serialization.GraphQLClientKotlinxSerializer
 import com.google.gson.Gson
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import io.ktor.client.*
+import io.ktor.client.plugins.logging.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttp
@@ -401,11 +403,26 @@ class DashXClient {
         val fetchStoredPreferencesInput = FetchStoredPreferencesInput(this.accountUid ?: "")
         val fetchStoredPreferencesQuery = FetchStoredPreferencesQuery(fetchStoredPreferencesInput)
 
-        val ql = GraphQLKtorClient(url = URL("https://api.dashx-staging.com/graphql"))
-        val query = FetchStoredPreferences(variables = FetchStoredPreferences.Variables(com.dashx.inputs.FetchStoredPreferencesInput(this.accountUid ?: "")))
+        val httpClient = HttpClient(engineFactory = io.ktor.client.engine.okhttp.OkHttp) {
+            engine {
+                config {
+                    connectTimeout(10, TimeUnit.SECONDS)
+                    readTimeout(60, TimeUnit.SECONDS)
+                    writeTimeout(60, TimeUnit.SECONDS)
+                }
+            }
+            install(Logging) {
+                logger = Logger.DEFAULT
+                level = LogLevel.HEADERS
+            }
+        }
+        val ql = GraphQLKtorClient(url = URL("https://api.dashx-staging.com/graphql"), httpClient
+        = httpClient, serializer = GraphQLClientKotlinxSerializer())
+
+        val query = FetchStoredPreferences(variables = FetchStoredPreferences.Variables(com.dashx.graphql.generated.inputs.FetchStoredPreferencesInput(accountUid!!)))
         runBlocking {
             val result = ql.execute(query)
-            println("\tquery without parameters result: ${result.data.toString()}")
+            println("\tquery without parameters result: ${result.toString()}")
         }
 
 

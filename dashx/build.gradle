@@ -1,9 +1,11 @@
+import com.expediagroup.graphql.plugin.gradle.config.GraphQLSerializer
+
 apply plugin: 'com.android.library'
 apply plugin: 'kotlin-android'
 apply plugin: 'com.apollographql.apollo'
 apply plugin: 'maven-publish'
 apply plugin: "com.expediagroup.graphql"
-
+apply plugin: "org.jetbrains.kotlin.plugin.serialization"
 
 group = 'com.dashx'
 version = '1.0.3'
@@ -26,14 +28,18 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
-    kotlinOptions {
-        jvmTarget = '1.8'
-    }
+
+        kotlinOptions {
+            jvmTarget = '1.8'
+        }
+
 
     compileOptions {
         coreLibraryDesugaringEnabled true
     }
 }
+
+//android.compileKotlin.configure { dependsOn("graphqlGenerateClient") }
 
 dependencies {
     implementation 'com.squareup.okhttp3:okhttp:4.9.3'
@@ -46,6 +52,8 @@ dependencies {
     // Kotlin Graphql
 //    implementation "com.expediagroup:graphql-kotlin-spring-client:$latestGraphQLKotlinVersion"
     implementation "com.expediagroup:graphql-kotlin-ktor-client:$latestGraphQLKotlinVersion"
+    implementation("io.ktor:ktor-client-okhttp:2.0.3")
+    implementation("io.ktor:ktor-client-logging-jvm:2.0.3")
 //    implementation("com.expediagroup", "graphql-kotlin-ktor-client")
 //    implementation("io.ktor:ktor-client-okhttp:$ktorVersion")
 //    implementation("io.ktor:ktor-client-logging-jvm:$ktorVersion")
@@ -70,8 +78,14 @@ apollo {
 graphql {
     client {
         endpoint = "https://api.dashx-staging.com/graphql"
-        packageName = group
+        packageName = "com.dashx.graphql.generated"
+
+        serializer = GraphQLSerializer.KOTLINX
     }
 }
+
+android.sourceSets {
+        main.kotlin.srcDirs "build/generated/source/graphql/main"
+    }
 
 //apply from: "${rootProject.projectDir}/scripts/publish-module.gradle"
