@@ -54,6 +54,7 @@ dependencies {
     implementation "com.expediagroup:graphql-kotlin-ktor-client:$latestGraphQLKotlinVersion"
     implementation("io.ktor:ktor-client-okhttp:2.0.3")
     implementation("io.ktor:ktor-client-logging-jvm:2.0.3")
+    implementation 'androidx.work:work-runtime-ktx:2.5.0'
 //    implementation("com.expediagroup", "graphql-kotlin-ktor-client")
 //    implementation("io.ktor:ktor-client-okhttp:$ktorVersion")
 //    implementation("io.ktor:ktor-client-logging-jvm:$ktorVersion")
@@ -67,13 +68,13 @@ dependencies {
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.4.0'
 }
 
-apollo {
-    // instruct the compiler to generate Kotlin models
-    generateKotlinModels.set(true)
-    customTypeMapping = [
-        'Json': 'com.google.gson.JsonElement'
-    ]
-}
+//apollo {
+//    // instruct the compiler to generate Kotlin models
+//    generateKotlinModels.set(true)
+//    customTypeMapping = [
+//        'Json': 'com.google.gson.JsonElement'
+//    ]
+//}
 
 graphql {
     client {

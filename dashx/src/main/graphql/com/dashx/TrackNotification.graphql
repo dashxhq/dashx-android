@@ -1,5 +1,0 @@
-mutation TrackNotification($input: TrackNotificationInput!) {
-    trackNotification(input: $input) {
-        success
-    }
-}
