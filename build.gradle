@@ -10,13 +10,6 @@ plugins {
 }
 apply from: "${rootDir}/scripts/publish-root.gradle"
 
-//
-////sourceSets.main.kotlin.srcDir "build/generated/source/graphql/main"
-//
-//sourceSets {
-//    findByName("main")?.java?.srcDir("${project.projectDir}/target/generated-sources/graphql")
-//}
-
 task clean(type: Delete) {
     delete rootProject.buildDir
 }

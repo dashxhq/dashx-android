@@ -8,12 +8,15 @@ import com.dashx.graphql.generated.*
 import com.dashx.graphql.generated.enums.ContactKind
 import com.dashx.graphql.generated.enums.TrackNotificationStatus
 import com.dashx.graphql.generated.inputs.*
+import com.expediagroup.graphql.client.jackson.GraphQLClientJacksonSerializer
 import com.expediagroup.graphql.client.ktor.GraphQLKtorClient
 import com.expediagroup.graphql.client.serialization.GraphQLClientKotlinxSerializer
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import io.ktor.client.*
+import io.ktor.client.plugins.*
 import io.ktor.client.plugins.logging.*
+import io.ktor.client.request.*
 import io.ktor.client.utils.*
 import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
@@ -176,7 +179,7 @@ class DashXClient {
                 }.build()).build()
     }*/
 
-    fun getGraphqlClient(): GraphQLKtorClient {
+    private fun getGraphqlClient(): GraphQLKtorClient {
         val httpClient = HttpClient(engineFactory = io.ktor.client.engine.okhttp.OkHttp) {
             engine {
                 config {
@@ -190,19 +193,18 @@ class DashXClient {
                 level = LogLevel.HEADERS
             }
 
-            buildHeaders {
-                if(publicKey != null) {
-                    append("X-Public-Key", publicKey ?: "")
+            defaultRequest {
+                publicKey?.let {
+                    header("X-Public-Key", it)
                 }
+
                 targetEnvironment?.let {
-                    append("X-Target-Environment", it)
+                    header("X-Target-Environment", it)
                 }
 
-                if (identityToken != null) {
-                    append("X-Identity-Token", identityToken!!)
+                identityToken?.let {
+                    header("X-Identity-Token", it)
                 }
-
-
             }
         }
         return GraphQLKtorClient(url = URL(baseURI ?: "https://api.dashx.com/graphql"), httpClient = httpClient, serializer = GraphQLClientKotlinxSerializer())
@@ -280,7 +282,14 @@ class DashXClient {
         val content = urnArray[1]
         val contentType = urnArray[0]
 
-        val query = FetchContent(variables = FetchContent.Variables(FetchContentInput(accountUid!!)))
+        val query = FetchContent(variables = FetchContent.Variables(FetchContentInput(
+            contentType = contentType,
+            content = content,
+            preview = preview,
+            language = language,
+            fields = fields,
+            include = include,
+            exclude = exclude)))
         runBlocking {
             val result = apolloClient.execute(query)
             println("\tquery without parameters result: $result")
@@ -340,12 +349,28 @@ class DashXClient {
                 logger = Logger.DEFAULT
                 level = LogLevel.HEADERS
             }
+
+            defaultRequest {
+                publicKey?.let {
+                    header("X-Public-Key", it)
+                }
+
+                targetEnvironment?.let {
+                    header("X-Target-Environment", it)
+                }
+
+                identityToken?.let {
+                    header("X-Identity-Token", it)
+                }
+            }
         }
-        val ql = GraphQLKtorClient(url = URL("https://api.dashx-staging.com/graphql"), httpClient = httpClient, serializer = GraphQLClientKotlinxSerializer())
+        val ql = GraphQLKtorClient(url = URL("https://api.dashx-staging.com/graphql"), httpClient
+        = httpClient, serializer = GraphQLClientKotlinxSerializer())
 
         val query = FetchStoredPreferences(variables = FetchStoredPreferences.Variables(FetchStoredPreferencesInput(accountUid!!)))
+        val query1 = PrepareExternalAsset(variables = PrepareExternalAsset.Variables(PrepareExternalAssetInput("f03b20a8-2375-4f8d-bfbe-ce35141abe98")))
         runBlocking {
-            val result = apolloClient.execute(query)
+            val result = ql.execute(query1)
             println("\tquery without parameters result: $result")
         }
     }
