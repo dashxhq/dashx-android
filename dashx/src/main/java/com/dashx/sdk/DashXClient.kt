@@ -8,7 +8,6 @@ import com.dashx.graphql.generated.*
 import com.dashx.graphql.generated.enums.ContactKind
 import com.dashx.graphql.generated.enums.TrackNotificationStatus
 import com.dashx.graphql.generated.inputs.*
-import com.expediagroup.graphql.client.jackson.GraphQLClientJacksonSerializer
 import com.expediagroup.graphql.client.ktor.GraphQLKtorClient
 import com.expediagroup.graphql.client.serialization.GraphQLClientKotlinxSerializer
 import com.google.gson.Gson
@@ -17,7 +16,6 @@ import io.ktor.client.*
 import io.ktor.client.plugins.*
 import io.ktor.client.plugins.logging.*
 import io.ktor.client.request.*
-import io.ktor.client.utils.*
 import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
 import java.io.File
@@ -25,7 +23,6 @@ import java.io.FileInputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.time.Instant
-import java.util.*
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
@@ -115,10 +112,10 @@ class DashXClient {
         }.apply()
     }
 
-    private var apolloClient = getGraphqlClient()
+    private var graphqlClient = getGraphqlClient()
 
     private fun createApolloClient() {
-        apolloClient = getGraphqlClient()
+        graphqlClient = getGraphqlClient()
     }
 
     fun setIdentityToken(identityToken: String) {
@@ -243,7 +240,7 @@ class DashXClient {
             firstName = options[UserAttributes.FIRST_NAME],
             lastName = options[UserAttributes.LAST_NAME])))
         runBlocking {
-            val result = apolloClient.execute(query)
+            val result = graphqlClient.execute(query)
             println("\tquery without parameters result: $result")
         }
 
@@ -291,8 +288,16 @@ class DashXClient {
             include = include,
             exclude = exclude)))
         runBlocking {
-            val result = apolloClient.execute(query)
-            println("\tquery without parameters result: $result")
+            val result = graphqlClient.execute(query)
+
+            if (!result.errors.isNullOrEmpty()) {
+                val errors = result.errors?.map { e -> e.message }.toString()
+                DashXLog.d(tag, errors)
+                onError(errors)
+                return@runBlocking
+            }
+
+            result.data?.fetchContent?.let { onSuccess(gson.toJsonTree(it).asJsonObject) }
         }
 
 
@@ -315,8 +320,16 @@ class DashXClient {
 
         val query = SearchContent(variables = SearchContent.Variables(SearchContentInput(contentType = contentType, returnType = returnType)))
         runBlocking {
-            val result = apolloClient.execute(query)
-            println("\tquery without parameters result: $result")
+            val result = graphqlClient.execute(query)
+            if (!result.errors.isNullOrEmpty()) {
+                val errors = result.errors?.map { e -> e.message }.toString()
+                DashXLog.d(tag, errors)
+                onError(errors)
+                return@runBlocking
+            }
+
+            val content = result.data?.searchContent ?: listOf()
+            onSuccess(content.map { gson.toJsonTree(it).asJsonObject })
         }
     }
 
@@ -327,7 +340,7 @@ class DashXClient {
 
         val query = FetchCart(variables = FetchCart.Variables(FetchCartInput(accountUid!!)))
         runBlocking {
-            val result = apolloClient.execute(query)
+            val result = graphqlClient.execute(query)
             println("\tquery without parameters result: $result")
         }
     }
@@ -364,11 +377,13 @@ class DashXClient {
                 }
             }
         }
-        val ql = GraphQLKtorClient(url = URL("https://api.dashx-staging.com/graphql"), httpClient
+        val ql = MyGraphQLKtorClient(url = URL("https://api.dashx-staging.com/graphql"), httpClient
         = httpClient, serializer = GraphQLClientKotlinxSerializer())
 
         val query = FetchStoredPreferences(variables = FetchStoredPreferences.Variables(FetchStoredPreferencesInput(accountUid!!)))
-        val query1 = PrepareExternalAsset(variables = PrepareExternalAsset.Variables(PrepareExternalAssetInput("f03b20a8-2375-4f8d-bfbe-ce35141abe98")))
+        val query1 = FetchCart(variables = FetchCart.Variables(FetchCartInput(accountUid)))
+        val query2  = PrepareExternalAsset(variables = PrepareExternalAsset.Variables(
+            PrepareExternalAssetInput("f03b20a8-2375-4f8d-bfbe-ce35141abe98")))
         runBlocking {
             val result = ql.execute(query1)
             println("\tquery without parameters result: $result")
@@ -383,7 +398,7 @@ class DashXClient {
 
         val query = PrepareExternalAsset(variables = PrepareExternalAsset.Variables(PrepareExternalAssetInput(accountUid!!)))
         runBlocking {
-            val result = apolloClient.execute(query)
+            val result = graphqlClient.execute(query)
             println("\tquery without parameters result: $result")
         }
 
@@ -447,7 +462,7 @@ class DashXClient {
 
         val query = ExternalAsset(variables = ExternalAsset.Variables(accountUid!!))
         runBlocking {
-            val result = apolloClient.execute(query)
+            val result = graphqlClient.execute(query)
 
             println("\tquery without parameters result: $result")
         }
@@ -493,7 +508,7 @@ class DashXClient {
 
         val query = SaveStoredPreferences(variables = SaveStoredPreferences.Variables(SaveStoredPreferencesInput(accountUid!!, preferenceData)))
         runBlocking {
-            val result = apolloClient.execute(query)
+            val result = graphqlClient.execute(query)
             println("\tquery without parameters result: $result")
         }
 
@@ -537,7 +552,7 @@ class DashXClient {
 
         val query = FetchStoredPreferences(variables = FetchStoredPreferences.Variables(FetchStoredPreferencesInput(accountUid!!)))
         runBlocking {
-            val result = apolloClient.execute(query)
+            val result = graphqlClient.execute(query)
             println("\tquery without parameters result: $result")
         }
     }
@@ -547,7 +562,7 @@ class DashXClient {
 
         val query = TrackEvent(variables = TrackEvent.Variables(TrackEventInput(accountAnonymousUid = accountAnonymousUid, accountUid = accountUid!!, data = jsonData, event = event)))
         runBlocking {
-            val result = apolloClient.execute(query)
+            val result = graphqlClient.execute(query)
             println("\tquery without parameters result: $result")
         }
     }
@@ -648,7 +663,7 @@ class DashXClient {
                         deviceModel = Build.MODEL)
                 ))
                 runBlocking {
-                    val result = apolloClient.execute(query)
+                    val result = graphqlClient.execute(query)
                     println("\tquery without parameters result: $result")
                 }
             }
@@ -663,7 +678,7 @@ class DashXClient {
 
         val query = TrackNotification(variables = TrackNotification.Variables(TrackNotificationInput(id = id, status = status, timestamp = currentTime)))
         runBlocking {
-            val result = apolloClient.execute(query)
+            val result = graphqlClient.execute(query)
             println("\tquery without parameters result: $result")
         }
 
