@@ -4,10 +4,12 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.os.Build
 import android.provider.Settings
+import android.util.Log
 import com.dashx.graphql.generated.*
 import com.dashx.graphql.generated.enums.ContactKind
 import com.dashx.graphql.generated.enums.TrackNotificationStatus
 import com.dashx.graphql.generated.inputs.*
+import com.dashx.sdk.data.PrepareExternalAssetResponse
 import com.expediagroup.graphql.client.ktor.GraphQLKtorClient
 import com.expediagroup.graphql.client.serialization.GraphQLClientKotlinxSerializer
 import com.google.gson.Gson
@@ -241,7 +243,14 @@ class DashXClient {
             lastName = options[UserAttributes.LAST_NAME])))
         runBlocking {
             val result = graphqlClient.execute(query)
-            println("\tquery without parameters result: $result")
+
+            if (!result.errors.isNullOrEmpty()) {
+                val errors = result.errors?.map { e -> e.message }.toString()
+                DashXLog.d(tag, errors)
+                return@runBlocking
+            }
+
+            result.data?.identifyAccount?.let { gson.toJsonTree(it) }
         }
 
     }
@@ -321,6 +330,7 @@ class DashXClient {
         val query = SearchContent(variables = SearchContent.Variables(SearchContentInput(contentType = contentType, returnType = returnType)))
         runBlocking {
             val result = graphqlClient.execute(query)
+
             if (!result.errors.isNullOrEmpty()) {
                 val errors = result.errors?.map { e -> e.message }.toString()
                 DashXLog.d(tag, errors)
@@ -341,7 +351,15 @@ class DashXClient {
         val query = FetchCart(variables = FetchCart.Variables(FetchCartInput(accountUid!!)))
         runBlocking {
             val result = graphqlClient.execute(query)
-            println("\tquery without parameters result: $result")
+
+            if (!result.errors.isNullOrEmpty()) {
+                val errors = result.errors?.map { e -> e.message }.toString()
+                DashXLog.d(tag, errors)
+                onError(errors)
+                return@runBlocking
+            }
+
+            result.data?.fetchCart?.let { onSuccess(gson.toJsonTree(it).asJsonObject) }
         }
     }
 
@@ -381,12 +399,20 @@ class DashXClient {
         = httpClient, serializer = GraphQLClientKotlinxSerializer())
 
         val query = FetchStoredPreferences(variables = FetchStoredPreferences.Variables(FetchStoredPreferencesInput(accountUid!!)))
-        val query1 = FetchCart(variables = FetchCart.Variables(FetchCartInput(accountUid)))
+        /*val query1 = FetchCart(variables = FetchCart.Variables(FetchCartInput(accountUid)))
         val query2  = PrepareExternalAsset(variables = PrepareExternalAsset.Variables(
-            PrepareExternalAssetInput("f03b20a8-2375-4f8d-bfbe-ce35141abe98")))
+            PrepareExternalAssetInput("f03b20a8-2375-4f8d-bfbe-ce35141abe98")))*/
         runBlocking {
-            val result = ql.execute(query1)
-            println("\tquery without parameters result: $result")
+            val result = ql.execute(query)
+
+            if (!result.errors.isNullOrEmpty()) {
+                val errors = result.errors?.map { e -> e.message }.toString()
+                DashXLog.d(tag, errors)
+                onError(errors)
+                return@runBlocking
+            }
+
+            result.data?.fetchStoredPreferences?.let { onSuccess(gson.toJsonTree(it).asJsonObject) }
         }
     }
 
@@ -399,7 +425,24 @@ class DashXClient {
         val query = PrepareExternalAsset(variables = PrepareExternalAsset.Variables(PrepareExternalAssetInput(accountUid!!)))
         runBlocking {
             val result = graphqlClient.execute(query)
-            println("\tquery without parameters result: $result")
+
+            if (!result.errors.isNullOrEmpty()) {
+                val errors = result.errors?.map { e -> e.message }.toString()
+                DashXLog.d(tag, errors)
+                onError(errors)
+                return@runBlocking
+            }
+
+            val url = (gson.fromJson(
+                gson.toJsonTree(result?.data).asJsonObject,
+                PrepareExternalAssetResponse::class.java
+            )).upload.url
+
+            Log.d("dsz",url)
+
+                    //writeFileToUrl(file, url, result.data?.id.toString(), onSuccess, onError)
+//            result.data?.prepareExternalAsset.let { onSuccess(gson.toJsonTree(it).asJsonObject) }
+//            result.data?.?.let { onSuccess(gson.toJsonTree(it).asJsonObject) }
         }
 
 //        apolloClient.mutate(prepareExternalAssetMutation)
@@ -464,7 +507,12 @@ class DashXClient {
         runBlocking {
             val result = graphqlClient.execute(query)
 
-            println("\tquery without parameters result: $result")
+            if (!result.errors.isNullOrEmpty()) {
+                val errors = result.errors?.map { e -> e.message }.toString()
+                DashXLog.d(tag, errors)
+                onError(errors)
+                return@runBlocking
+            }
         }
 //        val externalAssetQuery = ExternalAssetQuery(id)
 
@@ -509,7 +557,15 @@ class DashXClient {
         val query = SaveStoredPreferences(variables = SaveStoredPreferences.Variables(SaveStoredPreferencesInput(accountUid!!, preferenceData)))
         runBlocking {
             val result = graphqlClient.execute(query)
-            println("\tquery without parameters result: $result")
+
+            if (!result.errors.isNullOrEmpty()) {
+                val errors = result.errors?.map { e -> e.message }.toString()
+                DashXLog.d(tag, errors)
+                onError(errors)
+                return@runBlocking
+            }
+
+            onSuccess(gson.toJsonTree(result.data?.saveStoredPreferences).asJsonObject)
         }
 
 //        val saveStoredPreferencesInput = SaveStoredPreferencesInput(
@@ -550,10 +606,18 @@ class DashXClient {
         onError: (error: String) -> Unit
     ) {
 
-        val query = FetchStoredPreferences(variables = FetchStoredPreferences.Variables(FetchStoredPreferencesInput(accountUid!!)))
+        val query = AddItemToCart(variables = AddItemToCart.Variables(AddItemToCartInput(accountUid = accountUid!!, itemId = itemId, pricingId = pricingId, quantity = quantity, reset = reset)))
         runBlocking {
             val result = graphqlClient.execute(query)
-            println("\tquery without parameters result: $result")
+
+            if (!result.errors.isNullOrEmpty()) {
+                val errors = result.errors?.map { e -> e.message }.toString()
+                DashXLog.d(tag, errors)
+                onError(errors)
+                return@runBlocking
+            }
+
+            result.data?.addItemToCart.let { onSuccess(gson.toJsonTree(it).asJsonObject) }
         }
     }
 
@@ -561,9 +625,18 @@ class DashXClient {
         val jsonData = data?.toMap()?.let { JSONObject(it) }.toString()
 
         val query = TrackEvent(variables = TrackEvent.Variables(TrackEventInput(accountAnonymousUid = accountAnonymousUid, accountUid = accountUid!!, data = jsonData, event = event)))
+
         runBlocking {
             val result = graphqlClient.execute(query)
-            println("\tquery without parameters result: $result")
+
+            if (!result.errors.isNullOrEmpty()) {
+                val errors = result.errors?.map { e -> e.message }.toString()
+                DashXLog.d("dasd", errors)
+                return@runBlocking
+            }
+
+            result.data?.trackEvent.let { gson.toJsonTree(it) }
+            DashXLog.d("werfsd", result.data?.trackEvent.let { gson.toJsonTree(it) }.toString())
         }
     }
 
@@ -664,7 +737,14 @@ class DashXClient {
                 ))
                 runBlocking {
                     val result = graphqlClient.execute(query)
-                    println("\tquery without parameters result: $result")
+
+                    if (!result.errors.isNullOrEmpty()) {
+                        val errors = result.errors?.map { e -> e.message }.toString()
+                        DashXLog.d(tag, errors)
+                        return@runBlocking
+                    }
+
+                   result.data?.subscribeContact.let { gson.toJsonTree(it) }
                 }
             }
             else -> {
@@ -679,7 +759,14 @@ class DashXClient {
         val query = TrackNotification(variables = TrackNotification.Variables(TrackNotificationInput(id = id, status = status, timestamp = currentTime)))
         runBlocking {
             val result = graphqlClient.execute(query)
-            println("\tquery without parameters result: $result")
+
+            if (!result.errors.isNullOrEmpty()) {
+                val errors = result.errors?.map { e -> e.message }.toString()
+                DashXLog.d(tag, errors)
+                return@runBlocking
+            }
+
+            result.data?.trackNotification.let { gson.toJsonTree(it) }
         }
 
     }
