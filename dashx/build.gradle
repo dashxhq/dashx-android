@@ -2,7 +2,6 @@ import com.expediagroup.graphql.plugin.gradle.config.GraphQLSerializer
 
 apply plugin: 'com.android.library'
 apply plugin: 'kotlin-android'
-apply plugin: 'com.apollographql.apollo'
 apply plugin: 'maven-publish'
 apply plugin: 'com.expediagroup.graphql'
 apply plugin: 'org.jetbrains.kotlin.plugin.serialization'

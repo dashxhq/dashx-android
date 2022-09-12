@@ -90,7 +90,7 @@ class DashXClient {
         this.mustSubscribe = false
 
         loadFromStorage()
-        createApolloClient()
+        createGraphqlClient()
     }
 
     private fun loadFromStorage() {
@@ -115,13 +115,13 @@ class DashXClient {
 
     private var graphqlClient = getGraphqlClient()
 
-    private fun createApolloClient() {
+    private fun createGraphqlClient() {
         graphqlClient = getGraphqlClient()
     }
 
     fun setIdentityToken(identityToken: String) {
         this.identityToken = identityToken
-        createApolloClient()
+        createGraphqlClient()
     }
 
     fun setDeviceToken(deviceToken: String) {
@@ -213,7 +213,7 @@ class DashXClient {
         this.identityToken = token
         saveToStorage()
 
-        createApolloClient()
+        createGraphqlClient()
     }
 
     fun reset() {
