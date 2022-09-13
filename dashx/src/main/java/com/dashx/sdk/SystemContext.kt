@@ -1,65 +1,95 @@
 package com.dashx.sdk
 
 import android.content.Context
-import java.util.HashMap
+import android.content.pm.ApplicationInfo
+import org.json.JSONObject
 
 class SystemContext {
 
-    companion object {
+    private var context: Context? = null
+    private var systemContextHashMap = hashMapOf<String,Any>()
 
+    companion object {
         // App
-        private const val APP_KEY = "app"
-        private const val APP_NAME_KEY = "name"
-        private const val APP_IDENTIFIER_KEY = "identifier"
-        private const val APP_VERSION_NUMBER_KEY = "versionNumber"
-        private const val APP_VERSION_CODE_KEY = "versionCode"
-        private const val APP_BUILD_KEY = "build"
-        private const val APP_RELEASE_KEY = "release"
+        private const val APP = "app"
+        private const val NAME = "name"
+        private const val IDENTIFIER_KEY = "identifier"
+        private const val VERSION_NUMBER = "versionNumber"
+        private const val VERSION_CODE = "versionCode"
+        private const val BUILD = "build"
+        private const val RELEASE_MODE = "releaseMode"
+        private const val RELEASE = "release"
+        private const val DEBUG = "debug"
 
         // Library
-        private const val LIBRARY_KEY = "library"
-        private const val LIBRARY_NAME_KEY = "name"
-        private const val LIBRARY_VERSION_KEY = "version"
+        private const val LIBRARY = "library"
+        private const val VERSION = "version"
 
-    }
+        private var INSTANCE: SystemContext = SystemContext()
 
-    fun putApp(context: Context) {
+        fun configure(context: Context): SystemContext {
+            INSTANCE.init(context)
+            return INSTANCE
+        }
 
-        val packageManager = context.packageManager
-        val packageInfo = packageManager.getPackageInfo(context.packageName, 0)
-        val app = HashMap<String, Any>()
-        putUndefinedIfNull(
-            app, APP_NAME_KEY, packageInfo.applicationInfo.loadLabel(packageManager))
-        putUndefinedIfNull(app, APP_IDENTIFIER_KEY, packageInfo.packageName)
-        putUndefinedIfNull(app, APP_VERSION_NUMBER_KEY, packageInfo.versionName)
-        putUndefinedIfNull(app, APP_VERSION_CODE_KEY, packageInfo.versionCode.toString())
-        putUndefinedIfNull(app, APP_BUILD_KEY, packageInfo.versionCode.toString())
-
-        put(APP_KEY, app)
-
-    }
-
-    private fun putUndefinedIfNull(app: HashMap<String, Any>, key: String, value: CharSequence) {
-        if (value.isNullOrEmpty()) {
-            app[key] = "undefined"
-        } else {
-            app[key] = value
+        @JvmName("getSystemContextInstance")
+        fun getInstance(): SystemContext {
+            try {
+                return INSTANCE
+            } catch (exception: Exception) {
+                throw NullPointerException("Create DashXClient before accessing it.")
+            }
         }
     }
 
-    fun library(context: Context) {
+    fun init(context: Context) {
+        this.context = context.applicationContext
+        setAppInfo()
+        setLibraryInfo()
+    }
 
+    private fun setAppInfo() {
+        val packageManager = context?.packageManager
+        val packageInfo = context?.packageName?.let { packageManager?.getPackageInfo(it, 0) }
+        val hashMap = HashMap<String, Any>()
+        packageInfo?.let {
+            if (packageManager != null) {
+                hashMap[NAME] = it.applicationInfo.loadLabel(packageManager)
+            }
+            hashMap[IDENTIFIER_KEY] = it.packageName
+            hashMap[VERSION_NUMBER] = it.versionName
+            hashMap[VERSION_CODE] = it.versionCode
+            hashMap[BUILD] = it.versionCode
+            hashMap[RELEASE_MODE] = if (0 != context?.applicationInfo?.flags!! and ApplicationInfo.FLAG_DEBUGGABLE) {
+                    DEBUG
+                } else {
+                    RELEASE
+                }
+        }
+        put(APP, hashMap)
+    }
+
+    private fun setLibraryInfo() {
         val library = HashMap<String, Any>()
-        library[LIBRARY_NAME_KEY] = BuildConfig.LIBRARY_PACKAGE_NAME
-        library[LIBRARY_VERSION_KEY] = BuildConfig.VERSION_NAME
+        library[NAME] = BuildConfig.LIBRARY_PACKAGE_NAME
+        library[VERSION] = BuildConfig.VERSION_NAME
+        put(LIBRARY, library)
+    }
 
-        put(LIBRARY_KEY, library)
+    fun getAppInfo(): JSONObject {
+        return JSONObject(systemContextHashMap[APP] as Map<String, Any>)
+    }
 
+    fun getLibraryInfo(): JSONObject {
+        return JSONObject(systemContextHashMap[LIBRARY] as Map<String, Any>)
+    }
+
+    fun getSystemContext():JSONObject {
+        return JSONObject(systemContextHashMap as Map<String, Any>)
     }
 
     private fun put(key: String, value: Any) {
-        val map = HashMap<String, Any>()
-        map[key] = value
+        systemContextHashMap[key] = value
     }
 
 }
