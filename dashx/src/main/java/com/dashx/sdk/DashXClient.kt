@@ -506,7 +506,11 @@ class DashXClient {
                     } else {
                         pollCounter = 1
                         val responseJsonObject = gson.toJson(externalAssetResponse)
-                        onSuccess(gson.fromJson(responseJsonObject, ExternalAsset::class.java))
+                        val externalAsset = gson.fromJson(responseJsonObject, ExternalAsset::class.java)
+                        if(externalAsset.data.asset?.url == null && !externalAsset.data.asset?.playbackIds.isNullOrEmpty()) {
+                            externalAsset.data.asset?.url = prepareMuxVideoUrl(externalAsset.data.asset?.playbackIds?.get(0)?.id)
+                        }
+                        onSuccess(externalAsset)
                     }
                 }
 
