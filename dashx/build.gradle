@@ -42,6 +42,7 @@ dependencies {
     implementation "com.apollographql.apollo:apollo-runtime:$apolloVersion"
     implementation "com.apollographql.apollo:apollo-coroutines-support:$apolloVersion"
     implementation "com.apollographql.apollo:apollo-http-cache:$apolloVersion"
+    implementation 'com.google.android.gms:play-services-appset:16.0.2'
 
     compileOnly 'com.google.firebase:firebase-core:17.2.1'
     compileOnly 'com.google.firebase:firebase-messaging:20.0.1'
@@ -59,4 +60,4 @@ apollo {
     ]
 }
 
-apply from: "${rootProject.projectDir}/scripts/publish-module.gradle"
+//apply from: "${rootProject.projectDir}/scripts/publish-module.gradle"
