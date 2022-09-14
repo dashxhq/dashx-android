@@ -29,14 +29,14 @@ class MyGraphQLKtorClient(
 
     override suspend fun <T : Any> execute(request: GraphQLClientRequest<T>, requestCustomizer: HttpRequestBuilder.() -> Unit): GraphQLClientResponse<T> {
         try {
-            val rawResult1 = httpClient.post(url) {
+            val rawResult = httpClient.post(url) {
                 expectSuccess = true
                 apply(requestCustomizer)
                 setBody(TextContent(serializer.serialize(request), ContentType.Application.Json))
             }
 
-            val rawResult = rawResult1.body<String>()
-            val resultJsonObject = JSONObject(rawResult)
+            val rawResultBody = rawResult.body<String>()
+            val resultJsonObject = JSONObject(rawResultBody)
 
             if (resultJsonObject.getString(DATA) != "null") {
                 val dataObject = resultJsonObject.getJSONObject(DATA)
