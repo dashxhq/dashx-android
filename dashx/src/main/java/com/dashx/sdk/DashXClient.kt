@@ -409,8 +409,12 @@ class DashXClient {
             val externalDataJsonObject = responseObject?.data?.let { JSONObject(it) }
             val responseJsonObject = JSONObject(gson.toJson(responseObject))
             responseJsonObject.put(DATA, externalDataJsonObject)
+
             val externalAsset = gson.fromJson(responseJsonObject.toString(),
                                               com.dashx.sdk.data.ExternalAsset::class.java)
+            if(externalAsset.data.asset?.url == null && !externalAsset.data.asset?.playbackIds.isNullOrEmpty()) {
+                externalAsset.data.asset?.url = prepareMuxVideoUrl(externalAsset.data.asset?.playbackIds?.get(0)?.id)
+            }
             onSuccess(externalAsset)
         }
     }

@@ -42,3 +42,7 @@ fun getBytes(inputStream: InputStream): ByteArray {
     }
     return byteBuffer.toByteArray()
 }
+
+fun prepareMuxVideoUrl(playbackId: String?):String {
+    return "https://stream.mux.com/$playbackId.m3u8"
+}
