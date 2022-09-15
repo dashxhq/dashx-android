@@ -132,7 +132,7 @@ class DashXClient {
         }
     }
 
-    private fun getGraphqlClient(): MyGraphQLKtorClient {
+    private fun getGraphqlClient(): DashXGraphQLKtorClient {
         val httpClient = HttpClient(engineFactory = io.ktor.client.engine.okhttp.OkHttp) {
             engine {
                 config {
@@ -160,7 +160,7 @@ class DashXClient {
                 }
             }
         }
-        return MyGraphQLKtorClient(url = URL(baseURI ?: "https://api.dashx.com/graphql"), httpClient = httpClient, serializer = GraphQLClientKotlinxSerializer())
+        return DashXGraphQLKtorClient(url = URL(baseURI ?: "https://api.dashx.com/graphql"), httpClient = httpClient, serializer = GraphQLClientKotlinxSerializer())
     }
 
     fun generateAccountAnonymousUid(): String {
