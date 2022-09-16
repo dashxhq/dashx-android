@@ -3,18 +3,22 @@ package com.dashx.sdk
 import android.Manifest
 import android.bluetooth.BluetoothAdapter
 import android.content.Context
+import android.content.Context.CONNECTIVITY_SERVICE
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.content.res.Resources
+import android.net.ConnectivityManager
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.provider.Settings
 import android.telephony.TelephonyManager
 import androidx.core.app.ActivityCompat
 import com.google.android.gms.ads.identifier.AdvertisingIdClient
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withContext
+import com.google.android.gms.appset.AppSet
+import com.google.android.gms.appset.AppSetIdInfo
+import com.google.android.gms.tasks.Task
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.util.*
 
@@ -22,7 +26,7 @@ import java.util.*
 class SystemContext {
 
     private var context: Context? = null
-    private var systemContextHashMap = hashMapOf<String,Any>()
+    private var systemContextHashMap = hashMapOf<String, Any>()
 
     companion object {
         // App
@@ -55,6 +59,9 @@ class SystemContext {
         private const val SCREEN_HEIGHT = "height"
         private const val SCREEN_DENSITY = "density"
         private const val SCREEN_ORIENTATION = "orientation"
+        private const val PORTRAIT = "portrait"
+        private const val LANDSCAPE = "landscape"
+        private const val SQUARE = "square"
 
         //Local
         private const val LOCAL = "local"
@@ -104,7 +111,8 @@ class SystemContext {
             hashMap[VERSION_NUMBER] = it.versionName
             hashMap[VERSION_CODE] = it.versionCode
             hashMap[BUILD] = it.versionCode
-            hashMap[RELEASE_MODE] = if (0 != context?.applicationInfo?.flags!! and ApplicationInfo.FLAG_DEBUGGABLE) {
+            hashMap[RELEASE_MODE] =
+                if (0 != context?.applicationInfo?.flags!! and ApplicationInfo.FLAG_DEBUGGABLE) {
                     DEBUG
                 } else {
                     RELEASE
@@ -120,31 +128,30 @@ class SystemContext {
         put(LIBRARY, library)
     }
 
-    val adInfo = AdvertisingIdClient(context!!)
-
-     suspend fun getAdvertisingId(): String =
-        withContext(Dispatchers.IO) {
-            //Connect with start(), disconnect with finish()
-            adInfo.start()
-            val adIdInfo = adInfo.info
-            adInfo.finish()
-            adIdInfo.id
-        }
-
     fun setUserAgentInfo() {
         val userAgent = HashMap<String, Any>()
-        userAgent[UID] = Settings.Secure.getString(context!!.getContentResolver(), Settings.Secure.ANDROID_ID)
-        userAgent[ADVERTISING_UID] = runBlocking { getAdvertisingId() }
-
-//        val client = AppSet.getClient(context!!)
-//        val task: Task<AppSetIdInfo> = client.appSetIdInfo
-//        task.addOnSuccessListener {
-//            userAgent[APP_SET_SCOPE] = it.scope
-//            userAgent[APP_SET_UID] = it.id
-//        }
 
         val model = Build.MODEL
         val manufacturer = Build.MANUFACTURER
+        val displayMetricsInfo = Resources.getSystem().displayMetrics
+        val fields = Build.VERSION_CODES::class.java.fields
+        val orientation = context!!.resources.configuration.orientation
+
+        val client = AppSet.getClient(context!!)
+        val task: Task<AppSetIdInfo> = client.appSetIdInfo
+
+        userAgent[UID] =
+            Settings.Secure.getString(context!!.getContentResolver(), Settings.Secure.ANDROID_ID)
+
+        GlobalScope.launch {
+            val adInfo = AdvertisingIdClient.getAdvertisingIdInfo(context!!)
+            userAgent[ADVERTISING_UID] = adInfo?.id.toString()
+        }
+
+        task.addOnSuccessListener {
+            userAgent[APP_SET_UID] = it.id
+            userAgent[APP_SET_SCOPE] = it.scope
+        }
 
         userAgent[NAME] = if (model.startsWith(manufacturer)) {
             model.capitalize()
@@ -152,20 +159,26 @@ class SystemContext {
             "$manufacturer $model".capitalize()
         }
 
-        userAgent[MANUFACTURER] = Build.MANUFACTURER
-        userAgent[MODEL] = Build.MODEL
+        userAgent[MANUFACTURER] = manufacturer
+        userAgent[MODEL] = model
 
-//        val fields = VERSION_CODES::class.java.fields
-//        userAgent[OS_NAME] = fields[Build.VERSION.SDK_INT + 1].name
+        fields.filter { it.getInt(Build.VERSION_CODES::class) == Build.VERSION.SDK_INT }
+            .forEach {
+                userAgent[OS_NAME] = it.name
+            }
 
-        userAgent[OS_VERSION] = Build.VERSION.SDK_INT
-
-        val displayMetricsInfo = Resources.getSystem().displayMetrics
+        userAgent[OS_VERSION] = Build.VERSION.SDK
         userAgent[SCREEN_HEIGHT] = displayMetricsInfo.heightPixels
         userAgent[SCREEN_WIDTH] = displayMetricsInfo.widthPixels
         userAgent[SCREEN_DENSITY] = displayMetricsInfo.densityDpi
-        userAgent[SCREEN_ORIENTATION] = context!!.resources.configuration.orientation
 
+        userAgent[SCREEN_ORIENTATION] = when (orientation) {
+            1 -> PORTRAIT
+            2 -> LANDSCAPE
+            else -> {
+                SQUARE
+            }
+        }
         put(USER_AGENT, userAgent)
     }
 
@@ -184,19 +197,43 @@ class SystemContext {
         val network = HashMap<String, Any>()
 
         val wifiManager = context!!.getSystemService(Context.WIFI_SERVICE) as WifiManager
-        val telephonyManager = context!!.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
-        val bluetoothAdapter =  BluetoothAdapter.getDefaultAdapter()
+        val mConnectivityManager =
+            context!!.getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager
+        val mInfo = mConnectivityManager.activeNetworkInfo
+        val telephonyManager =
+            context!!.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
+        val bluetoothAdapter = BluetoothAdapter.getDefaultAdapter()
 
-        if (ActivityCompat.checkSelfPermission(context!!, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
-            val name = bluetoothAdapter.name
-            if (name == null) {
-                network[BLUETOOTH] = bluetoothAdapter.address
+        network[BLUETOOTH] = if (bluetoothAdapter != null) {
+            if (ActivityCompat.checkSelfPermission(
+                    context!!,
+                    Manifest.permission.BLUETOOTH_CONNECT
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                bluetoothAdapter.address
+                return
+            } else {
+                ""
             }
-            return
+        } else {
+            ""
         }
 
-        network[WIFI] = wifiManager.connectionInfo.ssid
+        network[WIFI] = wifiManager.connectionInfo.bssid
         network[CARRIER] = telephonyManager.networkOperatorName
+
+        network[CELLULAR] = if (mInfo?.type == ConnectivityManager.TYPE_MOBILE) {
+            when (mInfo.subtype) {
+                TelephonyManager.NETWORK_TYPE_GPRS, TelephonyManager.NETWORK_TYPE_EDGE, TelephonyManager.NETWORK_TYPE_CDMA, TelephonyManager.NETWORK_TYPE_1xRTT, TelephonyManager.NETWORK_TYPE_IDEN, TelephonyManager.NETWORK_TYPE_GSM -> "2G"
+                TelephonyManager.NETWORK_TYPE_UMTS, TelephonyManager.NETWORK_TYPE_EVDO_0, TelephonyManager.NETWORK_TYPE_EVDO_A, TelephonyManager.NETWORK_TYPE_HSDPA, TelephonyManager.NETWORK_TYPE_HSUPA, TelephonyManager.NETWORK_TYPE_HSPA, TelephonyManager.NETWORK_TYPE_EVDO_B, TelephonyManager.NETWORK_TYPE_EHRPD, TelephonyManager.NETWORK_TYPE_HSPAP, TelephonyManager.NETWORK_TYPE_TD_SCDMA -> "3G"
+                TelephonyManager.NETWORK_TYPE_LTE, TelephonyManager.NETWORK_TYPE_IWLAN, 19 -> "4G"
+                TelephonyManager.NETWORK_TYPE_NR -> "5G"
+                else -> ""
+            }
+        } else {
+            ""
+        }
+
         put(NETWORK, network)
     }
 
@@ -208,7 +245,19 @@ class SystemContext {
         return JSONObject(systemContextHashMap[LIBRARY] as Map<String, Any>)
     }
 
-    fun getSystemContext():JSONObject {
+    fun getUserAgentInfo(): JSONObject {
+        return JSONObject(systemContextHashMap[USER_AGENT] as Map<String, Any>)
+    }
+
+    fun getLocalInfo(): JSONObject {
+        return JSONObject(systemContextHashMap[LOCAL] as Map<String, Any>)
+    }
+
+    fun getNetworkInfo(): JSONObject {
+        return JSONObject(systemContextHashMap[NETWORK] as Map<String, Any>)
+    }
+
+    fun getSystemContext(): JSONObject {
         return JSONObject(systemContextHashMap as Map<String, Any>)
     }
 
