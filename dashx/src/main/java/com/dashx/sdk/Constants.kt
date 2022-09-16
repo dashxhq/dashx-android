@@ -19,6 +19,8 @@ const val INTERNAL_EVENT_APP_BACKGROUNDED = "Application Backgrounded"
 const val INTERNAL_EVENT_APP_CRASHED = "Application Crashed"
 const val INTERNAL_EVENT_APP_SCREEN_VIEWED = "Screen Viewed"
 
+const val DATA = "data"
+
 object UserAttributes {
     const val UID = "uid"
     const val ANONYMOUS_UID = "anonymousUid"
