@@ -34,11 +34,10 @@ class SystemContext {
 
         @JvmName("getSystemContextInstance")
         fun getInstance(): SystemContext {
-            try {
-                return INSTANCE
-            } catch (exception: Exception) {
-                throw NullPointerException("Create DashXClient before accessing it.")
+            if (INSTANCE.context == null) {
+                throw NullPointerException("Configure SystemContext before accessing it.")
             }
+            return INSTANCE
         }
     }
 
