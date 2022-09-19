@@ -18,6 +18,8 @@ android {
         versionCode 1
         versionName version
 
+        buildConfigField 'String', 'VERSION_NAME', "\"$version\""
+        buildConfigField 'String', 'LIBRARY_NAME', "\"dashx-android\""
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
 
@@ -72,4 +74,4 @@ android.sourceSets {
     main.kotlin.srcDirs 'build/generated/source/graphql/main'
 }
 
-apply from: "${rootProject.projectDir}/scripts/publish-module.gradle"
+//apply from: "${rootProject.projectDir}/scripts/publish-module.gradle"
