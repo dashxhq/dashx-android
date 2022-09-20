@@ -2,7 +2,6 @@
 
 package com.dashx.sdk
 
-
 const val PACKAGE_NAME = "com.dashx.sdk"
 const val DEFAULT_INSTANCE = "default"
 
@@ -48,4 +47,24 @@ object UploadConstants {
 
     const val READY = "ready"
     const val WAITING = "waiting"
+}
+
+object SystemContextConstants {
+    // Network
+    const val NETWORK = "network"
+    const val WIFI = "wifi"
+    const val CELLULAR = "cellular"
+    const val CARRIER = "carrier"
+    const val BLUETOOTH = "bluetooth"
+
+    // Device
+    const val DEVICE = "device"
+    const val AD_TRACKING_ENABLED = "adTrackingEnabled"
+    const val ADVERTISING_ID = "advertisingId"
+    const val ID = "id"
+    const val KIND = "kind"
+    const val MANUFACTURER = "manufacturer"
+    const val MODEL = "model"
+    const val NAME = "name"
+    const val TOKEN = "token"
 }

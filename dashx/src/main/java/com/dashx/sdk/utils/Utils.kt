@@ -11,7 +11,6 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.InputStream
 
-
 fun getPackageInfo(context: Context): PackageInfo = context.packageManager.getPackageInfo(context.packageName, PackageManager.GET_META_DATA)
 
 fun getPrefKey(context: Context) = "$PACKAGE_NAME.$DEFAULT_INSTANCE.$context.packageName"
