@@ -1,6 +1,6 @@
 @file:JvmName("Constants")
 
-package com.dashx.sdk
+package com.dashx.sdk.utils
 
 const val PACKAGE_NAME = "com.dashx.sdk"
 const val DEFAULT_INSTANCE = "default"

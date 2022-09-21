@@ -9,6 +9,7 @@ import com.dashx.graphql.generated.enums.ContactKind
 import com.dashx.graphql.generated.enums.TrackNotificationStatus
 import com.dashx.graphql.generated.inputs.*
 import com.dashx.sdk.data.PrepareExternalAssetResponse
+import com.dashx.sdk.utils.*
 import com.expediagroup.graphql.client.serialization.GraphQLClientKotlinxSerializer
 import com.google.gson.Gson
 import com.google.gson.JsonObject
@@ -26,7 +27,7 @@ import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
-val DashX = DashXClient.getInstance()
+var DashX = DashXClient()
 
 class DashXClient {
     private val tag = DashXClient::class.java.simpleName
@@ -61,6 +62,7 @@ class DashXClient {
             targetEnvironment: String? = null,
         ): DashXClient {
             INSTANCE.init(context, publicKey, baseURI, targetEnvironment)
+            DashX = INSTANCE
             return INSTANCE
         }
 
@@ -88,6 +90,7 @@ class DashXClient {
         this.context = context
         this.mustSubscribe = false
 
+        SystemContext.configure(context)
         loadFromStorage()
         createGraphqlClient()
     }

@@ -1,38 +1,37 @@
 package com.dashx.sdk.utils
 
 import android.annotation.SuppressLint
-import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.wifi.WifiManager
-import android.os.AsyncTask
 import android.os.Build
 import android.provider.Settings
 import android.telephony.TelephonyManager
+import com.dashx.sdk.utils.SystemContextConstants.ADVERTISING_ID
+import com.dashx.sdk.utils.SystemContextConstants.AD_TRACKING_ENABLED
 import com.google.android.gms.ads.identifier.AdvertisingIdClient
-import com.google.android.gms.common.GooglePlayServicesNotAvailableException
-import com.google.android.gms.common.GooglePlayServicesRepairableException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import java.io.IOException
 import java.util.*
 
 private val coroutineScope = CoroutineScope(Dispatchers.IO)
 
-fun getBluetoothInfo(): Boolean {
-    val bluetoothAdapter = BluetoothAdapter.getDefaultAdapter()
-    return bluetoothAdapter.isEnabled
+fun getBluetoothInfo(context: Context?): Boolean {
+    val bluetoothManager = context?.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+    return bluetoothManager.adapter.isEnabled
 }
 
 fun getWifiInfo(context: Context): Boolean {
-    val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+    val wifiManager =
+        context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
     return wifiManager.isWifiEnabled
 }
 
 fun getCellularInfo(context: Context): Boolean? {
-    val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+    val connectivityManager =
+        context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
     return connectivityManager.activeNetworkInfo?.isConnected
 }
 
@@ -65,31 +64,24 @@ fun getDeviceName(): String {
     }
 }
 
-@SuppressLint("HardwareIds")
-fun getDeviceToken(context: Context): String {
-    val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
-    return telephonyManager.deviceId
-}
-
-fun getAdvertisingId(context: Context): String {
-    val adInfo = AdvertisingIdClient(context.applicationContext)
-    var advertisingId: String ?= ""
-    CoroutineScope(Dispatchers.IO).launch {
-        adInfo.start()
-        val adIdInfo = adInfo.info
-        adInfo.finish()
-        advertisingId = adIdInfo.id
-        return@launch
-    }
-    return advertisingId ?: ""
-}
-
 fun getDeviceKind(): String {
-    return Build.TYPE
+    return "android"
 }
 
-fun getAdTrackingEnabled(): Boolean {
-    val adInfo: AdvertisingIdClient.Info? = null
-    return adInfo?.isLimitAdTrackingEnabled ?: false
+fun getAdvertisingInfo(context: Context?) {
+    var adInfo: AdvertisingIdClient.Info? = null
+    CoroutineScope(Dispatchers.IO).launch {
+        try {
+            adInfo = context?.let { AdvertisingIdClient.getAdvertisingIdInfo(it) }
+            context?.let {
+                getDashXSharedPreferences(it).edit().apply {
+                    putString(ADVERTISING_ID, adInfo?.id)
+                    putBoolean(AD_TRACKING_ENABLED, !(adInfo?.isLimitAdTrackingEnabled ?: true))
+                }.apply()
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
 }
 
