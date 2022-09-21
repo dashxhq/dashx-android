@@ -49,3 +49,11 @@ object UploadConstants {
     const val READY = "ready"
     const val WAITING = "waiting"
 }
+
+object SystemContextConstants {
+    const val LOCALE = "locale"
+    const val TIME_ZONE = "timeZone"
+    const val USER_AGENT = "userAgent"
+    const val IPV4 = "ipV4"
+    const val IPV6 = "ipV6"
+}
