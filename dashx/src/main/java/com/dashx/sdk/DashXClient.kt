@@ -27,7 +27,7 @@ import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
-var DashX = DashXClient()
+val DashX = DashXClient.getInstance()
 
 class DashXClient {
     private val tag = DashXClient::class.java.simpleName
@@ -62,7 +62,6 @@ class DashXClient {
             targetEnvironment: String? = null,
         ): DashXClient {
             INSTANCE.init(context, publicKey, baseURI, targetEnvironment)
-            DashX = INSTANCE
             return INSTANCE
         }
 
@@ -90,7 +89,6 @@ class DashXClient {
         this.context = context
         this.mustSubscribe = false
 
-        SystemContext.configure(context)
         loadFromStorage()
         createGraphqlClient()
     }
