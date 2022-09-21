@@ -1,7 +1,6 @@
 @file:JvmName("Constants")
 
-package com.dashx.sdk
-
+package com.dashx.sdk.utils
 
 const val PACKAGE_NAME = "com.dashx.sdk"
 const val DEFAULT_INSTANCE = "default"
@@ -56,4 +55,22 @@ object SystemContextConstants {
     const val USER_AGENT = "userAgent"
     const val IPV4 = "ipV4"
     const val IPV6 = "ipV6"
+
+    // Network
+    const val NETWORK = "network"
+    const val WIFI = "wifi"
+    const val CELLULAR = "cellular"
+    const val CARRIER = "carrier"
+    const val BLUETOOTH = "bluetooth"
+
+    // Device
+    const val DEVICE = "device"
+    const val AD_TRACKING_ENABLED = "adTrackingEnabled"
+    const val ADVERTISING_ID = "advertisingId"
+    const val ID = "id"
+    const val KIND = "kind"
+    const val MANUFACTURER = "manufacturer"
+    const val MODEL = "model"
+    const val NAME = "name"
+    const val TOKEN = "token"
 }
