@@ -9,6 +9,7 @@ import com.dashx.graphql.generated.enums.ContactKind
 import com.dashx.graphql.generated.enums.TrackNotificationStatus
 import com.dashx.graphql.generated.inputs.*
 import com.dashx.sdk.data.PrepareExternalAssetResponse
+import com.dashx.sdk.utils.*
 import com.expediagroup.graphql.client.serialization.GraphQLClientKotlinxSerializer
 import com.google.gson.Gson
 import com.google.gson.JsonObject
@@ -409,10 +410,9 @@ class DashXClient {
             val responseJsonObject = JSONObject(gson.toJson(responseObject))
             responseJsonObject.put(DATA, externalDataJsonObject)
 
-            val externalAsset = gson.fromJson(responseJsonObject.toString(),
-                                              com.dashx.sdk.data.ExternalAsset::class.java)
-            if(externalAsset.data.asset?.url == null && !externalAsset.data.asset?.playbackIds.isNullOrEmpty()) {
-                externalAsset.data.asset?.url = prepareMuxVideoUrl(externalAsset.data.asset?.playbackIds?.get(0)?.id)
+            val externalAsset = gson.fromJson(responseJsonObject.toString(), com.dashx.sdk.data.ExternalAsset::class.java)
+            if (externalAsset.data.asset?.url == null && !externalAsset.data.asset?.playbackIds.isNullOrEmpty()) {
+                externalAsset.data.asset?.url = generateMuxVideoUrl(externalAsset.data.asset?.playbackIds?.get(0)?.id)
             }
             onSuccess(externalAsset)
         }
@@ -463,7 +463,7 @@ class DashXClient {
     fun track(event: String, data: HashMap<String, String>? = hashMapOf()) {
         val jsonData = data?.toMap()?.let { JSONObject(it) }.toString()
 
-        val query = TrackEvent(variables = TrackEvent.Variables(TrackEventInput(accountAnonymousUid = accountAnonymousUid, accountUid = accountUid!!, data = jsonData, event = event)))
+        val query = TrackEvent(variables = TrackEvent.Variables(TrackEventInput(accountAnonymousUid = accountAnonymousUid, accountUid = accountUid!!, data = jsonData, event = event, systemContext = gson.fromJson(SystemContext.getInstance().getSystemContext().toString(), SystemContextInput::class.java))))
 
         coroutineScope.launch {
             val result = graphqlClient.execute(query)
