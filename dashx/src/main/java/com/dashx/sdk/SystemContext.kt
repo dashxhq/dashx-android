@@ -1,6 +1,11 @@
 package com.dashx.sdk
 
 import android.content.Context
+import com.dashx.sdk.utils.getIpHostAddresses
+import com.dashx.sdk.utils.getAppLocale
+import com.dashx.sdk.utils.getAppTimeZone
+import com.dashx.sdk.utils.getAppUserAgent
+import android.content.pm.ApplicationInfo
 import com.dashx.sdk.utils.*
 import com.dashx.sdk.utils.SystemContextConstants.ADVERTISING_ID
 import com.dashx.sdk.utils.SystemContextConstants.AD_TRACKING_ENABLED
@@ -23,6 +28,20 @@ class SystemContext {
     private var systemContextHashMap = hashMapOf<String, Any>()
 
     companion object {
+        // App
+        private const val APP = "app"
+        private const val NAME = "name"
+        private const val IDENTIFIER_KEY = "identifier"
+        private const val VERSION_NUMBER = "versionNumber"
+        private const val VERSION_CODE = "versionCode"
+        private const val BUILD = "build"
+        private const val RELEASE_MODE = "releaseMode"
+        private const val RELEASE = "release"
+        private const val DEBUG = "debug"
+
+        // Library
+        private const val LIBRARY = "library"
+        private const val VERSION = "version"
 
         private var INSTANCE: SystemContext = SystemContext()
 
@@ -31,7 +50,8 @@ class SystemContext {
             return INSTANCE
         }
 
-        @JvmName("getSystemContextInstance") fun getInstance(): SystemContext {
+        @JvmName("getSystemContextInstance")
+        fun getInstance(): SystemContext {
             if (INSTANCE.context == null) {
                 throw NullPointerException("Configure SystemContext before accessing it.")
             }
@@ -75,6 +95,77 @@ class SystemContext {
 
     fun getDeviceInfo(): JSONObject {
         return JSONObject(systemContextHashMap[DEVICE] as Map<String, Any>)
+    }
+
+    private fun setLocale() {
+        getAppLocale(context!!)?.let { put(LOCALE, it) }
+    }
+
+    private fun setTimeZone() {
+        put(TIME_ZONE, getAppTimeZone())
+    }
+
+    private fun setUserAgent() {
+        put(USER_AGENT, getAppUserAgent())
+    }
+
+    private fun setIpAddress() {
+        val ipAddressHashMap = getIpHostAddresses()
+        put(IPV4, ipAddressHashMap[IPV4] ?: "")
+        put(IPV6, ipAddressHashMap[IPV6] ?: "")
+    }
+
+    fun getLocale(): JSONObject {
+        return JSONObject(systemContextHashMap[LOCALE] as Map<String, Any>)
+    }
+
+    fun getTimeZone(): JSONObject {
+        return JSONObject(systemContextHashMap[TIME_ZONE] as Map<String, Any>)
+    }
+
+    fun getUserAgent(): JSONObject {
+        return JSONObject(systemContextHashMap[USER_AGENT] as Map<String, Any>)
+    }
+
+    fun getIpAddress(): JSONObject {
+        return JSONObject(hashMapOf(IPV4 to systemContextHashMap[IPV4], IPV6 to systemContextHashMap[IPV6]))
+    }
+
+    private fun setAppInfo() {
+        val packageManager = context?.packageManager
+        val packageInfo = context?.packageName?.let { packageManager?.getPackageInfo(it, 0) }
+        val hashMap = HashMap<String, Any>()
+        packageInfo?.let {
+            if (packageManager != null) {
+                hashMap[NAME] = it.applicationInfo.loadLabel(packageManager)
+            }
+            hashMap[IDENTIFIER_KEY] = it.packageName
+            hashMap[VERSION_NUMBER] = it.versionName
+            hashMap[VERSION_CODE] = it.versionCode
+            hashMap[BUILD] = it.versionCode
+            hashMap[RELEASE_MODE] =
+                if (0 != context?.applicationInfo?.flags!! and ApplicationInfo.FLAG_DEBUGGABLE) {
+                    DEBUG
+                } else {
+                    RELEASE
+                }
+        }
+        put(APP, hashMap)
+    }
+
+    fun setLibraryInfo() {
+        val library = HashMap<String, Any>()
+        library[NAME] = BuildConfig.LIBRARY_NAME
+        library[VERSION] = BuildConfig.VERSION_NAME
+        put(LIBRARY, library)
+    }
+
+    fun getAppInfo(): JSONObject {
+        return JSONObject(systemContextHashMap[APP] as Map<String, Any>)
+    }
+
+    fun getLibraryInfo(): JSONObject {
+        return JSONObject(systemContextHashMap[LIBRARY] as Map<String, Any>)
     }
 
     fun getSystemContext(): JSONObject {

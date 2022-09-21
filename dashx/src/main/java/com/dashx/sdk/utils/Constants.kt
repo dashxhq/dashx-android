@@ -50,6 +50,12 @@ object UploadConstants {
 }
 
 object SystemContextConstants {
+    const val LOCALE = "locale"
+    const val TIME_ZONE = "timeZone"
+    const val USER_AGENT = "userAgent"
+    const val IPV4 = "ipV4"
+    const val IPV6 = "ipV6"
+
     // Network
     const val NETWORK = "network"
     const val WIFI = "wifi"
