@@ -3,11 +3,17 @@ package com.dashx.sdk.utils
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothManager
 import android.content.Context
+import android.location.Address
+import android.location.Geocoder
+import android.location.Location
+import android.location.LocationManager
 import android.net.ConnectivityManager
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.provider.Settings
 import android.telephony.TelephonyManager
+import androidx.core.app.ActivityCompat
+import androidx.core.content.PermissionChecker
 import com.dashx.sdk.utils.SystemContextConstants.ADVERTISING_ID
 import com.dashx.sdk.utils.SystemContextConstants.AD_TRACKING_ENABLED
 import com.google.android.gms.ads.identifier.AdvertisingIdClient
@@ -118,5 +124,31 @@ fun getAdvertisingInfo(context: Context?) {
             e.printStackTrace()
         }
     }
+}
+
+fun getLocationAddress(context: Context): Address {
+    val geocoder = Geocoder(context, Locale.getDefault())
+    val location = getLocationCoordinates(context)
+    val addresses: List<Address> = geocoder.getFromLocation(location?.latitude ?: 0.0, location?.longitude ?: 0.0, 1)
+    return addresses[0]
+}
+
+fun getLocationCoordinates(context: Context): Location? {
+    val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager?
+    var location: Location? = null
+    if(PermissionChecker.PERMISSION_GRANTED == ActivityCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_FINE_LOCATION )
+        || PermissionChecker.PERMISSION_GRANTED == ActivityCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_COARSE_LOCATION)) {
+        try {
+            location = locationManager!!.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+        }
+        catch (e:Exception) {
+
+        }
+    }
+    return location
+}
+
+fun getSpeed() {
+
 }
 

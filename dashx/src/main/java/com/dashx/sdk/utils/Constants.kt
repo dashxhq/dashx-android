@@ -73,4 +73,11 @@ object SystemContextConstants {
     const val MODEL = "model"
     const val NAME = "name"
     const val TOKEN = "token"
+
+    // Location
+    const val CITY = "city"
+    const val COUNTRY = "country"
+    const val LATITUDE = "latitude"
+    const val LONGITUDE = "longitude"
+    const val SPEED = "speed"
 }
