@@ -3,6 +3,7 @@ package com.dashx.sdk.utils
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothManager
 import android.content.Context
+import android.content.res.Resources
 import android.net.ConnectivityManager
 import android.net.wifi.WifiManager
 import android.os.Build
@@ -18,6 +19,8 @@ import java.net.Inet4Address
 import java.net.Inet6Address
 import java.net.NetworkInterface
 import java.util.*
+
+private val displayMetricsInfo = Resources.getSystem().displayMetrics
 
 fun getIpHostAddresses(): HashMap<String, String> {
     val ipAddressHashMap = hashMapOf<String, String>()
@@ -118,5 +121,31 @@ fun getAdvertisingInfo(context: Context?) {
             e.printStackTrace()
         }
     }
+}
+
+fun getOsName(): String {
+    var osName = ""
+    val fields = Build.VERSION_CODES::class.java.fields
+    fields.filter { it.getInt(Build.VERSION_CODES::class) == Build.VERSION.SDK_INT }
+        .forEach {
+            osName = it.name
+        }
+    return osName
+}
+
+fun getOsVersion(): String {
+    return Build.VERSION.RELEASE
+}
+
+fun getScreenHeight(): Int {
+    return displayMetricsInfo.heightPixels
+}
+
+fun getScreenWidth(): Int {
+    return displayMetricsInfo.widthPixels
+}
+
+fun getScreenDensity(): Int {
+    return displayMetricsInfo.densityDpi
 }
 

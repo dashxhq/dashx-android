@@ -73,4 +73,15 @@ object SystemContextConstants {
     const val MODEL = "model"
     const val NAME = "name"
     const val TOKEN = "token"
+
+    // Os
+    const val OS = "os"
+    const val OS_NAME = "name"
+    const val OS_VERSION = "version"
+
+    //Screen
+    const val SCREEN = "screen"
+    const val HEIGHT = "height"
+    const val WIDTH = "width"
+    const val DENSITY = "density"
 }
