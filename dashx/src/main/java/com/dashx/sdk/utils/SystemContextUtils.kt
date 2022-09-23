@@ -3,17 +3,16 @@ package com.dashx.sdk.utils
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothManager
 import android.content.Context
-import android.location.Address
-import android.location.Geocoder
-import android.location.Location
-import android.location.LocationManager
+import android.location.*
 import android.net.ConnectivityManager
 import android.net.wifi.WifiManager
 import android.os.Build
+import android.os.Bundle
 import android.provider.Settings
 import android.telephony.TelephonyManager
-import androidx.core.app.ActivityCompat
-import androidx.core.content.PermissionChecker
+import android.telephony.gsm.GsmCellLocation
+import android.util.Log
+import androidx.core.content.ContextCompat.getSystemService
 import com.dashx.sdk.utils.SystemContextConstants.ADVERTISING_ID
 import com.dashx.sdk.utils.SystemContextConstants.AD_TRACKING_ENABLED
 import com.google.android.gms.ads.identifier.AdvertisingIdClient
@@ -24,6 +23,7 @@ import java.net.Inet4Address
 import java.net.Inet6Address
 import java.net.NetworkInterface
 import java.util.*
+
 
 fun getIpHostAddresses(): HashMap<String, String> {
     val ipAddressHashMap = hashMapOf<String, String>()
@@ -126,29 +126,55 @@ fun getAdvertisingInfo(context: Context?) {
     }
 }
 
-fun getLocationAddress(context: Context): Address {
+fun getLocationAddress(context: Context): List<Address> {
     val geocoder = Geocoder(context, Locale.getDefault())
     val location = getLocationCoordinates(context)
-    val addresses: List<Address> = geocoder.getFromLocation(location?.latitude ?: 0.0, location?.longitude ?: 0.0, 1)
-    return addresses[0]
+    return geocoder.getFromLocation(location?.latitude ?: 0.0, location?.longitude ?: 0.0, 1)
 }
 
 fun getLocationCoordinates(context: Context): Location? {
     val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager?
     var location: Location? = null
-    if(PermissionChecker.PERMISSION_GRANTED == ActivityCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_FINE_LOCATION )
-        || PermissionChecker.PERMISSION_GRANTED == ActivityCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_COARSE_LOCATION)) {
-        try {
-            location = locationManager!!.getLastKnownLocation(LocationManager.GPS_PROVIDER)
-        }
-        catch (e:Exception) {
 
+    val telephony = context.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager?
+    if (telephony!!.phoneType == TelephonyManager.PHONE_TYPE_GSM) {
+        val location: GsmCellLocation = telephony.cellLocation as GsmCellLocation
+        if (location != null) {
+            val LAC: String = location.getLac().toString()
+            val CID: String = location.getCid().toString()
         }
     }
+
+//    val locationManager = this.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+
+    // Define a listener that responds to location updates
+
+    // Define a listener that responds to location updates
+    val locationListener: LocationListener = object : LocationListener {
+        override fun onLocationChanged(location: Location) { // Called when a new location is found by the network location provider.
+//            makeUseOfNewLocation(location)
+            Log.d("csfsgfdg",location.toString())
+        }
+
+        override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
+        override fun onProviderEnabled(provider: String) {}
+        override fun onProviderDisabled(provider: String) {}
+    }
+
+    // Register the listener with the Location Manager to receive location updates
+
+    // Register the listener with the Location Manager to receive location updates
+
+
+//    if(PermissionChecker.PERMISSION_GRANTED == ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_FINE_LOCATION )
+//        || PermissionChecker.PERMISSION_GRANTED == ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_COARSE_LOCATION)) {
+        try {
+//            location = locationManager!!.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+            locationManager?.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, Long.MIN_VALUE,0F,locationListener)
+        }
+        catch (e:Exception) {
+        }
+//    }
     return location
-}
-
-fun getSpeed() {
-
 }
 

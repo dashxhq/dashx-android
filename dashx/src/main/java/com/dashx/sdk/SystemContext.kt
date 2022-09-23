@@ -12,15 +12,19 @@ import com.dashx.sdk.utils.SystemContextConstants.AD_TRACKING_ENABLED
 import com.dashx.sdk.utils.SystemContextConstants.BLUETOOTH
 import com.dashx.sdk.utils.SystemContextConstants.CARRIER
 import com.dashx.sdk.utils.SystemContextConstants.CELLULAR
+import com.dashx.sdk.utils.SystemContextConstants.CITY
+import com.dashx.sdk.utils.SystemContextConstants.COUNTRY
 import com.dashx.sdk.utils.SystemContextConstants.DEVICE
 import com.dashx.sdk.utils.SystemContextConstants.ID
 import com.dashx.sdk.utils.SystemContextConstants.IPV4
 import com.dashx.sdk.utils.SystemContextConstants.IPV6
 import com.dashx.sdk.utils.SystemContextConstants.KIND
+import com.dashx.sdk.utils.SystemContextConstants.LATITUDE
 import com.dashx.sdk.utils.SystemContextConstants.LOCALE
+import com.dashx.sdk.utils.SystemContextConstants.LOCATION
+import com.dashx.sdk.utils.SystemContextConstants.LONGITUDE
 import com.dashx.sdk.utils.SystemContextConstants.MANUFACTURER
 import com.dashx.sdk.utils.SystemContextConstants.MODEL
-import com.dashx.sdk.utils.SystemContextConstants.NAME
 import com.dashx.sdk.utils.SystemContextConstants.NETWORK
 import com.dashx.sdk.utils.SystemContextConstants.TIME_ZONE
 import com.dashx.sdk.utils.SystemContextConstants.USER_AGENT
@@ -60,7 +64,7 @@ class SystemContext {
             if (INSTANCE.context == null) {
                 throw NullPointerException("Configure SystemContext before accessing it.")
             }
-            getAdvertisingInfo(INSTANCE.context)
+//            getAdvertisingInfo(INSTANCE.context)
             return INSTANCE
         }
     }
@@ -165,12 +169,34 @@ class SystemContext {
         put(LIBRARY, library)
     }
 
+    fun setLocationInfo() {
+        val location = HashMap<String, Any>()
+
+        getLocationAddress(context!!).let {
+            if(it.isNotEmpty()) {
+                location[CITY] = it[0].getAddressLine(0)
+                location[COUNTRY] = it[0].countryName
+            }
+        }
+
+        getLocationCoordinates(context!!).let {
+            location[LONGITUDE] = it?.longitude ?: ""
+            location[LATITUDE] = it?.latitude ?: ""
+        }
+
+        put(LOCATION, location)
+    }
+
     fun getAppInfo(): JSONObject {
         return JSONObject(systemContextHashMap[APP] as Map<String, Any>)
     }
 
     fun getLibraryInfo(): JSONObject {
         return JSONObject(systemContextHashMap[LIBRARY] as Map<String, Any>)
+    }
+
+    fun getLocationInfo(): JSONObject {
+        return JSONObject(systemContextHashMap[LOCATION] as Map<String, Any>)
     }
 
     fun getSystemContext(): JSONObject {
@@ -180,6 +206,7 @@ class SystemContext {
     fun fetchSystemContext(): JSONObject {
         setNetworkInfo()
         setDeviceInfo()
+        setLocationInfo()
         return getSystemContext()
     }
 
