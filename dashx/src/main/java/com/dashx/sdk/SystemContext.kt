@@ -1,10 +1,6 @@
 package com.dashx.sdk
 
 import android.content.Context
-import com.dashx.sdk.utils.getIpHostAddresses
-import com.dashx.sdk.utils.getAppLocale
-import com.dashx.sdk.utils.getAppTimeZone
-import com.dashx.sdk.utils.getAppUserAgent
 import android.content.pm.ApplicationInfo
 import com.dashx.sdk.utils.*
 import com.dashx.sdk.utils.SystemContextConstants.ADVERTISING_ID
@@ -26,6 +22,7 @@ import com.dashx.sdk.utils.SystemContextConstants.LONGITUDE
 import com.dashx.sdk.utils.SystemContextConstants.MANUFACTURER
 import com.dashx.sdk.utils.SystemContextConstants.MODEL
 import com.dashx.sdk.utils.SystemContextConstants.NETWORK
+import com.dashx.sdk.utils.SystemContextConstants.SPEED
 import com.dashx.sdk.utils.SystemContextConstants.TIME_ZONE
 import com.dashx.sdk.utils.SystemContextConstants.USER_AGENT
 import com.dashx.sdk.utils.SystemContextConstants.WIFI
@@ -64,7 +61,7 @@ class SystemContext {
             if (INSTANCE.context == null) {
                 throw NullPointerException("Configure SystemContext before accessing it.")
             }
-//            getAdvertisingInfo(INSTANCE.context)
+            getAdvertisingInfo(INSTANCE.context)
             return INSTANCE
         }
     }
@@ -74,7 +71,7 @@ class SystemContext {
         getAdvertisingInfo(this.context)
     }
 
-    fun setNetworkInfo() {
+    private fun setNetworkInfo() {
         val network = hashMapOf<String, Any>()
 
         network[BLUETOOTH] = getBluetoothInfo(context)
@@ -85,10 +82,13 @@ class SystemContext {
         put(NETWORK, network)
     }
 
-    fun setDeviceInfo() {
+    private fun setDeviceInfo() {
         val device = HashMap<String, Any>()
-        device[AD_TRACKING_ENABLED] = context?.let { getDashXSharedPreferences(it).getBoolean(AD_TRACKING_ENABLED, false) } ?: false
-        device[ADVERTISING_ID] = context?.let { getDashXSharedPreferences(it).getString(ADVERTISING_ID, "") } ?: ""
+        device[AD_TRACKING_ENABLED] =
+            context?.let { getDashXSharedPreferences(it).getBoolean(AD_TRACKING_ENABLED, false) }
+                ?: false
+        device[ADVERTISING_ID] =
+            context?.let { getDashXSharedPreferences(it).getString(ADVERTISING_ID, "") } ?: ""
         device[ID] = getDeviceId(context!!)
         device[KIND] = getDeviceKind()
         device[MANUFACTURER] = getDeviceManufacturer()
@@ -137,7 +137,8 @@ class SystemContext {
     }
 
     fun getIpAddress(): JSONObject {
-        return JSONObject(hashMapOf(IPV4 to systemContextHashMap[IPV4], IPV6 to systemContextHashMap[IPV6]))
+        return JSONObject(hashMapOf(IPV4 to systemContextHashMap[IPV4],
+            IPV6 to systemContextHashMap[IPV6]))
     }
 
     private fun setAppInfo() {
@@ -162,28 +163,35 @@ class SystemContext {
         put(APP, hashMap)
     }
 
-    fun setLibraryInfo() {
+    private fun setLibraryInfo() {
         val library = HashMap<String, Any>()
         library[NAME] = BuildConfig.LIBRARY_NAME
         library[VERSION] = BuildConfig.VERSION_NAME
         put(LIBRARY, library)
     }
 
-    fun setLocationInfo() {
+    private fun setLocationInfo() {
         val location = HashMap<String, Any>()
 
+        getLocationCoordinates(context!!).let {
+            location[LONGITUDE] = it?.longitude ?: 0.0
+            location[LATITUDE] = it?.latitude ?: 0.0
+        }
+
         getLocationAddress(context!!).let {
-            if(it.isNotEmpty()) {
-                location[CITY] = it[0].getAddressLine(0)
-                location[COUNTRY] = it[0].countryName
+            location[CITY] = if (it.isNotEmpty()) {
+                it[0].getAddressLine(0)
+            } else {
+                ""
+            }
+            location[COUNTRY] = if (it.isNotEmpty()) {
+                it[0].countryName
+            } else {
+                ""
             }
         }
 
-        getLocationCoordinates(context!!).let {
-            location[LONGITUDE] = it?.longitude ?: ""
-            location[LATITUDE] = it?.latitude ?: ""
-        }
-
+        location[SPEED] = getSpeed(context!!)
         put(LOCATION, location)
     }
 
