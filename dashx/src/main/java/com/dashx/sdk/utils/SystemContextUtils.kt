@@ -4,6 +4,10 @@ import android.annotation.SuppressLint
 import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.res.Resources
+import android.location.Address
+import android.location.Geocoder
+import android.location.Location
+import android.location.LocationManager
 import android.net.ConnectivityManager
 import android.net.wifi.WifiManager
 import android.os.Build
@@ -11,6 +15,8 @@ import android.provider.Settings
 import android.telephony.TelephonyManager
 import com.dashx.sdk.utils.SystemContextConstants.ADVERTISING_ID
 import com.dashx.sdk.utils.SystemContextConstants.AD_TRACKING_ENABLED
+import com.dashx.sdk.utils.SystemContextConstants.LAST_GPS_POINT_X
+import com.dashx.sdk.utils.SystemContextConstants.LAST_GPS_POINT_Y
 import com.google.android.gms.ads.identifier.AdvertisingIdClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -19,6 +25,7 @@ import java.net.Inet4Address
 import java.net.Inet6Address
 import java.net.NetworkInterface
 import java.util.*
+import kotlin.math.pow
 
 private val displayMetricsInfo = Resources.getSystem().displayMetrics
 
@@ -67,8 +74,7 @@ fun getWifiInfo(context: Context): Boolean {
 }
 
 fun getCellularInfo(context: Context): Boolean? {
-    val connectivityManager =
-        context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+    val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
     return connectivityManager.activeNetworkInfo?.isConnected
 }
 
@@ -93,7 +99,6 @@ fun getDeviceModel(): String {
 fun getDeviceName(): String {
     val model = Build.MODEL
     val manufacturer = Build.MANUFACTURER
-
     return if (model.startsWith(manufacturer)) {
         model.capitalize(Locale.ROOT)
     } else {
@@ -120,6 +125,58 @@ fun getAdvertisingInfo(context: Context?) {
             e.printStackTrace()
         }
     }
+}
+
+fun getLocationAddress(context: Context): List<Address> {
+    val geocoder = Geocoder(context, Locale.getDefault())
+    val location = getLocationCoordinates(context)
+    return geocoder.getFromLocation(location?.latitude ?: 0.0, location?.longitude ?: 0.0, 1)
+}
+
+fun getLocationCoordinates(context: Context): Location? {
+    val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager?
+    var location: Location? = null
+
+    try {
+        location = locationManager!!.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+        context.let {
+            getDashXSharedPreferences(it).edit().apply {
+                putFloat(LAST_GPS_POINT_X, (location?.latitude?.toFloat()!!))
+                putFloat(LAST_GPS_POINT_Y, (location.longitude.toFloat()))
+            }
+        }
+    } catch (e: Exception) {
+        e.printStackTrace()
+    }
+    return location
+}
+
+fun getSpeed(context: Context): Double {
+    val lastGPSPointX = context.let {
+        getDashXSharedPreferences(it).getFloat(LAST_GPS_POINT_X, 0F)
+    }
+
+    val lastGPSPointY = context.let {
+        getDashXSharedPreferences(it).getFloat(LAST_GPS_POINT_Y, 0F)
+    }
+
+    getLocationCoordinates(context).let {
+        val currentGPSPointX = it?.latitude
+        val currentGPSPointY = it?.longitude
+        val results = FloatArray(1)
+        if (currentGPSPointY != null) {
+            if (currentGPSPointX != null) {
+                Location.distanceBetween(lastGPSPointX.toDouble(), currentGPSPointX.toDouble(), lastGPSPointY.toDouble(), currentGPSPointY.toDouble(), results)
+            }
+        }
+
+        if (currentGPSPointX != null) {
+            val gpsPointX = currentGPSPointX - lastGPSPointX
+            val gpsPointY = currentGPSPointY?.minus(lastGPSPointX)
+            return kotlin.math.sqrt((gpsPointX).pow(2) + (gpsPointY)?.pow(2)!!) / results[0]
+        }
+    }
+    return 0.0
 }
 
 fun getOsName(): String {

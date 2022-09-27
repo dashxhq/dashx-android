@@ -12,6 +12,8 @@ import com.dashx.sdk.utils.SystemContextConstants.CARRIER
 import com.dashx.sdk.utils.SystemContextConstants.CELLULAR
 import com.dashx.sdk.utils.SystemContextConstants.DEBUG
 import com.dashx.sdk.utils.SystemContextConstants.DENSITY
+import com.dashx.sdk.utils.SystemContextConstants.CITY
+import com.dashx.sdk.utils.SystemContextConstants.COUNTRY
 import com.dashx.sdk.utils.SystemContextConstants.DEVICE
 import com.dashx.sdk.utils.SystemContextConstants.HEIGHT
 import com.dashx.sdk.utils.SystemContextConstants.ID
@@ -20,7 +22,10 @@ import com.dashx.sdk.utils.SystemContextConstants.IPV4
 import com.dashx.sdk.utils.SystemContextConstants.IPV6
 import com.dashx.sdk.utils.SystemContextConstants.KIND
 import com.dashx.sdk.utils.SystemContextConstants.LIBRARY
+import com.dashx.sdk.utils.SystemContextConstants.LATITUDE
 import com.dashx.sdk.utils.SystemContextConstants.LOCALE
+import com.dashx.sdk.utils.SystemContextConstants.LOCATION
+import com.dashx.sdk.utils.SystemContextConstants.LONGITUDE
 import com.dashx.sdk.utils.SystemContextConstants.MANUFACTURER
 import com.dashx.sdk.utils.SystemContextConstants.MODEL
 import com.dashx.sdk.utils.SystemContextConstants.NAME
@@ -31,6 +36,7 @@ import com.dashx.sdk.utils.SystemContextConstants.OS_VERSION
 import com.dashx.sdk.utils.SystemContextConstants.RELEASE
 import com.dashx.sdk.utils.SystemContextConstants.RELEASE_MODE
 import com.dashx.sdk.utils.SystemContextConstants.SCREEN
+import com.dashx.sdk.utils.SystemContextConstants.SPEED
 import com.dashx.sdk.utils.SystemContextConstants.TIME_ZONE
 import com.dashx.sdk.utils.SystemContextConstants.USER_AGENT
 import com.dashx.sdk.utils.SystemContextConstants.VERSION
@@ -71,7 +77,6 @@ class SystemContext {
 
     private fun setNetworkInfo() {
         val network = hashMapOf<String, Any>()
-
         network[BLUETOOTH] = getBluetoothInfo(context)
         network[CARRIER] = getCarrierInfo(context!!)
         network[CELLULAR] = getCellularInfo(context!!).toString()
@@ -154,6 +159,7 @@ class SystemContext {
         val library = HashMap<String, Any>()
         library[NAME] = BuildConfig.LIBRARY_NAME
         library[VERSION] = BuildConfig.VERSION_NAME
+
         put(LIBRARY, library)
     }
 
@@ -181,6 +187,29 @@ class SystemContext {
         return JSONObject(hashMapOf(IPV4 to systemContextHashMap[IPV4], IPV6 to systemContextHashMap[IPV6]))
     }
 
+    private fun setLocationInfo() {
+        val location = HashMap<String, Any>()
+        getLocationCoordinates(context!!).let {
+            location[LONGITUDE] = it?.longitude ?: 0.0
+            location[LATITUDE] = it?.latitude ?: 0.0
+        }
+        getLocationAddress(context!!).let {
+            location[CITY] = if (it.isNotEmpty()) {
+                it[0].getAddressLine(0)
+            } else {
+                ""
+            }
+            location[COUNTRY] = if (it.isNotEmpty()) {
+                it[0].countryName
+            } else {
+                ""
+            }
+        }
+        location[SPEED] = getSpeed(context!!)
+
+        put(LOCATION, location)
+    }
+
     fun getAppInfo(): JSONObject {
         return JSONObject(systemContextHashMap[APP] as Map<String, Any>)
     }
@@ -195,6 +224,10 @@ class SystemContext {
 
     fun getScreenInfo(): JSONObject {
         return JSONObject(systemContextHashMap[SCREEN] as Map<String, Any>)
+    }
+
+    fun getLocationInfo(): JSONObject {
+        return JSONObject(systemContextHashMap[LOCATION] as Map<String, Any>)
     }
 
     fun getSystemContext(): JSONObject {
@@ -212,6 +245,7 @@ class SystemContext {
         setOsInfo()
         setScreenInfo()
         setLibraryInfo()
+        setLocationInfo()
         return getSystemContext()
     }
 

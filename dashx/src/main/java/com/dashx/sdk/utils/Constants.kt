@@ -58,7 +58,6 @@ object SystemContextConstants {
 
     // App
     const val APP = "app"
-    const val NAME = "name"
     const val IDENTIFIER_KEY = "identifier"
     const val VERSION_NUMBER = "versionNumber"
     const val VERSION_CODE = "versionCode"
@@ -97,4 +96,15 @@ object SystemContextConstants {
     const val HEIGHT = "height"
     const val WIDTH = "width"
     const val DENSITY = "density"
+    const val NAME = "name"
+
+    // Location
+    const val LOCATION = "location"
+    const val CITY = "city"
+    const val COUNTRY = "country"
+    const val LATITUDE = "latitude"
+    const val LONGITUDE = "longitude"
+    const val SPEED = "speed"
+    const val LAST_GPS_POINT_X = "lastGPSPointX"
+    const val LAST_GPS_POINT_Y = "lastGPSPointY"
 }
