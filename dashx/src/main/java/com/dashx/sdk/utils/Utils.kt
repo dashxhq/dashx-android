@@ -7,9 +7,6 @@ import android.content.SharedPreferences
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.net.Uri
-import com.dashx.sdk.DEFAULT_INSTANCE
-import com.dashx.sdk.FileConstants
-import com.dashx.sdk.PACKAGE_NAME
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.InputStream
