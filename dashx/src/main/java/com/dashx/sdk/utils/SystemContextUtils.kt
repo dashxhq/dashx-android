@@ -62,8 +62,7 @@ fun getBluetoothInfo(context: Context?): Boolean {
 }
 
 fun getWifiInfo(context: Context): Boolean {
-    val wifiManager =
-        context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+    val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
     return wifiManager.isWifiEnabled
 }
 

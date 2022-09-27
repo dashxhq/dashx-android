@@ -56,6 +56,21 @@ object SystemContextConstants {
     const val IPV4 = "ipV4"
     const val IPV6 = "ipV6"
 
+    // App
+    const val APP = "app"
+    const val NAME = "name"
+    const val IDENTIFIER_KEY = "identifier"
+    const val VERSION_NUMBER = "versionNumber"
+    const val VERSION_CODE = "versionCode"
+    const val BUILD = "build"
+    const val RELEASE_MODE = "releaseMode"
+    const val RELEASE = "release"
+    const val DEBUG = "debug"
+
+    // Library
+    const val LIBRARY = "library"
+    const val VERSION = "version"
+
     // Network
     const val NETWORK = "network"
     const val WIFI = "wifi"
@@ -71,8 +86,6 @@ object SystemContextConstants {
     const val KIND = "kind"
     const val MANUFACTURER = "manufacturer"
     const val MODEL = "model"
-    const val NAME = "name"
-    const val TOKEN = "token"
 
     // Os
     const val OS = "os"
