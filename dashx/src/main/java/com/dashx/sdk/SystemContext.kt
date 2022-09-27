@@ -189,12 +189,10 @@ class SystemContext {
 
     private fun setLocationInfo() {
         val location = HashMap<String, Any>()
-
         getLocationCoordinates(context!!).let {
             location[LONGITUDE] = it?.longitude ?: 0.0
             location[LATITUDE] = it?.latitude ?: 0.0
         }
-
         getLocationAddress(context!!).let {
             location[CITY] = if (it.isNotEmpty()) {
                 it[0].getAddressLine(0)
@@ -207,7 +205,6 @@ class SystemContext {
                 ""
             }
         }
-
         location[SPEED] = getSpeed(context!!)
 
         put(LOCATION, location)

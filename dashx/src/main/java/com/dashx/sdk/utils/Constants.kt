@@ -2,8 +2,6 @@
 
 package com.dashx.sdk.utils
 
-import android.location.Location
-
 const val PACKAGE_NAME = "com.dashx.sdk"
 const val DEFAULT_INSTANCE = "default"
 
@@ -99,7 +97,6 @@ object SystemContextConstants {
     const val WIDTH = "width"
     const val DENSITY = "density"
     const val NAME = "name"
-    const val TOKEN = "token"
 
     // Location
     const val LOCATION = "location"
