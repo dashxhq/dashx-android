@@ -147,4 +147,3 @@ fun getScreenWidth(): Int {
 fun getScreenDensity(): Int {
     return displayMetricsInfo.densityDpi
 }
-

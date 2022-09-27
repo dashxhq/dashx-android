@@ -1,12 +1,7 @@
 package com.dashx.sdk
 
 import android.content.Context
-import com.dashx.sdk.utils.getIpHostAddresses
-import com.dashx.sdk.utils.getAppLocale
-import com.dashx.sdk.utils.getAppTimeZone
-import com.dashx.sdk.utils.getAppUserAgent
 import android.content.pm.ApplicationInfo
-import android.util.Log
 import com.dashx.sdk.utils.*
 import com.dashx.sdk.utils.SystemContextConstants.ADVERTISING_ID
 import com.dashx.sdk.utils.SystemContextConstants.AD_TRACKING_ENABLED
@@ -44,7 +39,6 @@ import com.dashx.sdk.utils.SystemContextConstants.VERSION_NUMBER
 import com.dashx.sdk.utils.SystemContextConstants.WIDTH
 import com.dashx.sdk.utils.SystemContextConstants.WIFI
 import org.json.JSONObject
-import java.lang.Exception
 
 class SystemContext {
 
@@ -72,13 +66,7 @@ class SystemContext {
 
     fun init(context: Context) {
         this.context = context.applicationContext
-        try {
-            getAdvertisingInfo(this.context)
-        }
-        catch (e: Exception) {
-            e.printStackTrace()
-            Log.d("czxcsd","fdsfs")
-        }
+        getAdvertisingInfo(this.context)
     }
 
     private fun setNetworkInfo() {
@@ -107,7 +95,6 @@ class SystemContext {
 
     private fun setOsInfo() {
         val os = HashMap<String, Any>()
-
         os[OS_NAME] = getOsName()
         os[OS_VERSION] = getOsVersion()
 
@@ -116,7 +103,6 @@ class SystemContext {
 
     private fun setScreenInfo() {
         val screen = HashMap<String, Any>()
-
         screen[HEIGHT] = getScreenHeight()
         screen[WIDTH] = getScreenWidth()
         screen[DENSITY] = getScreenDensity()
