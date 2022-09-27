@@ -26,7 +26,6 @@ import java.net.NetworkInterface
 import java.util.*
 import kotlin.math.pow
 
-
 fun getIpHostAddresses(): HashMap<String, String> {
     val ipAddressHashMap = hashMapOf<String, String>()
     NetworkInterface.getNetworkInterfaces()?.toList()?.map { networkInterface ->
@@ -67,14 +66,12 @@ fun getBluetoothInfo(context: Context?): Boolean {
 }
 
 fun getWifiInfo(context: Context): Boolean {
-    val wifiManager =
-        context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+    val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
     return wifiManager.isWifiEnabled
 }
 
 fun getCellularInfo(context: Context): Boolean? {
-    val connectivityManager =
-        context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+    val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
     return connectivityManager.activeNetworkInfo?.isConnected
 }
 
@@ -99,7 +96,6 @@ fun getDeviceModel(): String {
 fun getDeviceName(): String {
     val model = Build.MODEL
     val manufacturer = Build.MANUFACTURER
-
     return if (model.startsWith(manufacturer)) {
         model.capitalize(Locale.ROOT)
     } else {
@@ -153,7 +149,6 @@ fun getLocationCoordinates(context: Context): Location? {
 }
 
 fun getSpeed(context: Context): Double {
-
     val lastGPSPointX = context.let {
         getDashXSharedPreferences(it).getFloat(LAST_GPS_POINT_X, 0F)
     }
@@ -165,15 +160,10 @@ fun getSpeed(context: Context): Double {
     getLocationCoordinates(context).let {
         val currentGPSPointX = it?.latitude
         val currentGPSPointY = it?.longitude
-
         val results = FloatArray(1)
         if (currentGPSPointY != null) {
             if (currentGPSPointX != null) {
-                Location.distanceBetween(lastGPSPointX.toDouble(),
-                    currentGPSPointX.toDouble(),
-                    lastGPSPointY.toDouble(),
-                    currentGPSPointY.toDouble(),
-                    results)
+                Location.distanceBetween(lastGPSPointX.toDouble(), currentGPSPointX.toDouble(), lastGPSPointY.toDouble(), currentGPSPointY.toDouble(), results)
             }
         }
 

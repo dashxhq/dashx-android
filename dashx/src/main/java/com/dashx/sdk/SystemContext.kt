@@ -73,7 +73,6 @@ class SystemContext {
 
     private fun setNetworkInfo() {
         val network = hashMapOf<String, Any>()
-
         network[BLUETOOTH] = getBluetoothInfo(context)
         network[CARRIER] = getCarrierInfo(context!!)
         network[CELLULAR] = getCellularInfo(context!!).toString()
@@ -163,6 +162,7 @@ class SystemContext {
         val library = HashMap<String, Any>()
         library[NAME] = BuildConfig.LIBRARY_NAME
         library[VERSION] = BuildConfig.VERSION_NAME
+
         put(LIBRARY, library)
     }
 
@@ -188,6 +188,7 @@ class SystemContext {
         }
 
         location[SPEED] = getSpeed(context!!)
+
         put(LOCATION, location)
     }
 
