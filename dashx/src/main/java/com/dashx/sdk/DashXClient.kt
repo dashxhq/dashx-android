@@ -8,6 +8,7 @@ import com.dashx.graphql.generated.*
 import com.dashx.graphql.generated.enums.ContactKind
 import com.dashx.graphql.generated.enums.TrackNotificationStatus
 import com.dashx.graphql.generated.inputs.*
+import com.dashx.sdk.data.LibraryInfo
 import com.dashx.sdk.data.PrepareExternalAssetResponse
 import com.dashx.sdk.utils.*
 import com.expediagroup.graphql.client.serialization.GraphQLClientKotlinxSerializer
@@ -60,10 +61,10 @@ class DashXClient {
             publicKey: String,
             baseURI: String? = null,
             targetEnvironment: String? = null,
+            libraryInfo: LibraryInfo? = null
         ): DashXClient {
-            INSTANCE.init(context, publicKey, baseURI, targetEnvironment)
+            INSTANCE.init(context, publicKey, baseURI, targetEnvironment, libraryInfo)
             DashX = INSTANCE
-            SystemContext.configure(context)
             return INSTANCE
         }
 
@@ -76,14 +77,15 @@ class DashXClient {
         }
     }
 
-    fun configure(context: Context, publicKey: String, baseURI: String? = null, targetEnvironment: String? = null): DashXClient =
-        DashXClient.configure(context, publicKey, baseURI, targetEnvironment)
+    fun configure(context: Context, publicKey: String, baseURI: String? = null, targetEnvironment: String? = null, libraryInfo: LibraryInfo? = null): DashXClient =
+        DashXClient.configure(context, publicKey, baseURI, targetEnvironment, libraryInfo)
 
     private fun init(
         context: Context,
         publicKey: String,
         baseURI: String? = null,
         targetEnvironment: String? = null,
+        libraryInfo: LibraryInfo? = null
     ) {
         this.baseURI = baseURI
         this.publicKey = publicKey
@@ -92,6 +94,7 @@ class DashXClient {
         this.mustSubscribe = false
 
         SystemContext.configure(context)
+        SystemContext.setLibraryInfo(libraryInfo)
         loadFromStorage()
         createGraphqlClient()
     }

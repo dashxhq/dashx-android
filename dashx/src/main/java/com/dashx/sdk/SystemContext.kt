@@ -2,6 +2,7 @@ package com.dashx.sdk
 
 import android.content.Context
 import android.content.pm.ApplicationInfo
+import com.dashx.sdk.data.LibraryInfo
 import com.dashx.sdk.utils.*
 import com.dashx.sdk.utils.SystemContextConstants.ADVERTISING_ID
 import com.dashx.sdk.utils.SystemContextConstants.AD_TRACKING_ENABLED
@@ -10,25 +11,25 @@ import com.dashx.sdk.utils.SystemContextConstants.BLUETOOTH
 import com.dashx.sdk.utils.SystemContextConstants.BUILD
 import com.dashx.sdk.utils.SystemContextConstants.CARRIER
 import com.dashx.sdk.utils.SystemContextConstants.CELLULAR
-import com.dashx.sdk.utils.SystemContextConstants.DEBUG
-import com.dashx.sdk.utils.SystemContextConstants.DENSITY
 import com.dashx.sdk.utils.SystemContextConstants.CITY
 import com.dashx.sdk.utils.SystemContextConstants.COUNTRY
+import com.dashx.sdk.utils.SystemContextConstants.DEBUG
+import com.dashx.sdk.utils.SystemContextConstants.DENSITY
 import com.dashx.sdk.utils.SystemContextConstants.DEVICE
 import com.dashx.sdk.utils.SystemContextConstants.HEIGHT
 import com.dashx.sdk.utils.SystemContextConstants.ID
-import com.dashx.sdk.utils.SystemContextConstants.NAMESPACE
 import com.dashx.sdk.utils.SystemContextConstants.IPV4
 import com.dashx.sdk.utils.SystemContextConstants.IPV6
 import com.dashx.sdk.utils.SystemContextConstants.KIND
-import com.dashx.sdk.utils.SystemContextConstants.LIBRARY
 import com.dashx.sdk.utils.SystemContextConstants.LATITUDE
+import com.dashx.sdk.utils.SystemContextConstants.LIBRARY
 import com.dashx.sdk.utils.SystemContextConstants.LOCALE
 import com.dashx.sdk.utils.SystemContextConstants.LOCATION
 import com.dashx.sdk.utils.SystemContextConstants.LONGITUDE
 import com.dashx.sdk.utils.SystemContextConstants.MANUFACTURER
 import com.dashx.sdk.utils.SystemContextConstants.MODEL
 import com.dashx.sdk.utils.SystemContextConstants.NAME
+import com.dashx.sdk.utils.SystemContextConstants.NAMESPACE
 import com.dashx.sdk.utils.SystemContextConstants.NETWORK
 import com.dashx.sdk.utils.SystemContextConstants.OS
 import com.dashx.sdk.utils.SystemContextConstants.OS_NAME
@@ -55,10 +56,20 @@ class SystemContext {
 
         private var INSTANCE: SystemContext = SystemContext()
 
+        private var libraryName = BuildConfig.LIBRARY_NAME
+        private var libraryVersion = BuildConfig.VERSION_NAME
+
         fun configure(context: Context): SystemContext {
             INSTANCE.init(context)
             getAdvertisingInfo(context)
             return INSTANCE
+        }
+
+        fun setLibraryInfo(libraryInfo: LibraryInfo?) {
+            if (libraryInfo != null) {
+                libraryName = libraryInfo.name
+                libraryVersion = libraryInfo.version
+            }
         }
 
         @JvmName("getSystemContextInstance")
@@ -158,8 +169,8 @@ class SystemContext {
 
     private fun setLibraryInfo() {
         val library = HashMap<String, Any>()
-        library[NAME] = BuildConfig.LIBRARY_NAME
-        library[VERSION] = BuildConfig.VERSION_NAME
+        library[NAME] = libraryName
+        library[VERSION] = libraryVersion
 
         put(LIBRARY, library)
     }
