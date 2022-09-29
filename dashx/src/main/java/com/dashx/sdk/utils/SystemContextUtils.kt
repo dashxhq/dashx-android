@@ -32,9 +32,9 @@ private val displayMetricsInfo = Resources.getSystem().displayMetrics
 fun getIpHostAddresses(): HashMap<String, String> {
     val ipAddressHashMap = hashMapOf<String, String>()
     NetworkInterface.getNetworkInterfaces()?.toList()?.map { networkInterface ->
-        networkInterface.inetAddresses?.toList()?.find {
+        networkInterface.inetAddresses?.toList()?.filter {
             !it.isLoopbackAddress && (it is Inet4Address || it is Inet6Address)
-        }?.let {
+        }?.map {
             when (it) {
                 is Inet4Address -> {
                     ipAddressHashMap.put(SystemContextConstants.IPV4, it.hostAddress ?: "")

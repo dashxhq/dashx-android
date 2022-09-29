@@ -58,8 +58,8 @@ object SystemContextConstants {
 
     // App
     const val APP = "app"
-    const val IDENTIFIER_KEY = "identifier"
-    const val VERSION_NUMBER = "versionNumber"
+    const val NAMESPACE = "namespace"
+    const val VERSION_NUMBER = "version"
     const val VERSION_CODE = "versionCode"
     const val BUILD = "build"
     const val RELEASE_MODE = "releaseMode"

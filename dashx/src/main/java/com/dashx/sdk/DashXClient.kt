@@ -465,7 +465,7 @@ class DashXClient {
     fun track(event: String, data: HashMap<String, String>? = hashMapOf()) {
         val jsonData = data?.toMap()?.let { JSONObject(it) }.toString()
 
-        val query = TrackEvent(variables = TrackEvent.Variables(TrackEventInput(accountAnonymousUid = accountAnonymousUid, accountUid = accountUid!!, data = jsonData, event = event, systemContext = gson.fromJson(SystemContext.getInstance().getSystemContext().toString(), SystemContextInput::class.java))))
+        val query = TrackEvent(variables = TrackEvent.Variables(TrackEventInput(accountAnonymousUid = accountAnonymousUid, accountUid = accountUid!!, data = jsonData, event = event, systemContext = gson.fromJson(SystemContext.getInstance().fetchSystemContext().toString(), SystemContextInput::class.java))))
 
         coroutineScope.launch {
             val result = graphqlClient.execute(query)

@@ -17,7 +17,7 @@ import com.dashx.sdk.utils.SystemContextConstants.COUNTRY
 import com.dashx.sdk.utils.SystemContextConstants.DEVICE
 import com.dashx.sdk.utils.SystemContextConstants.HEIGHT
 import com.dashx.sdk.utils.SystemContextConstants.ID
-import com.dashx.sdk.utils.SystemContextConstants.IDENTIFIER_KEY
+import com.dashx.sdk.utils.SystemContextConstants.NAMESPACE
 import com.dashx.sdk.utils.SystemContextConstants.IPV4
 import com.dashx.sdk.utils.SystemContextConstants.IPV6
 import com.dashx.sdk.utils.SystemContextConstants.KIND
@@ -141,7 +141,7 @@ class SystemContext {
             if (packageManager != null) {
                 hashMap[NAME] = it.applicationInfo.loadLabel(packageManager)
             }
-            hashMap[IDENTIFIER_KEY] = it.packageName
+            hashMap[NAMESPACE] = it.packageName
             hashMap[VERSION_NUMBER] = it.versionName
             hashMap[VERSION_CODE] = it.versionCode
             hashMap[BUILD] = it.versionCode
