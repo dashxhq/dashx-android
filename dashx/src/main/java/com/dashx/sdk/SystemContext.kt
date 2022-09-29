@@ -57,6 +57,7 @@ class SystemContext {
 
         fun configure(context: Context): SystemContext {
             INSTANCE.init(context)
+            getAdvertisingInfo(context)
             return INSTANCE
         }
 

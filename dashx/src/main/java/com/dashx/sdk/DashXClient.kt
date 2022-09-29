@@ -63,6 +63,7 @@ class DashXClient {
         ): DashXClient {
             INSTANCE.init(context, publicKey, baseURI, targetEnvironment)
             DashX = INSTANCE
+            SystemContext.configure(context)
             return INSTANCE
         }
 
