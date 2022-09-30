@@ -8,7 +8,9 @@ import com.dashx.graphql.generated.*
 import com.dashx.graphql.generated.enums.ContactKind
 import com.dashx.graphql.generated.enums.TrackNotificationStatus
 import com.dashx.graphql.generated.inputs.*
+import com.dashx.sdk.data.LibraryInfo
 import com.dashx.sdk.data.PrepareExternalAssetResponse
+import com.dashx.sdk.utils.*
 import com.expediagroup.graphql.client.serialization.GraphQLClientKotlinxSerializer
 import com.google.gson.Gson
 import com.google.gson.JsonObject
@@ -26,7 +28,7 @@ import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
-val DashX = DashXClient.getInstance()
+var DashX = DashXClient()
 
 class DashXClient {
     private val tag = DashXClient::class.java.simpleName
@@ -59,29 +61,31 @@ class DashXClient {
             publicKey: String,
             baseURI: String? = null,
             targetEnvironment: String? = null,
+            libraryInfo: LibraryInfo? = null
         ): DashXClient {
-            INSTANCE.init(context, publicKey, baseURI, targetEnvironment)
+            INSTANCE.init(context, publicKey, baseURI, targetEnvironment, libraryInfo)
+            DashX = INSTANCE
             return INSTANCE
         }
 
         @JvmName("getDashXInstance")
         fun getInstance(): DashXClient {
-            try {
-                return INSTANCE
-            } catch (exception: Exception) {
-                throw NullPointerException("Create DashXClient before accessing it.")
+            if (INSTANCE.context == null) {
+                throw NullPointerException("Configure DashXClient before accessing it.")
             }
+            return INSTANCE
         }
     }
 
-    fun configure(context: Context, publicKey: String, baseURI: String? = null, targetEnvironment: String? = null): DashXClient =
-        DashXClient.configure(context, publicKey, baseURI, targetEnvironment)
+    fun configure(context: Context, publicKey: String, baseURI: String? = null, targetEnvironment: String? = null, libraryInfo: LibraryInfo? = null): DashXClient =
+        DashXClient.configure(context, publicKey, baseURI, targetEnvironment, libraryInfo)
 
     private fun init(
         context: Context,
         publicKey: String,
         baseURI: String? = null,
         targetEnvironment: String? = null,
+        libraryInfo: LibraryInfo? = null
     ) {
         this.baseURI = baseURI
         this.publicKey = publicKey
@@ -89,6 +93,8 @@ class DashXClient {
         this.context = context
         this.mustSubscribe = false
 
+        SystemContext.configure(context)
+        SystemContext.setLibraryInfo(libraryInfo)
         loadFromStorage()
         createGraphqlClient()
     }
@@ -410,10 +416,9 @@ class DashXClient {
             val responseJsonObject = JSONObject(gson.toJson(responseObject))
             responseJsonObject.put(DATA, externalDataJsonObject)
 
-            val externalAsset = gson.fromJson(responseJsonObject.toString(),
-                                              com.dashx.sdk.data.ExternalAsset::class.java)
-            if(externalAsset.data.asset?.url == null && !externalAsset.data.asset?.playbackIds.isNullOrEmpty()) {
-                externalAsset.data.asset?.url = prepareMuxVideoUrl(externalAsset.data.asset?.playbackIds?.get(0)?.id)
+            val externalAsset = gson.fromJson(responseJsonObject.toString(), com.dashx.sdk.data.ExternalAsset::class.java)
+            if (externalAsset.data.asset?.url == null && !externalAsset.data.asset?.playbackIds.isNullOrEmpty()) {
+                externalAsset.data.asset?.url = generateMuxVideoUrl(externalAsset.data.asset?.playbackIds?.get(0)?.id)
             }
             onSuccess(externalAsset)
         }
@@ -464,7 +469,7 @@ class DashXClient {
     fun track(event: String, data: HashMap<String, String>? = hashMapOf()) {
         val jsonData = data?.toMap()?.let { JSONObject(it) }.toString()
 
-        val query = TrackEvent(variables = TrackEvent.Variables(TrackEventInput(accountAnonymousUid = accountAnonymousUid, accountUid = accountUid!!, data = jsonData, event = event)))
+        val query = TrackEvent(variables = TrackEvent.Variables(TrackEventInput(accountAnonymousUid = accountAnonymousUid, accountUid = accountUid!!, data = jsonData, event = event, systemContext = gson.fromJson(SystemContext.getInstance().fetchSystemContext().toString(), SystemContextInput::class.java))))
 
         coroutineScope.launch {
             val result = graphqlClient.execute(query)
