@@ -1,6 +1,6 @@
 @file:JvmName("Utils")
 
-package com.dashx.sdk
+package com.dashx.sdk.utils
 
 import android.content.Context
 import android.content.SharedPreferences
@@ -10,7 +10,6 @@ import android.net.Uri
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.InputStream
-
 
 fun getPackageInfo(context: Context): PackageInfo = context.packageManager.getPackageInfo(context.packageName, PackageManager.GET_META_DATA)
 
@@ -43,6 +42,6 @@ fun getBytes(inputStream: InputStream): ByteArray {
     return byteBuffer.toByteArray()
 }
 
-fun prepareMuxVideoUrl(playbackId: String?):String {
+fun generateMuxVideoUrl(playbackId: String?): String {
     return "https://stream.mux.com/$playbackId.m3u8"
 }

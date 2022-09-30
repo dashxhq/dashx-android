@@ -1,5 +1,6 @@
 package com.dashx.sdk
 
+import com.dashx.sdk.utils.DATA
 import com.expediagroup.graphql.client.GraphQLClient
 import com.expediagroup.graphql.client.serialization.types.KotlinxGraphQLError
 import com.expediagroup.graphql.client.serialization.types.KotlinxGraphQLResponse

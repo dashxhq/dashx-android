@@ -1,7 +1,6 @@
 @file:JvmName("Constants")
 
-package com.dashx.sdk
-
+package com.dashx.sdk.utils
 
 const val PACKAGE_NAME = "com.dashx.sdk"
 const val DEFAULT_INSTANCE = "default"
@@ -48,4 +47,64 @@ object UploadConstants {
 
     const val READY = "ready"
     const val WAITING = "waiting"
+}
+
+object SystemContextConstants {
+    const val LOCALE = "locale"
+    const val TIME_ZONE = "timeZone"
+    const val USER_AGENT = "userAgent"
+    const val IPV4 = "ipV4"
+    const val IPV6 = "ipV6"
+
+    // App
+    const val APP = "app"
+    const val NAMESPACE = "namespace"
+    const val VERSION_NUMBER = "version"
+    const val VERSION_CODE = "versionCode"
+    const val BUILD = "build"
+    const val RELEASE_MODE = "releaseMode"
+    const val RELEASE = "release"
+    const val DEBUG = "debug"
+
+    // Library
+    const val LIBRARY = "library"
+    const val VERSION = "version"
+
+    // Network
+    const val NETWORK = "network"
+    const val WIFI = "wifi"
+    const val CELLULAR = "cellular"
+    const val CARRIER = "carrier"
+    const val BLUETOOTH = "bluetooth"
+
+    // Device
+    const val DEVICE = "device"
+    const val AD_TRACKING_ENABLED = "adTrackingEnabled"
+    const val ADVERTISING_ID = "advertisingId"
+    const val ID = "id"
+    const val KIND = "kind"
+    const val MANUFACTURER = "manufacturer"
+    const val MODEL = "model"
+
+    // Os
+    const val OS = "os"
+    const val OS_NAME = "name"
+    const val OS_VERSION = "version"
+
+    //Screen
+    const val SCREEN = "screen"
+    const val HEIGHT = "height"
+    const val WIDTH = "width"
+    const val DENSITY = "density"
+    const val NAME = "name"
+
+    // Location
+    const val LOCATION = "location"
+    const val CITY = "city"
+    const val COUNTRY = "country"
+    const val LATITUDE = "latitude"
+    const val LONGITUDE = "longitude"
+    const val SPEED = "speed"
+    const val LAST_GPS_POINT_X = "lastGPSPointX"
+    const val LAST_GPS_POINT_Y = "lastGPSPointY"
 }
