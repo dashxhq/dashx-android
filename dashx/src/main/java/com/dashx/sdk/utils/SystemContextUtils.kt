@@ -3,6 +3,7 @@ package com.dashx.sdk.utils
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothManager
 import android.content.Context
+import android.content.pm.PackageManager
 import android.content.res.Resources
 import android.location.Address
 import android.location.Geocoder
@@ -13,19 +14,20 @@ import android.net.wifi.WifiManager
 import android.os.Build
 import android.provider.Settings
 import android.telephony.TelephonyManager
-import com.dashx.sdk.utils.SystemContextConstants.ADVERTISING_ID
+import androidx.core.content.ContextCompat
 import com.dashx.sdk.utils.SystemContextConstants.AD_TRACKING_ENABLED
+import com.dashx.sdk.utils.SystemContextConstants.ADVERTISING_ID
 import com.dashx.sdk.utils.SystemContextConstants.LAST_GPS_POINT_X
 import com.dashx.sdk.utils.SystemContextConstants.LAST_GPS_POINT_Y
 import com.google.android.gms.ads.identifier.AdvertisingIdClient
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import java.net.Inet4Address
 import java.net.Inet6Address
 import java.net.NetworkInterface
 import java.util.*
 import kotlin.math.pow
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 private val displayMetricsInfo = Resources.getSystem().displayMetrics
 
@@ -138,11 +140,13 @@ fun getLocationCoordinates(context: Context): Location? {
     var location: Location? = null
 
     try {
-        location = locationManager!!.getLastKnownLocation(LocationManager.GPS_PROVIDER)
-        context.let {
-            getDashXSharedPreferences(it).edit().apply {
-                putFloat(LAST_GPS_POINT_X, (location?.latitude?.toFloat()!!))
-                putFloat(LAST_GPS_POINT_Y, (location.longitude.toFloat()))
+        if (ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            location = locationManager!!.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+            context.let {
+                getDashXSharedPreferences(it).edit().apply {
+                    putFloat(LAST_GPS_POINT_X, (location?.latitude?.toFloat()!!))
+                    putFloat(LAST_GPS_POINT_Y, (location.longitude.toFloat()))
+                }
             }
         }
     } catch (e: Exception) {

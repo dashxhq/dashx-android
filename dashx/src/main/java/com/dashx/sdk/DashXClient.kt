@@ -12,26 +12,27 @@ import com.dashx.sdk.data.LibraryInfo
 import com.dashx.sdk.data.PrepareExternalAssetResponse
 import com.dashx.sdk.utils.*
 import com.expediagroup.graphql.client.serialization.GraphQLClientKotlinxSerializer
+import com.google.android.gms.tasks.OnCompleteListener
+import com.google.firebase.messaging.FirebaseMessaging
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import io.ktor.client.*
 import io.ktor.client.plugins.*
 import io.ktor.client.plugins.logging.*
 import io.ktor.client.request.*
-import kotlinx.coroutines.*
-import org.json.JSONObject
 import java.io.File
 import java.io.FileInputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.time.Instant
-import java.util.UUID
 import java.util.concurrent.TimeUnit
+import java.util.UUID
+import kotlinx.coroutines.*
+import org.json.JSONObject
 
 var DashX = DashXClient()
 
 class DashXClient {
-    private val tag = DashXClient::class.java.simpleName
 
     // Setup variables
     private var baseURI: String? = null
@@ -53,8 +54,8 @@ class DashXClient {
     private val coroutineScope = CoroutineScope(Dispatchers.IO)
 
     companion object {
-
         private var INSTANCE: DashXClient = DashXClient()
+        private val tag = DashXClient::class.java.simpleName
 
         fun configure(
             context: Context,
@@ -65,6 +66,19 @@ class DashXClient {
         ): DashXClient {
             INSTANCE.init(context, publicKey, baseURI, targetEnvironment, libraryInfo)
             DashX = INSTANCE
+
+            FirebaseMessaging.getInstance().getToken()
+                .addOnCompleteListener(OnCompleteListener { task ->
+                    if (!task.isSuccessful) {
+                        DashXLog.d(tag, "FirebaseMessaging.getInstance().getToken() failed: $task.exception")
+                        return@OnCompleteListener
+                    }
+
+                    val token = task.getResult()
+                    token?.let { it -> DashX.setDeviceToken(it) }
+                    DashXLog.d(tag, "Firebase Initialised with: $token")
+                });
+
             return INSTANCE
         }
 

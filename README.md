@@ -183,7 +183,7 @@ val query = FetchContent(variables = FetchContent.Variables(FetchContentInput(
             fields = fields,
             include = include,
             exclude = exclude)))
-            
+
 coroutineScope.launch {
      val result = graphqlClient.execute(query)
 
@@ -204,4 +204,4 @@ DashX Android SDK uses [Maven](https://mvnrepository.com/) to serve build artifa
 
 - Bump up the `version`, `versionCode` and `versionName` in **dashx/build.gradle**
 - Commit the version bump to **develop** (`git push origin develop`)
-- Merge the latest code in **develop** into **main**
+- Merge the latest **develop** branch into **main** branch
