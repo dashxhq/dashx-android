@@ -51,15 +51,20 @@ allprojects {
 
 ```groovy
 dependencies {
-    implementation 'com.dashx:dashx-android:1.0.0'
+    implementation 'com.dashx:dashx-android:1.0.8'
     // ...
 }
+```
+
+- Add this under application tag in Manifest.xml file
+```kotlin
+<meta-data android:name="com.google.android.gms.version" android:value="@integer/google_play_services_version" />
 ```
 
 ## Usage
 
 ```kotlin
-val dashXClient = DashXClient("Your Public Key")
+val dashX = DashX.configure("Your Public Key")
 ```
 
 DashXClient can be initialised with:
@@ -74,13 +79,15 @@ DashXClient can be initialised with:
 ### Identify User
 
 ```kotlin
-dashXClient.identify(uid, hashMapOf("name" to "John Doe") /* identifyOptions */)
+DashX.identify(hashMapOf("name" to "John Doe") /* identifyOptions */)
 ```
 
 `identifyOptions` can accept `HashMap<String, String>` with
 
 |Name|Type|
 |:---:|:--:|
+|**`uid`**|`String`|
+|**`anonymousUid`**|`String`|
 |**`firstName`**|`String`|
 |**`lastName`**|`String`|
 |**`name`**|`String`|
@@ -90,7 +97,7 @@ dashXClient.identify(uid, hashMapOf("name" to "John Doe") /* identifyOptions */)
 ### Track Events
 
 ```kotlin
-dashXClient.track(event, hashMapOf("page" to "index") /* trackData */)
+DashX.track(event, hashMapOf("page" to "index") /* trackData */)
 ```
 
 `trackData` accepts `HashMap<String, String>`
@@ -98,7 +105,7 @@ dashXClient.track(event, hashMapOf("page" to "index") /* trackData */)
 ### Fetch Content
 
 ```kotlin
-dashXClient.fetchContent("contacts/user", language = "en_US", onSuccess = {
+DashX.fetchContent("email/welcome", language = "en_US", onSuccess = {
     println(it)
 }, onError = {
     println(it)
@@ -118,9 +125,9 @@ dashXClient.fetchContent("contacts/user", language = "en_US", onSuccess = {
 ### Search Content
 
 ```kotlin
-dashXClient.searchContent("contacts",
+DashX.searchContent("email",
     language = "en_US", returnType = "all",
-    filter = hashMapOf("name_eq" to "John"),
+    filter = hashMapOf("identifier_eq" to "welcome"),
     order = hashMapOf("created_at" to "DESC"),
     limit = 10,
     preview = true,
@@ -130,27 +137,12 @@ dashXClient.searchContent("contacts",
         println(it)
     })
 ```
-=======
+
 For detailed usage, refer to the [documentation](https://docs.dashx.com/developer).
 
 ## Contributing
 
 ### Obtaining Graphql schema and generating Graphql operation
-
-- Make sure to install Apollo CLI via npm:
-
-```sh
-$ npm i -g apollo
-```
-- In order to generate code, Apollo requires local copy of Graphql schema, to download that:
-
-```sh
-$ apollo schema:download --endpoint="https://api.dashx.com/graphql" app/src/main/graphql/com/dashx/schema.json
-```
-
-This will save a schama.json file in your ios directory.
-
-- Add Graphql request in `src/main/graphql/com/dashx` dir.
 
 - To re-generate Kotlin models for your graphql operations, run:
 
@@ -160,12 +152,6 @@ This will save a schama.json file in your ios directory.
 ---
 
 For example, if you want to generate code for `FetchContent`.
-
-- Download schema
-
-```sh
-$ apollo schema:download --endpoint="https://api.dashx.com/graphql" app/src/main/graphql/com/dashx/schema.json
-```
 
 - Add request in `graphql` dir with following contents:
 
@@ -184,44 +170,29 @@ $ ./gradlew build
 - Now you can use FetchContent operation like so:
 
 ```kotlin
-import com.dashx.type.* // Note the package name
+import com.dashx.graphql.generated.* // Note the package name
 
-val fetchContentInput = FetchContentInput(
-    contentType,
-    content,
-    Input.fromNullable(preview),
-    Input.fromNullable(language),
-    Input.fromNullable(fields),
-    Input.fromNullable(include),
-    Input.fromNullable(exclude)
-)
+val query = FetchContent(variables = FetchContent.Variables(FetchContentInput(
+            contentType = contentType,
+            content = content,
+            preview = preview,
+            language = language,
+            fields = fields,
+            include = include,
+            exclude = exclude)))
 
-val fetchContentQuery = FetchContentQuery(fetchContentInput)
+coroutineScope.launch {
+     val result = graphqlClient.execute(query)
 
-apolloClient.query(fetchContentQuery)
-    .enqueue(object : ApolloCall.Callback<FetchContentQuery.Data>() {
-        override fun onFailure(e: ApolloException) {
-            DashXLog.d(tag, "Could not get content for: $urn")
-            onError(e.message ?: "")
-            e.printStackTrace()
-        }
+     if (!result.errors.isNullOrEmpty()) {
+           val errors = result.errors?.map { e -> e.message }.toString()
+           DashXLog.d(tag, errors)
+           onError(errors)
+           return@launch
+     }
 
-        override fun onResponse(response: com.apollographql.apollo.api.Response<FetchContentQuery.Data>) {
-            val content = response.data?.fetchContent
-            if (!response.errors.isNullOrEmpty()) {
-                val errors = response.errors?.map { e -> e.message }.toString()
-                DashXLog.d(tag, errors)
-                onError(errors)
-                return
-            }
-
-            if (content != null) {
-                onSuccess(content.asJsonObject)
-            }
-
-            DashXLog.d(tag, "Got content: $content")
-        }
-    })
+     result.data?.fetchContent?.let { onSuccess(gson.toJsonTree(it).asJsonObject) }
+}
 ```
 
 ## Publishing
@@ -230,4 +201,4 @@ DashX Android SDK uses [Maven](https://mvnrepository.com/) to serve build artifa
 
 - Bump up the `version`, `versionCode` and `versionName` in **dashx/build.gradle**
 - Commit the version bump to **develop** (`git push origin develop`)
-- Merge the latest code in **develop** into **main**
+- Merge the latest **develop** branch into **main** branch
