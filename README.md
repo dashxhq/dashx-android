@@ -79,13 +79,15 @@ DashXClient can be initialised with:
 ### Identify User
 
 ```kotlin
-DashX.identify(uid, hashMapOf("name" to "John Doe") /* identifyOptions */)
+DashX.identify(hashMapOf("name" to "John Doe") /* identifyOptions */)
 ```
 
 `identifyOptions` can accept `HashMap<String, String>` with
 
 |Name|Type|
 |:---:|:--:|
+|**`uid`**|`String`|
+|**`anonymousUid`**|`String`|
 |**`firstName`**|`String`|
 |**`lastName`**|`String`|
 |**`name`**|`String`|
@@ -103,7 +105,7 @@ DashX.track(event, hashMapOf("page" to "index") /* trackData */)
 ### Fetch Content
 
 ```kotlin
-DashX.fetchContent("contacts/user", language = "en_US", onSuccess = {
+DashX.fetchContent("email/welcome", language = "en_US", onSuccess = {
     println(it)
 }, onError = {
     println(it)
@@ -123,9 +125,9 @@ DashX.fetchContent("contacts/user", language = "en_US", onSuccess = {
 ### Search Content
 
 ```kotlin
-DashX.searchContent("contacts",
+DashX.searchContent("email",
     language = "en_US", returnType = "all",
-    filter = hashMapOf("name_eq" to "John"),
+    filter = hashMapOf("identifier_eq" to "welcome"),
     order = hashMapOf("created_at" to "DESC"),
     limit = 10,
     preview = true,
