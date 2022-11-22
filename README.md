@@ -51,16 +51,11 @@ allprojects {
 
 ```groovy
 dependencies {
-    implementation 'com.dashx:dashx-android:1.0.7'
-    implementation 'com.google.android.gms:play-services:4.2.42'
+    implementation 'com.dashx:dashx-android:1.0.8'
     // ...
 }
 ```
 
-- Add this permission to your app Manifest.xml file
-```kotlin
-<uses-permission android:name="com.google.android.gms.permission.AD_ID"/>
-```
 - Add this under application tag in Manifest.xml file
 ```kotlin
 <meta-data android:name="com.google.android.gms.version" android:value="@integer/google_play_services_version" />
