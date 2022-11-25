@@ -45,8 +45,8 @@ dependencies {
 
     // Kotlin Graphql
     implementation "com.expediagroup:graphql-kotlin-ktor-client:$latestGraphQLKotlinVersion"
-    implementation("io.ktor:ktor-client-okhttp:$ktorVersion")
-    implementation("io.ktor:ktor-client-logging-jvm:$ktorVersion")
+    implementation "io.ktor:ktor-client-okhttp:$ktorVersion"
+    implementation "io.ktor:ktor-client-logging-jvm:$ktorVersion"
     implementation 'androidx.work:work-runtime-ktx:2.7.1'
 
     // Coroutines
