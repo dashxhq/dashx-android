@@ -180,8 +180,8 @@ coroutineScope.launch {
      val result = graphqlClient.execute(query)
 
      if (!result.errors.isNullOrEmpty()) {
-           val errors = result.errors?.map { e -> e.message }.toString()
-           DashXLog.d(tag, errors)
+           val errors = result.errors?.toString() ?: ""
+           DashXLog.e(tag, errors)
            onError(errors)
            return@launch
      }

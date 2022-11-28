@@ -2,7 +2,7 @@ package com.dashx.sdk
 
 class DashXExceptionHandler(private val mainExceptionHandler: Thread.UncaughtExceptionHandler) :
     Thread.UncaughtExceptionHandler {
-    private val dashXClient = DashX
+    private val dashXClient = DashXClient.getInstance()
 
     companion object {
         fun enable() {

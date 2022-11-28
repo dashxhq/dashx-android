@@ -140,7 +140,10 @@ fun getLocationCoordinates(context: Context): Location? {
     var location: Location? = null
 
     try {
-        if (ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+        if (
+            ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        ) {
             location = locationManager!!.getLastKnownLocation(LocationManager.GPS_PROVIDER)
             context.let {
                 getDashXSharedPreferences(it).edit().apply {
