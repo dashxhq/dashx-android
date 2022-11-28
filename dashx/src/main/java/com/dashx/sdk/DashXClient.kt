@@ -217,7 +217,7 @@ class DashXClient {
                 return@launch
             }
 
-            result.data?.identifyAccount?.let { gson.toJsonTree(it) }
+            DashXLog.d(tag, result.data?.identifyAccount?.let { gson.toJsonTree(it) }.toString())
         }
 
     }
@@ -489,7 +489,6 @@ class DashXClient {
             }
 
             DashXLog.d(tag, result.data?.trackEvent.let { gson.toJsonTree(it) }.toString())
-            result.data?.trackEvent.let { gson.toJsonTree(it) }
         }
     }
 

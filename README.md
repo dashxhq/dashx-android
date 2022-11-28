@@ -24,7 +24,7 @@ _DashX SDK for Android_
 
 ## Install
 
-- Add maven repository in your `settings.gradle`
+- Add Maven Central repository to your `settings.gradle`:
 
 ```groovy
 dependencyResolutionManagement {
@@ -36,102 +36,15 @@ dependencyResolutionManagement {
 }
 ```
 
-- If you are using `gradle < 7` add this to your global `build.gradle`
-
-```groovy
-allprojects {
-    repositories {
-        // ...
-        mavenCentral()
-    }
-}
-```
-
-- Add `dashx-android` to your app dependencies:
+- Add `dashx-android` to your dependencies in your module-level `build.gradle`:
 
 ```groovy
 dependencies {
     implementation 'com.dashx:dashx-android:1.0.8'
-    // ...
 }
 ```
 
 ## Usage
-
-```kotlin
-val dashX = DashX.configure("Your Public Key")
-```
-
-DashXClient can be initialised with:
-
-|Name|Type|
-|:---:|:--:|
-|**`publicKey`**|`String` _(Required)_ |
-|**`accountType`**|`String`|
-|**`baseURI`**|`String`|
-|**`targetEnvironment`**|`String`|
-
-### Identify User
-
-```kotlin
-DashX.identify(hashMapOf("name" to "John Doe") /* identifyOptions */)
-```
-
-`identifyOptions` can accept `HashMap<String, String>` with
-
-|Name|Type|
-|:---:|:--:|
-|**`uid`**|`String`|
-|**`anonymousUid`**|`String`|
-|**`firstName`**|`String`|
-|**`lastName`**|`String`|
-|**`name`**|`String`|
-|**`email`**|`String`|
-|**`phone`**|`String`|
-
-### Track Events
-
-```kotlin
-DashX.track(event, hashMapOf("page" to "index") /* trackData */)
-```
-
-`trackData` accepts `HashMap<String, String>`
-
-### Fetch Content
-
-```kotlin
-DashX.fetchContent("email/welcome", language = "en_US", onSuccess = {
-    println(it)
-}, onError = {
-    println(it)
-})
-```
-
-`fetchContent` accepts following arguments
-
-|Name|Type|Example|
-|:--:|:--:|:-----:|
-|**`preview`**|`Boolean`||
-|**`language`**|`String`|`"en_US"`||
-|**`fields`**|`List<String>`|`["character", "cast"]`||
-|**`include`**|`List<String>`|`["character.createdBy", "character.birthDate"]`||
-|**`exclude`**|`List<String>`|`["directors"]`||
-
-### Search Content
-
-```kotlin
-DashX.searchContent("email",
-    language = "en_US", returnType = "all",
-    filter = hashMapOf("identifier_eq" to "welcome"),
-    order = hashMapOf("created_at" to "DESC"),
-    limit = 10,
-    preview = true,
-    onSuccess = {
-        println(it)
-    }, onError = {
-        println(it)
-    })
-```
 
 For detailed usage, refer to the [documentation](https://docs.dashx.com/developer).
 
@@ -215,7 +128,7 @@ Using Gradle's [Composite Builds](https://publicobject.com/2021/03/11/includebui
     ```groovy
     def localSettings = file('local.settings.gradle')
     if (localSettings.exists()) {
-    apply(from: localSettings)
+        apply(from: localSettings)
     }
     ```
 - Add the `local.settings.gradle` file to `.gitignore`, so it won't be committed.
