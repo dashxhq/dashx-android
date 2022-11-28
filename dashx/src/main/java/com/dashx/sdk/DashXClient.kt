@@ -30,8 +30,6 @@ import java.util.UUID
 import kotlinx.coroutines.*
 import org.json.JSONObject
 
-var DashX = DashXClient()
-
 class DashXClient {
 
     // Setup variables
@@ -65,7 +63,6 @@ class DashXClient {
             libraryInfo: LibraryInfo? = null
         ): DashXClient {
             INSTANCE.init(context, publicKey, baseURI, targetEnvironment, libraryInfo)
-            DashX = INSTANCE
 
             FirebaseMessaging.getInstance().getToken()
                 .addOnCompleteListener(OnCompleteListener { task ->
@@ -75,7 +72,7 @@ class DashXClient {
                     }
 
                     val token = task.getResult()
-                    token?.let { it -> DashX.setDeviceToken(it) }
+                    token?.let { it -> INSTANCE.setDeviceToken(it) }
                     DashXLog.d(tag, "Firebase Initialised with: $token")
                 });
 
@@ -90,9 +87,6 @@ class DashXClient {
             return INSTANCE
         }
     }
-
-    fun configure(context: Context, publicKey: String, baseURI: String? = null, targetEnvironment: String? = null, libraryInfo: LibraryInfo? = null): DashXClient =
-        DashXClient.configure(context, publicKey, baseURI, targetEnvironment, libraryInfo)
 
     private fun init(
         context: Context,
@@ -183,7 +177,7 @@ class DashXClient {
         return DashXGraphQLKtorClient(url = URL(baseURI ?: "https://api.dashx.com/graphql"), httpClient = httpClient, serializer = GraphQLClientKotlinxSerializer())
     }
 
-    fun generateAccountAnonymousUid(): String {
+    private fun generateAccountAnonymousUid(): String {
         return UUID.randomUUID().toString()
     }
 
@@ -218,12 +212,12 @@ class DashXClient {
             val result = graphqlClient.execute(query)
 
             if (!result.errors.isNullOrEmpty()) {
-                val errors = result.errors?.map { e -> e.message }.toString()
-                DashXLog.d(tag, errors)
+                val errors = result.errors?.toString() ?: ""
+                DashXLog.e(tag, errors)
                 return@launch
             }
 
-            result.data?.identifyAccount?.let { gson.toJsonTree(it) }
+            DashXLog.d(tag, result.data?.identifyAccount?.let { gson.toJsonTree(it) }.toString())
         }
 
     }
@@ -273,8 +267,8 @@ class DashXClient {
             val result = graphqlClient.execute(query)
 
             if (!result.errors.isNullOrEmpty()) {
-                val errors = result.errors?.map { e -> e.message }.toString()
-                DashXLog.d(tag, errors)
+                val errors = result.errors?.toString() ?: ""
+                DashXLog.e(tag, errors)
                 onError(errors)
                 return@launch
             }
@@ -305,8 +299,8 @@ class DashXClient {
             val result = graphqlClient.execute(query)
 
             if (!result.errors.isNullOrEmpty()) {
-                val errors = result.errors?.map { e -> e.message }.toString()
-                DashXLog.d(tag, errors)
+                val errors = result.errors?.toString() ?: ""
+                DashXLog.e(tag, errors)
                 onError(errors)
                 return@launch
             }
@@ -326,8 +320,8 @@ class DashXClient {
             val result = graphqlClient.execute(query)
 
             if (!result.errors.isNullOrEmpty()) {
-                val errors = result.errors?.map { e -> e.message }.toString()
-                DashXLog.d(tag, errors)
+                val errors = result.errors?.toString() ?: ""
+                DashXLog.e(tag, errors)
                 onError(errors)
                 return@launch
             }
@@ -346,8 +340,8 @@ class DashXClient {
             val result = graphqlClient.execute(query)
 
             if (!result.errors.isNullOrEmpty()) {
-                val errors = result.errors?.map { e -> e.message }.toString()
-                DashXLog.d(tag, errors)
+                val errors = result.errors?.toString() ?: ""
+                DashXLog.e(tag, errors)
                 onError(errors)
                 return@launch
             }
@@ -366,8 +360,8 @@ class DashXClient {
             val result = graphqlClient.execute(query)
 
             if (!result.errors.isNullOrEmpty()) {
-                val errors = result.errors?.map { e -> e.message }.toString()
-                DashXLog.d(tag, errors)
+                val errors = result.errors?.toString() ?: ""
+                DashXLog.e(tag, errors)
                 onError(errors)
                 return@launch
             }
@@ -412,8 +406,8 @@ class DashXClient {
         val query = ExternalAsset(variables = ExternalAsset.Variables(id))
         val result = graphqlClient.execute(query)
         if (!result.errors.isNullOrEmpty()) {
-            val errors = result.errors?.map { e -> e.message }.toString()
-            DashXLog.d(tag, errors)
+            val errors = result.errors?.toString() ?: ""
+            DashXLog.e(tag, errors)
             onError(errors)
             return
         }
@@ -448,8 +442,8 @@ class DashXClient {
             val result = graphqlClient.execute(query)
 
             if (!result.errors.isNullOrEmpty()) {
-                val errors = result.errors?.map { e -> e.message }.toString()
-                DashXLog.d(tag, errors)
+                val errors = result.errors?.toString() ?: ""
+                DashXLog.e(tag, errors)
                 onError(errors)
                 return@launch
             }
@@ -470,8 +464,8 @@ class DashXClient {
             val result = graphqlClient.execute(query)
 
             if (!result.errors.isNullOrEmpty()) {
-                val errors = result.errors?.map { e -> e.message }.toString()
-                DashXLog.d(tag, errors)
+                val errors = result.errors?.toString() ?: ""
+                DashXLog.e(tag, errors)
                 onError(errors)
                 return@launch
             }
@@ -481,7 +475,7 @@ class DashXClient {
     }
 
     fun track(event: String, data: HashMap<String, String>? = hashMapOf()) {
-        val jsonData = data?.toMap()?.let { JSONObject(it) }.toString()
+        val jsonData = data?.toMap()?.let { JSONObject(it).toString() }
 
         val query = TrackEvent(variables = TrackEvent.Variables(TrackEventInput(accountAnonymousUid = accountAnonymousUid, accountUid = accountUid!!, data = jsonData, event = event, systemContext = gson.fromJson(SystemContext.getInstance().fetchSystemContext().toString(), SystemContextInput::class.java))))
 
@@ -489,13 +483,12 @@ class DashXClient {
             val result = graphqlClient.execute(query)
 
             if (!result.errors.isNullOrEmpty()) {
-                val errors = result.errors?.map { e -> e.message }.toString()
-                DashXLog.d(tag, errors)
+                val errors = result.errors?.toString()
+                DashXLog.e(tag, errors)
                 return@launch
             }
 
             DashXLog.d(tag, result.data?.trackEvent.let { gson.toJsonTree(it) }.toString())
-            result.data?.trackEvent.let { gson.toJsonTree(it) }
         }
     }
 
@@ -598,8 +591,8 @@ class DashXClient {
                     val result = graphqlClient.execute(query)
 
                     if (!result.errors.isNullOrEmpty()) {
-                        val errors = result.errors?.map { e -> e.message }.toString()
-                        DashXLog.d(tag, errors)
+                        val errors = result.errors?.toString() ?: ""
+                        DashXLog.e(tag, errors)
                         return@launch
                     }
 
@@ -620,8 +613,8 @@ class DashXClient {
             val result = graphqlClient.execute(query)
 
             if (!result.errors.isNullOrEmpty()) {
-                val errors = result.errors?.map { e -> e.message }.toString()
-                DashXLog.d(tag, errors)
+                val errors = result.errors?.toString() ?: ""
+                DashXLog.e(tag, errors)
                 return@launch
             }
 

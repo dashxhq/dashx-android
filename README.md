@@ -24,7 +24,7 @@ _DashX SDK for Android_
 
 ## Install
 
-- Add maven repository in your `settings.gradle`
+- Add Maven Central repository to your `settings.gradle`:
 
 ```groovy
 dependencyResolutionManagement {
@@ -36,107 +36,15 @@ dependencyResolutionManagement {
 }
 ```
 
-- If you are using `gradle < 7` add this to your global `build.gradle`
-
-```groovy
-allprojects {
-    repositories {
-        // ...
-        mavenCentral()
-    }
-}
-```
-
-- Add `dashx-android` to your app dependencies:
+- Add `dashx-android` to your dependencies in your module-level `build.gradle`:
 
 ```groovy
 dependencies {
     implementation 'com.dashx:dashx-android:1.0.8'
-    // ...
 }
 ```
 
-- Add this under application tag in Manifest.xml file
-```kotlin
-<meta-data android:name="com.google.android.gms.version" android:value="@integer/google_play_services_version" />
-```
-
 ## Usage
-
-```kotlin
-val dashX = DashX.configure("Your Public Key")
-```
-
-DashXClient can be initialised with:
-
-|Name|Type|
-|:---:|:--:|
-|**`publicKey`**|`String` _(Required)_ |
-|**`accountType`**|`String`|
-|**`baseURI`**|`String`|
-|**`targetEnvironment`**|`String`|
-
-### Identify User
-
-```kotlin
-DashX.identify(hashMapOf("name" to "John Doe") /* identifyOptions */)
-```
-
-`identifyOptions` can accept `HashMap<String, String>` with
-
-|Name|Type|
-|:---:|:--:|
-|**`uid`**|`String`|
-|**`anonymousUid`**|`String`|
-|**`firstName`**|`String`|
-|**`lastName`**|`String`|
-|**`name`**|`String`|
-|**`email`**|`String`|
-|**`phone`**|`String`|
-
-### Track Events
-
-```kotlin
-DashX.track(event, hashMapOf("page" to "index") /* trackData */)
-```
-
-`trackData` accepts `HashMap<String, String>`
-
-### Fetch Content
-
-```kotlin
-DashX.fetchContent("email/welcome", language = "en_US", onSuccess = {
-    println(it)
-}, onError = {
-    println(it)
-})
-```
-
-`fetchContent` accepts following arguments
-
-|Name|Type|Example|
-|:--:|:--:|:-----:|
-|**`preview`**|`Boolean`||
-|**`language`**|`String`|`"en_US"`||
-|**`fields`**|`List<String>`|`["character", "cast"]`||
-|**`include`**|`List<String>`|`["character.createdBy", "character.birthDate"]`||
-|**`exclude`**|`List<String>`|`["directors"]`||
-
-### Search Content
-
-```kotlin
-DashX.searchContent("email",
-    language = "en_US", returnType = "all",
-    filter = hashMapOf("identifier_eq" to "welcome"),
-    order = hashMapOf("created_at" to "DESC"),
-    limit = 10,
-    preview = true,
-    onSuccess = {
-        println(it)
-    }, onError = {
-        println(it)
-    })
-```
 
 For detailed usage, refer to the [documentation](https://docs.dashx.com/developer).
 
@@ -185,8 +93,8 @@ coroutineScope.launch {
      val result = graphqlClient.execute(query)
 
      if (!result.errors.isNullOrEmpty()) {
-           val errors = result.errors?.map { e -> e.message }.toString()
-           DashXLog.d(tag, errors)
+           val errors = result.errors?.toString() ?: ""
+           DashXLog.e(tag, errors)
            onError(errors)
            return@launch
      }
@@ -195,10 +103,34 @@ coroutineScope.launch {
 }
 ```
 
-## Publishing
+### Publishing
 
 DashX Android SDK uses [Maven](https://mvnrepository.com/) to serve build artifacts. This repository uses [GitHub Actions](https://github.com/features/actions) and any push to **main** will automatically publish to Maven. Here are the rough steps:
 
 - Bump up the `version`, `versionCode` and `versionName` in **dashx/build.gradle**
 - Commit the version bump to **develop** (`git push origin develop`)
 - Merge the latest **develop** branch into **main** branch
+
+### Testing Locally
+
+Using Gradle's [Composite Builds](https://publicobject.com/2021/03/11/includebuild/) feature, you can test changes to the DashX Android SDK locally against your application:
+
+- Clone the [dashx-android](https://github.com/dashxhq/dashx-android) repository into the same parent folder as your project.
+- Create a `local.settings.gradle` file with the following code:
+    ```groovy
+    includeBuild('../dashx-android') {
+        dependencySubstitution {
+            substitute module('com.dashx:dashx-android') using project(':dashx')
+        }
+    }
+    ```
+- Add the following code in your `settings.gradle` file, which applies code from `local.settings.gradle` if it exists:
+    ```groovy
+    def localSettings = file('local.settings.gradle')
+    if (localSettings.exists()) {
+        apply(from: localSettings)
+    }
+    ```
+- Add the `local.settings.gradle` file to `.gitignore`, so it won't be committed.
+
+You can check [dashx-demo-android](https://github.com/dashxhq/dashx-demo-android) for an example.
