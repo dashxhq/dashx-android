@@ -9,7 +9,7 @@ import java.io.File
 
 object DashX {
 
-    private val INSTANCE = DashXClient
+    private val dashXClient = DashXClient
 
     fun configure(
         context: Context,
@@ -22,27 +22,27 @@ object DashX {
     }
 
     fun identify(options: HashMap<String, String>? = null) {
-        INSTANCE.getInstance().identify(options)
+        dashXClient.getInstance().identify(options)
     }
 
     fun setIdentity(uid: String?, token: String?) {
-        INSTANCE.getInstance().setIdentity(uid, token)
+        dashXClient.getInstance().setIdentity(uid, token)
     }
 
     fun setIdentityToken(identityToken: String) {
-        INSTANCE.getInstance().setIdentityToken(identityToken)
+        dashXClient.getInstance().setIdentityToken(identityToken)
     }
 
     fun reset() {
-        INSTANCE.getInstance().reset()
+        dashXClient.getInstance().reset()
     }
 
     fun subscribe() {
-        INSTANCE.getInstance().subscribe()
+        dashXClient.getInstance().subscribe()
     }
 
     fun track(event: String, data: HashMap<String, String>? = hashMapOf()) {
-        INSTANCE.getInstance().track(event, data)
+        dashXClient.getInstance().track(event, data)
     }
 
     fun addItemToCart(
@@ -54,7 +54,7 @@ object DashX {
         onSuccess: (result: JsonObject) -> Unit,
         onError: (error: String) -> Unit
     ) {
-        INSTANCE.getInstance()
+        dashXClient.getInstance()
             .addItemToCart(itemId, pricingId, quantity, reset, custom, onSuccess, onError)
     }
 
@@ -63,7 +63,7 @@ object DashX {
         onSuccess: (result: JsonObject) -> Unit,
         onError: (error: String) -> Unit
     ) {
-        INSTANCE.getInstance().saveStoredPreferences(preferenceData, onSuccess, onError)
+        dashXClient.getInstance().saveStoredPreferences(preferenceData, onSuccess, onError)
     }
 
     fun uploadExternalAsset(
@@ -72,22 +72,21 @@ object DashX {
         onSuccess: (result: com.dashx.sdk.data.ExternalAsset) -> Unit,
         onError: (error: String) -> Unit
     ) {
-        INSTANCE.getInstance().uploadExternalAsset(file, externalColumnId, onSuccess, onError)
+        dashXClient.getInstance().uploadExternalAsset(file, externalColumnId, onSuccess, onError)
     }
 
     fun fetchStoredPreferences(
         onSuccess: (result: JsonObject) -> Unit,
         onError: (error: String) -> Unit
     ) {
-        INSTANCE.getInstance().fetchStoredPreferences(onSuccess, onError)
+        dashXClient.getInstance().fetchStoredPreferences(onSuccess, onError)
     }
-}
-/*
+
     fun fetchCart(
         onSuccess: (result: JsonObject) -> Unit,
         onError: (error: String) -> Unit
     ) {
-        INSTANCE.fetchCart(onSuccess, onError)
+        dashXClient.getInstance().fetchCart(onSuccess, onError)
     }
 
     fun searchContent(
@@ -104,7 +103,7 @@ object DashX {
         onSuccess: (result: List<JsonObject>) -> Unit,
         onError: (error: String) -> Unit
     ) {
-        INSTANCE.searchContent(
+        dashXClient.getInstance().searchContent(
             contentType,
             returnType,
             filter,
@@ -130,7 +129,7 @@ object DashX {
         onSuccess: (result: JsonObject) -> Unit,
         onError: (error: String) -> Unit
     ) {
-        INSTANCE.fetchContent(
+        dashXClient.getInstance().fetchContent(
             urn,
             preview,
             language,
@@ -143,24 +142,22 @@ object DashX {
     }
 
     fun trackNotification(id: String, status: TrackNotificationStatus) {
-        INSTANCE.trackNotification(id, status)
+        dashXClient.getInstance().trackNotification(id, status)
     }
 
     fun getBaseUri(): String? {
-        return INSTANCE.getBaseUri()
+        return dashXClient.getInstance().getBaseUri()
     }
 
     fun getPublicKey(): String? {
-        return INSTANCE.getPublicKey()
+        return dashXClient.getInstance().getPublicKey()
     }
 
     fun getTargetEnvironment(): String? {
-        return INSTANCE.getTargetEnvironment()
+        return dashXClient.getInstance().getTargetEnvironment()
     }
 
     fun getIdentityToken(): String? {
-        return INSTANCE.getIdentityToken()
+        return dashXClient.getInstance().getIdentityToken()
     }
 }
-
-*/
