@@ -79,7 +79,7 @@ class DashXClient {
             return INSTANCE
         }
 
-        @JvmName("getDashXInstance")
+//        @JvmName("getDashXInstance")
         fun getInstance(): DashXClient {
             if (INSTANCE.context == null) {
                 throw NullPointerException("Configure DashXClient before accessing it.")
@@ -183,8 +183,10 @@ class DashXClient {
 
     fun identify(options: HashMap<String, String>? = null) {
 
+        DashXLog.d(tag, "identify() called")
+
         if (options == null) {
-            DashXLog.d(tag, "Cannot be called with null, pass options: object")
+            DashXLog.d(tag, "identify() cannot be called with null, pass options: object")
             return
         }
 
@@ -213,11 +215,12 @@ class DashXClient {
 
             if (!result.errors.isNullOrEmpty()) {
                 val errors = result.errors?.toString() ?: ""
-                DashXLog.e(tag, errors)
+                DashXLog.e(tag, "identify() failed: $errors")
                 return@launch
             }
 
-            DashXLog.d(tag, result.data?.identifyAccount?.let { gson.toJsonTree(it) }.toString())
+            val response =  result.data?.identifyAccount?.let { gson.toJsonTree(it) }.toString()
+            DashXLog.i(tag, "identify() succeeded: $response")
         }
 
     }
@@ -227,6 +230,8 @@ class DashXClient {
         this.identityToken = token
         saveToStorage()
 
+        DashXLog.d(tag, "setIdentity() called")
+
         createGraphqlClient()
     }
 
@@ -234,6 +239,9 @@ class DashXClient {
         accountUid = null
         identityToken = null
         accountAnonymousUid = generateAccountAnonymousUid()
+
+        DashXLog.d(tag, "reset() called")
+
         saveToStorage()
     }
 
@@ -247,6 +255,8 @@ class DashXClient {
         onSuccess: (result: JsonObject) -> Unit,
         onError: (error: String) -> Unit
     ) {
+        DashXLog.d(tag, "fetchContent() called")
+
         if (!urn.contains('/')) {
             throw Exception("URN must be of form: {contentType}/{content}")
         }
@@ -268,10 +278,13 @@ class DashXClient {
 
             if (!result.errors.isNullOrEmpty()) {
                 val errors = result.errors?.toString() ?: ""
-                DashXLog.e(tag, errors)
+                DashXLog.e(tag, "fetchContent() failed: $errors")
                 onError(errors)
                 return@launch
             }
+
+            val response = result.data?.fetchContent?.let { gson.toJsonTree(it) }.toString()
+            DashXLog.i(tag, "fetchContent() succeeded: $response")
 
             result.data?.fetchContent?.let { onSuccess(gson.toJsonTree(it).asJsonObject) }
         }
@@ -293,6 +306,7 @@ class DashXClient {
         onSuccess: (result: List<JsonObject>) -> Unit,
         onError: (error: String) -> Unit
     ) {
+        DashXLog.d(tag, "searchContent() called")
 
         val query = SearchContent(variables = SearchContent.Variables(SearchContentInput(contentType = contentType, returnType = returnType)))
         coroutineScope.launch {
@@ -300,10 +314,13 @@ class DashXClient {
 
             if (!result.errors.isNullOrEmpty()) {
                 val errors = result.errors?.toString() ?: ""
-                DashXLog.e(tag, errors)
+                DashXLog.e(tag, "searchContent() failed: $errors")
                 onError(errors)
                 return@launch
             }
+
+            val response = result.data?.searchContent.let { gson.toJsonTree(it) }.toString()
+            DashXLog.i(tag, "searchContent() succeeded: $response")
 
             val content = result.data?.searchContent ?: listOf()
             onSuccess(content.map { gson.toJsonTree(it).asJsonObject })
@@ -314,6 +331,7 @@ class DashXClient {
         onSuccess: (result: JsonObject) -> Unit,
         onError: (error: String) -> Unit
     ) {
+        DashXLog.d(tag, "fetchCart() called")
 
         val query = FetchCart(variables = FetchCart.Variables(FetchCartInput(accountUid!!)))
         coroutineScope.launch {
@@ -321,10 +339,13 @@ class DashXClient {
 
             if (!result.errors.isNullOrEmpty()) {
                 val errors = result.errors?.toString() ?: ""
-                DashXLog.e(tag, errors)
+                DashXLog.e(tag, "fetchCart() failed: $errors")
                 onError(errors)
                 return@launch
             }
+
+            val response = result.data?.fetchCart.let { gson.toJsonTree(it) }.toString()
+            DashXLog.i(tag, "fetchCart() succeeded: $response")
 
             result.data?.fetchCart?.let { onSuccess(gson.toJsonTree(it).asJsonObject) }
         }
@@ -334,6 +355,7 @@ class DashXClient {
         onSuccess: (result: JsonObject) -> Unit,
         onError: (error: String) -> Unit
     ) {
+        DashXLog.d(tag, "fetchStoredPreferences() called")
 
         val query = FetchStoredPreferences(variables = FetchStoredPreferences.Variables(FetchStoredPreferencesInput(accountUid!!)))
         coroutineScope.launch {
@@ -341,10 +363,13 @@ class DashXClient {
 
             if (!result.errors.isNullOrEmpty()) {
                 val errors = result.errors?.toString() ?: ""
-                DashXLog.e(tag, errors)
+                DashXLog.e(tag, "fetchStoredPreferences() failed: $errors")
                 onError(errors)
                 return@launch
             }
+
+            val response = result.data?.fetchStoredPreferences.let { gson.toJsonTree(it) }.toString()
+            DashXLog.i(tag, "fetchStoredPreferences() succeeded: $response")
 
             result.data?.fetchStoredPreferences?.let { onSuccess(gson.toJsonTree(it).asJsonObject) }
         }
@@ -354,6 +379,8 @@ class DashXClient {
                             externalColumnId: String,
                             onSuccess: (result: com.dashx.sdk.data.ExternalAsset) -> Unit,
                             onError: (error: String) -> Unit) {
+        DashXLog.d(tag, "uploadExternalAsset() called")
+
         val query = PrepareExternalAsset(variables = PrepareExternalAsset.Variables(PrepareExternalAssetInput(externalColumnId)))
 
         coroutineScope.launch {
@@ -361,10 +388,13 @@ class DashXClient {
 
             if (!result.errors.isNullOrEmpty()) {
                 val errors = result.errors?.toString() ?: ""
-                DashXLog.e(tag, errors)
+                DashXLog.e(tag, "uploadExternalAsset() failed: $errors")
                 onError(errors)
                 return@launch
             }
+
+            val response = result.data?.prepareExternalAsset?.data.let { gson.toJsonTree(it) }.toString()
+            DashXLog.i(tag, "uploadExternalAsset() succeeded: $response")
 
             val url = (gson.fromJson(result.data?.prepareExternalAsset?.data, PrepareExternalAssetResponse::class.java)).upload.url
             writeFileToUrl(file, url, result.data?.prepareExternalAsset?.id ?: "", onSuccess, onError)
@@ -437,16 +467,21 @@ class DashXClient {
         onSuccess: (result: JsonObject) -> Unit,
         onError: (error: String) -> Unit
     ) {
+        DashXLog.d(tag, "saveStoredPreferences() called")
+
         val query = SaveStoredPreferences(variables = SaveStoredPreferences.Variables(SaveStoredPreferencesInput(accountUid!!, preferenceData)))
         coroutineScope.launch {
             val result = graphqlClient.execute(query)
 
             if (!result.errors.isNullOrEmpty()) {
                 val errors = result.errors?.toString() ?: ""
-                DashXLog.e(tag, errors)
+                DashXLog.e(tag, "saveStoredPreferences() failed: $errors")
                 onError(errors)
                 return@launch
             }
+
+            val response = result.data?.saveStoredPreferences
+            DashXLog.i(tag, "saveStoredPreferences() succeeded: $response")
 
             onSuccess(gson.toJsonTree(result.data?.saveStoredPreferences).asJsonObject)
         }
@@ -459,16 +494,21 @@ class DashXClient {
                       custom: JsonObject? = null,
                       onSuccess: (result: JsonObject) -> Unit,
                       onError: (error: String) -> Unit) {
+        DashXLog.d(tag, "addItemToCart() called")
+
         val query = AddItemToCart(variables = AddItemToCart.Variables(AddItemToCartInput(accountUid = accountUid!!, itemId = itemId, pricingId = pricingId, quantity = quantity, reset = reset)))
         coroutineScope.launch {
             val result = graphqlClient.execute(query)
 
             if (!result.errors.isNullOrEmpty()) {
                 val errors = result.errors?.toString() ?: ""
-                DashXLog.e(tag, errors)
+                DashXLog.e(tag, "addItemToCart() failed: $errors")
                 onError(errors)
                 return@launch
             }
+
+            val response = result.data?.addItemToCart.let { gson.toJsonTree(it) }.toString()
+            DashXLog.i(tag, "addItemToCart() succeeded: $response")
 
             result.data?.addItemToCart.let { onSuccess(gson.toJsonTree(it).asJsonObject) }
         }
@@ -477,6 +517,8 @@ class DashXClient {
     fun track(event: String, data: HashMap<String, String>? = hashMapOf()) {
         val jsonData = data?.toMap()?.let { JSONObject(it).toString() }
 
+        DashXLog.d(tag, "track() called")
+
         val query = TrackEvent(variables = TrackEvent.Variables(TrackEventInput(accountAnonymousUid = accountAnonymousUid, accountUid = accountUid!!, data = jsonData, event = event, systemContext = gson.fromJson(SystemContext.getInstance().fetchSystemContext().toString(), SystemContextInput::class.java))))
 
         coroutineScope.launch {
@@ -484,11 +526,12 @@ class DashXClient {
 
             if (!result.errors.isNullOrEmpty()) {
                 val errors = result.errors?.toString()
-                DashXLog.e(tag, errors)
+                DashXLog.e(tag, "track() failed: $errors")
                 return@launch
             }
 
-            DashXLog.d(tag, result.data?.trackEvent.let { gson.toJsonTree(it) }.toString())
+            val response = result.data?.trackEvent.let { gson.toJsonTree(it) }.toString()
+            DashXLog.i(tag, "track() succeeded: $response")
         }
     }
 
@@ -556,6 +599,7 @@ class DashXClient {
             this.mustSubscribe = true
             return
         }
+        DashXLog.d(tag, "subscribe() called")
 
         this.mustSubscribe = false
 
@@ -593,10 +637,14 @@ class DashXClient {
                     if (!result.errors.isNullOrEmpty()) {
                         val errors = result.errors?.toString() ?: ""
                         DashXLog.e(tag, errors)
+                        DashXLog.e(tag, "subscribe() failed $errors")
                         return@launch
                     }
 
-                   result.data?.subscribeContact.let { gson.toJsonTree(it) }
+                    val subscribeCallResponse = result.data?.subscribeContact.let { gson.toJsonTree(it) }.toString()
+                    DashXLog.i(tag, "subscribe() succeeded: $subscribeCallResponse")
+
+                    result.data?.subscribeContact.let { gson.toJsonTree(it) }
                 }
             }
             else -> {
@@ -606,6 +654,7 @@ class DashXClient {
     }
 
     fun trackNotification(id: String, status: TrackNotificationStatus) {
+        DashXLog.d(tag, "trackNotification() called")
         val currentTime = Instant.now().toString()
 
         val query = TrackNotification(variables = TrackNotification.Variables(TrackNotificationInput(id = id, status = status, timestamp = currentTime)))
@@ -614,9 +663,12 @@ class DashXClient {
 
             if (!result.errors.isNullOrEmpty()) {
                 val errors = result.errors?.toString() ?: ""
-                DashXLog.e(tag, errors)
+                DashXLog.e(tag, "trackNotification() failed: $errors")
                 return@launch
             }
+
+            val response = result.data?.trackNotification.let { gson.toJsonTree(it) }.toString()
+            DashXLog.i(tag, "trackNotification() succeeded: $response")
 
             result.data?.trackNotification.let { gson.toJsonTree(it) }
         }
