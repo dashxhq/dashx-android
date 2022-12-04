@@ -79,7 +79,7 @@ class DashXClient {
             return INSTANCE
         }
 
-//        @JvmName("getDashXInstance")
+        @JvmName("getDashXInstance")
         fun getInstance(): DashXClient {
             if (INSTANCE.context == null) {
                 throw NullPointerException("Configure DashXClient before accessing it.")
