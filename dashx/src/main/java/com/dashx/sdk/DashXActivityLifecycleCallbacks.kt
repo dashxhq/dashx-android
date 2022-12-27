@@ -7,11 +7,11 @@ import android.content.pm.PackageManager
 import android.os.Bundle
 
 class DashXActivityLifecycleCallbacks : Application.ActivityLifecycleCallbacks {
-    private val dashXClient = DashXClient.getInstance()
+    private val dashXClient = DashX
     private var startSession = System.currentTimeMillis().toDouble()
 
     init {
-        dashXClient?.trackAppStarted()
+        dashXClient.trackAppStarted()
     }
 
     override fun onActivityPaused(activity: Activity) {
@@ -19,7 +19,7 @@ class DashXActivityLifecycleCallbacks : Application.ActivityLifecycleCallbacks {
             return
         }
 
-        dashXClient?.trackAppSession(System.currentTimeMillis().toDouble() - startSession)
+        dashXClient.trackAppSession(System.currentTimeMillis().toDouble() - startSession)
     }
 
     override fun onActivityResumed(activity: Activity) {
@@ -28,7 +28,7 @@ class DashXActivityLifecycleCallbacks : Application.ActivityLifecycleCallbacks {
         }
 
         startSession = System.currentTimeMillis().toDouble()
-        dashXClient?.trackAppStarted(fromBackground = true)
+        dashXClient.trackAppStarted(fromBackground = true)
     }
 
     override fun onActivityStarted(activity: Activity) {
@@ -40,7 +40,7 @@ class DashXActivityLifecycleCallbacks : Application.ActivityLifecycleCallbacks {
         val info =
             packageManager?.getActivityInfo(activity.componentName, PackageManager.GET_META_DATA)
         val activityLabel = info?.loadLabel(packageManager)
-        activityLabel?.let { it -> dashXClient?.screen(it.toString(), hashMapOf()) }
+        activityLabel?.let { it -> dashXClient.screen(it.toString(), hashMapOf()) }
     }
 
     override fun onActivityDestroyed(activity: Activity) {
