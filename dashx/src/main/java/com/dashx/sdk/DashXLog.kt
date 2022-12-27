@@ -9,7 +9,7 @@ object DashXLog {
         DEBUG(2), INFO(1), ERROR(0), OFF(-1);
     }
 
-    private var logLevel = LogLevel.OFF
+    private var logLevel = LogLevel.ERROR
 
     @JvmStatic
     fun setLogLevel(logLevel: LogLevel) {
