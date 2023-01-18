@@ -1,6 +1,6 @@
 package com.dashx.sdk.data
 
-data class PrepareExternalAssetResponse(
+data class PrepareAssetResponse(
     val upload: UploadAssetUrl,
 )
 

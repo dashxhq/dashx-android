@@ -5,11 +5,12 @@ import android.content.SharedPreferences
 import android.os.Build
 import android.provider.Settings
 import com.dashx.graphql.generated.*
+import com.dashx.graphql.generated.enums.AssetUploadStatus
 import com.dashx.graphql.generated.enums.ContactKind
 import com.dashx.graphql.generated.enums.TrackNotificationStatus
 import com.dashx.graphql.generated.inputs.*
 import com.dashx.sdk.data.LibraryInfo
-import com.dashx.sdk.data.PrepareExternalAssetResponse
+import com.dashx.sdk.data.PrepareAssetResponse
 import com.dashx.sdk.utils.*
 import com.expediagroup.graphql.client.serialization.GraphQLClientKotlinxSerializer
 import com.google.android.gms.tasks.OnCompleteListener
@@ -350,11 +351,12 @@ class DashXClient {
         }
     }
 
-    fun uploadExternalAsset(file: File,
-                            externalColumnId: String,
-                            onSuccess: (result: com.dashx.sdk.data.ExternalAsset) -> Unit,
+    fun uploadAsset(file: File,
+                            resource: String,
+                            attribute: String,
+                            onSuccess: (result: com.dashx.sdk.data.Asset) -> Unit,
                             onError: (error: String) -> Unit) {
-        val query = PrepareExternalAsset(variables = PrepareExternalAsset.Variables(PrepareExternalAssetInput(externalColumnId)))
+        val query = PrepareAsset(variables = PrepareAsset.Variables(PrepareAssetInput(resource, attribute)))
 
         coroutineScope.launch {
             val result = graphqlClient.execute(query)
@@ -366,15 +368,15 @@ class DashXClient {
                 return@launch
             }
 
-            val url = (gson.fromJson(result.data?.prepareExternalAsset?.data, PrepareExternalAssetResponse::class.java)).upload.url
-            writeFileToUrl(file, url, result.data?.prepareExternalAsset?.id ?: "", onSuccess, onError)
+            val url = (gson.fromJson(result.data?.prepareAsset?.data, PrepareAssetResponse::class.java)).upload.url
+            writeFileToUrl(file, url, result.data?.prepareAsset?.id ?: "", onSuccess, onError)
         }
     }
 
     private suspend fun writeFileToUrl(file: File,
                                        url: String,
                                        id: String,
-                                       onSuccess: (result: com.dashx.sdk.data.ExternalAsset) -> Unit,
+                                       onSuccess: (result: com.dashx.sdk.data.Asset) -> Unit,
                                        onError: (error: String) -> Unit) {
         withContext(Dispatchers.IO) {
             val connection = URL(url).openConnection() as HttpURLConnection
@@ -392,18 +394,18 @@ class DashXClient {
             outputStream.close()
 
             if (connection.responseCode == HttpURLConnection.HTTP_OK) {
-                externalAsset(id, onSuccess, onError)
+                asset(id, onSuccess, onError)
             } else {
                 onError(connection.errorStream.toString())
             }
         }
     }
 
-    private suspend fun externalAsset(id: String,
-                                      onSuccess: (result: com.dashx.sdk.data.ExternalAsset) -> Unit,
+    private suspend fun asset(id: String,
+                                      onSuccess: (result: com.dashx.sdk.data.Asset) -> Unit,
                                       onError: (error: String) -> Unit) {
 
-        val query = ExternalAsset(variables = ExternalAsset.Variables(id))
+        val query = Asset(variables = Asset.Variables(id))
         val result = graphqlClient.execute(query)
         if (!result.errors.isNullOrEmpty()) {
             val errors = result.errors?.toString() ?: ""
@@ -412,23 +414,22 @@ class DashXClient {
             return
         }
 
-        if (result.data?.externalAsset?.status != UploadConstants.READY && pollCounter <= UploadConstants.POLL_TIME_OUT) {
+        if (result.data?.asset?.uploadStatus != AssetUploadStatus.UPLOADED && pollCounter <= UploadConstants.POLL_TIME_OUT) {
             delay(UploadConstants.POLL_INTERVAL)
-            externalAsset(id, onSuccess, onError)
+            asset(id, onSuccess, onError)
             pollCounter += 1
-
         } else {
             pollCounter = 1
-            val responseObject = result.data?.externalAsset
+            val responseObject = result.data?.asset
             val externalDataJsonObject = responseObject?.data?.let { JSONObject(it) }
             val responseJsonObject = JSONObject(gson.toJson(responseObject))
             responseJsonObject.put(DATA, externalDataJsonObject)
 
-            val externalAsset = gson.fromJson(responseJsonObject.toString(), com.dashx.sdk.data.ExternalAsset::class.java)
-            if (externalAsset.data.asset?.url == null && !externalAsset.data.asset?.playbackIds.isNullOrEmpty()) {
-                externalAsset.data.asset?.url = generateMuxVideoUrl(externalAsset.data.asset?.playbackIds?.get(0)?.id)
+            val asset = gson.fromJson(responseJsonObject.toString(), com.dashx.sdk.data.Asset::class.java)
+            if (asset.data.asset?.url == null && !asset.data.asset?.playbackIds.isNullOrEmpty()) {
+                asset.data.asset?.url = generateMuxVideoUrl(asset.data.asset?.playbackIds?.get(0)?.id)
             }
-            onSuccess(externalAsset)
+            onSuccess(asset)
         }
     }
 
