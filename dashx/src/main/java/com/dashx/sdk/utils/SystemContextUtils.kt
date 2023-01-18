@@ -129,10 +129,20 @@ fun getAdvertisingInfo(context: Context?) {
     }
 }
 
-fun getLocationAddress(context: Context): List<Address> {
+fun getLocationAddress(context: Context) {
     val geocoder = Geocoder(context, Locale.getDefault())
     val location = getLocationCoordinates(context)
-    return geocoder.getFromLocation(location?.latitude ?: 0.0, location?.longitude ?: 0.0, 1)
+
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        val geocodeListener = Geocoder.GeocodeListener { addresses ->
+            // do something with the addresses list
+        }
+
+        geocoder.getFromLocation(location?.latitude ?: 0.0, location?.longitude ?: 0.0, 1, geocodeListener)
+    } else {
+        val addresses = geocoder.getFromLocation(location?.latitude ?: 0.0, location?.longitude ?: 0.0, 1)
+
+    }
 }
 
 fun getLocationCoordinates(context: Context): Location? {

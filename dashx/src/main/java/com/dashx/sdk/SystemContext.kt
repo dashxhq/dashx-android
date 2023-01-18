@@ -205,18 +205,18 @@ class SystemContext {
             location[LONGITUDE] = it?.longitude ?: 0.0
             location[LATITUDE] = it?.latitude ?: 0.0
         }
-        getLocationAddress(context!!).let {
-            location[CITY] = if (it.isNotEmpty()) {
-                it[0].getAddressLine(0)
-            } else {
-                ""
-            }
-            location[COUNTRY] = if (it.isNotEmpty()) {
-                it[0].countryName
-            } else {
-                ""
-            }
-        }
+        // getLocationAddress(context!!).let {
+        //     location[CITY] = if (it.isNotEmpty()) {
+        //         it[0].getAddressLine(0)
+        //     } else {
+        //         ""
+        //     }
+        //     location[COUNTRY] = if (it.isNotEmpty()) {
+        //         it[0].countryName
+        //     } else {
+        //         ""
+        //     }
+        // }
         location[SPEED] = getSpeed(context!!)
 
         put(LOCATION, location)

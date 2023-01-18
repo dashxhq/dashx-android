@@ -354,21 +354,21 @@ class DashXClient {
                             externalColumnId: String,
                             onSuccess: (result: com.dashx.sdk.data.ExternalAsset) -> Unit,
                             onError: (error: String) -> Unit) {
-        val query = PrepareExternalAsset(variables = PrepareExternalAsset.Variables(PrepareExternalAssetInput(externalColumnId)))
+        // val query = PrepareExternalAsset(variables = PrepareExternalAsset.Variables(PrepareExternalAssetInput(externalColumnId)))
 
-        coroutineScope.launch {
-            val result = graphqlClient.execute(query)
+        // coroutineScope.launch {
+        //     val result = graphqlClient.execute(query)
 
-            if (!result.errors.isNullOrEmpty()) {
-                val errors = result.errors?.toString() ?: ""
-                DashXLog.e(tag, errors)
-                onError(errors)
-                return@launch
-            }
+        //     if (!result.errors.isNullOrEmpty()) {
+        //         val errors = result.errors?.toString() ?: ""
+        //         DashXLog.e(tag, errors)
+        //         onError(errors)
+        //         return@launch
+        //     }
 
-            val url = (gson.fromJson(result.data?.prepareExternalAsset?.data, PrepareExternalAssetResponse::class.java)).upload.url
-            writeFileToUrl(file, url, result.data?.prepareExternalAsset?.id ?: "", onSuccess, onError)
-        }
+        //     val url = (gson.fromJson(result.data?.prepareExternalAsset?.data, PrepareExternalAssetResponse::class.java)).upload.url
+        //     writeFileToUrl(file, url, result.data?.prepareExternalAsset?.id ?: "", onSuccess, onError)
+        // }
     }
 
     private suspend fun writeFileToUrl(file: File,
@@ -403,33 +403,33 @@ class DashXClient {
                                       onSuccess: (result: com.dashx.sdk.data.ExternalAsset) -> Unit,
                                       onError: (error: String) -> Unit) {
 
-        val query = ExternalAsset(variables = ExternalAsset.Variables(id))
-        val result = graphqlClient.execute(query)
-        if (!result.errors.isNullOrEmpty()) {
-            val errors = result.errors?.toString() ?: ""
-            DashXLog.e(tag, errors)
-            onError(errors)
-            return
-        }
+        // val query = ExternalAsset(variables = ExternalAsset.Variables(id))
+        // val result = graphqlClient.execute(query)
+        // if (!result.errors.isNullOrEmpty()) {
+        //     val errors = result.errors?.toString() ?: ""
+        //     DashXLog.e(tag, errors)
+        //     onError(errors)
+        //     return
+        // }
 
-        if (result.data?.externalAsset?.status != UploadConstants.READY && pollCounter <= UploadConstants.POLL_TIME_OUT) {
-            delay(UploadConstants.POLL_INTERVAL)
-            externalAsset(id, onSuccess, onError)
-            pollCounter += 1
+        // if (result.data?.externalAsset?.status != UploadConstants.READY && pollCounter <= UploadConstants.POLL_TIME_OUT) {
+        //     delay(UploadConstants.POLL_INTERVAL)
+        //     externalAsset(id, onSuccess, onError)
+        //     pollCounter += 1
 
-        } else {
-            pollCounter = 1
-            val responseObject = result.data?.externalAsset
-            val externalDataJsonObject = responseObject?.data?.let { JSONObject(it) }
-            val responseJsonObject = JSONObject(gson.toJson(responseObject))
-            responseJsonObject.put(DATA, externalDataJsonObject)
+        // } else {
+        //     pollCounter = 1
+        //     val responseObject = result.data?.externalAsset
+        //     val externalDataJsonObject = responseObject?.data?.let { JSONObject(it) }
+        //     val responseJsonObject = JSONObject(gson.toJson(responseObject))
+        //     responseJsonObject.put(DATA, externalDataJsonObject)
 
-            val externalAsset = gson.fromJson(responseJsonObject.toString(), com.dashx.sdk.data.ExternalAsset::class.java)
-            if (externalAsset.data.asset?.url == null && !externalAsset.data.asset?.playbackIds.isNullOrEmpty()) {
-                externalAsset.data.asset?.url = generateMuxVideoUrl(externalAsset.data.asset?.playbackIds?.get(0)?.id)
-            }
-            onSuccess(externalAsset)
-        }
+        //     val externalAsset = gson.fromJson(responseJsonObject.toString(), com.dashx.sdk.data.ExternalAsset::class.java)
+        //     if (externalAsset.data.asset?.url == null && !externalAsset.data.asset?.playbackIds.isNullOrEmpty()) {
+        //         externalAsset.data.asset?.url = generateMuxVideoUrl(externalAsset.data.asset?.playbackIds?.get(0)?.id)
+        //     }
+        //     onSuccess(externalAsset)
+        // }
     }
 
     fun saveStoredPreferences(
