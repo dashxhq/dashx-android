@@ -19,10 +19,6 @@ import com.dashx.sdk.DashXLog
 object PermissionUtils {
     private val tag = PermissionUtils::class.java.simpleName
 
-    fun requireRuntimePermissions(): Boolean {
-        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
-    }
-
     fun hasPermissions(context: Context, vararg permissions: String): Boolean {
         if (requireRuntimePermissions()) {
             for (permission in permissions) {
@@ -77,7 +73,11 @@ object PermissionUtils {
         }
     }
 
-    fun goToAppSettings(activity: Activity) {
+    private fun requireRuntimePermissions(): Boolean {
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
+    }
+
+    private fun goToAppSettings(activity: Activity) {
         val intent = Intent(
             Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
             Uri.fromParts("package", activity.getPackageName(), null)
@@ -87,13 +87,13 @@ object PermissionUtils {
         activity.startActivity(intent)
     }
 
-    fun hasAskedForPermissionTwice(activity: Activity, permission: String): Boolean {
+    private fun hasAskedForPermissionTwice(activity: Activity, permission: String): Boolean {
         return PreferenceManager
             .getDefaultSharedPreferences(activity)
             .getBoolean(permission, false)
     }
 
-    fun markPermissionAsAskedTwice(activity: Activity, permission: String) {
+    private fun markPermissionAsAskedTwice(activity: Activity, permission: String) {
         PreferenceManager
             .getDefaultSharedPreferences(activity)
             .edit()
@@ -101,7 +101,7 @@ object PermissionUtils {
             .apply()
     }
 
-    fun buildAlertDialog(activity: Activity): AlertDialog.Builder {
+    private fun buildAlertDialog(activity: Activity): AlertDialog.Builder {
         val builder = AlertDialog.Builder(activity)
 
         with(builder)
