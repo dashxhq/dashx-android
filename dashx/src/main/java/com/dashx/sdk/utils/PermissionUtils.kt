@@ -17,7 +17,7 @@ import androidx.core.content.ContextCompat
 import com.dashx.sdk.DashXLog
 
 object PermissionUtils {
-    const val tag = "PermissionUtils"
+    private val tag = PermissionUtils::class.java.simpleName
 
     fun requireRuntimePermissions(): Boolean {
         return Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
@@ -41,42 +41,39 @@ object PermissionUtils {
         }
 
         if (hasPermissions(activity, permission)) {
+            DashXLog.d(tag, "requestPermission(): already granted")
             return
         }
 
         val permissionName = permission.substringAfterLast(".").lowercase().replaceFirstChar { it.titlecase() }
 
-        if (ContextCompat.checkSelfPermission(activity, permission) != PackageManager.PERMISSION_GRANTED) {
-            if (ActivityCompat.shouldShowRequestPermissionRationale(activity, permission)) {
+        if (ActivityCompat.shouldShowRequestPermissionRationale(activity, permission)) {
+            val builder = buildAlertDialog(activity)
+
+            with(builder)
+            {
+                setMessage("$permissionName permission is needed for this app to function properly.")
+                setPositiveButton("Proceed", DialogInterface.OnClickListener { dialog, id ->
+                    markPermissionAsAskedTwice(activity, permission)
+                    ActivityCompat.requestPermissions(activity, arrayOf(permission), requestCode)
+                })
+                show()
+            }
+        } else {
+            if (hasAskedForPermissionTwice(activity, permission)) {
                 val builder = buildAlertDialog(activity)
 
                 with(builder)
                 {
-                    setMessage("$permissionName permission is needed for this app to function properly.")
+                    setMessage("$permissionName permission is needed for this app to function properly. Go to settings to enable this permission?")
                     setPositiveButton("Proceed", DialogInterface.OnClickListener { dialog, id ->
-                        markPermissionAsAskedTwice(activity, permission)
-                        ActivityCompat.requestPermissions(activity, arrayOf(permission), requestCode)
+                        goToAppSettings(activity)
                     })
                     show()
                 }
             } else {
-                if (hasAskedForPermissionTwice(activity, permission)) {
-                    val builder = buildAlertDialog(activity)
-
-                    with(builder)
-                    {
-                        setMessage("$permissionName permission is needed for this app to function properly. Go to settings to enable this permission?")
-                        setPositiveButton("Proceed", DialogInterface.OnClickListener { dialog, id ->
-                            goToAppSettings(activity)
-                        })
-                        show()
-                    }
-                } else {
-                    ActivityCompat.requestPermissions(activity, arrayOf(permission), requestCode)
-                }
+                ActivityCompat.requestPermissions(activity, arrayOf(permission), requestCode)
             }
-        } else {
-            DashXLog.d(tag, "requestPermission(): already granted")
         }
     }
 
