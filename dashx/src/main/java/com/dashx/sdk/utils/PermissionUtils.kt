@@ -57,7 +57,7 @@ object PermissionUtils {
                         markPermissionAsAskedTwice(activity, permission)
                         ActivityCompat.requestPermissions(activity, arrayOf(permission), requestCode)
                     })
-                    .show()
+                    show()
                 }
             } else {
                 if (hasAskedForPermissionTwice(activity, permission)) {
@@ -69,7 +69,7 @@ object PermissionUtils {
                         setPositiveButton("Proceed", DialogInterface.OnClickListener { dialog, id ->
                             goToAppSettings(activity)
                         })
-                        .show()
+                        show()
                     }
                 } else {
                     ActivityCompat.requestPermissions(activity, arrayOf(permission), requestCode)
