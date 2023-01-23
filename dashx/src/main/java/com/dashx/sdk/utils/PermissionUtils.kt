@@ -108,7 +108,7 @@ object PermissionUtils {
         {
             setTitle("Permission needed")
             setCancelable(false)
-            setNegativeButton("Cancel", DialogInterface.OnClickListener { dialog, id ->
+            setNegativeButton("Maybe Later", DialogInterface.OnClickListener { dialog, id ->
                 dialog.cancel()
             })
         }
