@@ -40,6 +40,10 @@ object PermissionUtils {
             DashXLog.d(tag, "no permissions required")
         }
 
+        if (hasPermissions(activity, permission)) {
+            return
+        }
+
         val permissionName = permission.substringAfterLast(".").lowercase().replaceFirstChar { it.titlecase() }
 
         if (ContextCompat.checkSelfPermission(activity, permission) != PackageManager.PERMISSION_GRANTED) {
