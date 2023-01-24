@@ -89,7 +89,7 @@ class SystemContext {
 
     private fun setNetworkInfo() {
         val network = hashMapOf<String, Any>()
-        network[BLUETOOTH] = getBluetoothInfo(context)
+        network[BLUETOOTH] = getBluetoothInfo(context!!)
         network[CARRIER] = getCarrierInfo(context!!)
         network[CELLULAR] = getCellularInfo(context!!).toString()
         network[WIFI] = getWifiInfo(context!!)
