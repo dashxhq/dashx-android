@@ -66,10 +66,14 @@ fun getAppUserAgent(): String {
 }
 
 fun getBluetoothInfo(context: Context): Boolean {
-    return if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.R && PermissionUtils.hasPermissions(context, android.Manifest.permission.BLUETOOTH)) {
-        val bluetoothManager = context?.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
-        bluetoothManager.adapter.isEnabled
-    } else false
+    if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.R) {
+        if (!PermissionUtils.hasPermissions(context, android.Manifest.permission.BLUETOOTH)) {
+            return false
+        }
+    }
+
+    val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+    return bluetoothManager.adapter.isEnabled
 }
 
 fun getWifiInfo(context: Context): Boolean {
