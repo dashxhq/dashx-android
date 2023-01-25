@@ -10,6 +10,7 @@ import android.location.Geocoder
 import android.location.Location
 import android.location.LocationManager
 import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.provider.Settings
@@ -83,9 +84,29 @@ fun getWifiInfo(context: Context): Boolean {
     } else false
 }
 
-fun getCellularInfo(context: Context): Boolean? {
-    val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-    return connectivityManager.activeNetworkInfo?.isConnected
+@SuppressLint("MissingPermission")
+fun getCellularInfo(context: Context): Boolean {
+    if (PermissionUtils.hasPermissions(context, android.Manifest.permission.ACCESS_NETWORK_STATE)) {
+        val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+
+        if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val capabilities = connectivityManager.getNetworkCapabilities(connectivityManager.activeNetwork)
+
+            if (capabilities != null) {
+                if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) {
+                    return true
+                }
+            }
+        } else {
+            val activeNetworkInfo = connectivityManager.activeNetworkInfo
+
+            if (activeNetworkInfo != null && activeNetworkInfo.isConnected) {
+                return true
+            }
+        }
+    }
+
+    return false
 }
 
 fun getCarrierInfo(context: Context): String {
@@ -137,26 +158,25 @@ fun getAdvertisingInfo(context: Context?) {
     }
 }
 
+@SuppressLint("MissingPermission")
 fun getLocationCoordinates(context: Context): Location? {
-    val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager?
-    var location: Location? = null
-
-    try {
-        if (
-            ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
-            ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
-        ) {
-            location = locationManager!!.getLastKnownLocation(LocationManager.GPS_PROVIDER)
-            context.let {
-                getDashXSharedPreferences(it).edit().apply {
-                    putFloat(LAST_GPS_POINT_X, (location?.latitude?.toFloat()!!))
-                    putFloat(LAST_GPS_POINT_Y, (location.longitude.toFloat()))
-                }
-            }
-        }
-    } catch (e: Exception) {
-        e.printStackTrace()
+    if (
+        ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
+        ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
+    ) {
+        return null
     }
+
+    val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+    val location = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+
+    context.let {
+        getDashXSharedPreferences(it).edit().apply {
+            putFloat(LAST_GPS_POINT_X, (location?.latitude?.toFloat()!!))
+            putFloat(LAST_GPS_POINT_Y, (location?.longitude?.toFloat()!!))
+        }
+    }
+
     return location
 }
 

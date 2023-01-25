@@ -9,7 +9,6 @@ import android.content.pm.PackageManager
 import android.Manifest
 import android.net.Uri
 import android.os.Build
-import android.preference.PreferenceManager
 import android.provider.Settings
 import android.widget.Toast
 import androidx.core.app.ActivityCompat
@@ -88,14 +87,12 @@ object PermissionUtils {
     }
 
     private fun hasAskedForPermissionTwice(activity: Activity, permission: String): Boolean {
-        return PreferenceManager
-            .getDefaultSharedPreferences(activity)
+        return getDashXSharedPreferences(activity)
             .getBoolean(permission, false)
     }
 
     private fun markPermissionAsAskedTwice(activity: Activity, permission: String) {
-        PreferenceManager
-            .getDefaultSharedPreferences(activity)
+        getDashXSharedPreferences(activity)
             .edit()
             .putBoolean(permission, true)
             .apply()
