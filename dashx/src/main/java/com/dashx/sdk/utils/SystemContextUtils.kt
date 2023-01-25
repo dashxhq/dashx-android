@@ -18,8 +18,6 @@ import android.telephony.TelephonyManager
 import androidx.core.content.ContextCompat
 import com.dashx.sdk.utils.SystemContextConstants.AD_TRACKING_ENABLED
 import com.dashx.sdk.utils.SystemContextConstants.ADVERTISING_ID
-import com.dashx.sdk.utils.SystemContextConstants.LAST_GPS_POINT_X
-import com.dashx.sdk.utils.SystemContextConstants.LAST_GPS_POINT_Y
 import com.google.android.gms.ads.identifier.AdvertisingIdClient
 import java.net.Inet4Address
 import java.net.Inet6Address
@@ -168,44 +166,8 @@ fun getLocationCoordinates(context: Context): Location? {
     }
 
     val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-    val location = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
 
-    context.let {
-        getDashXSharedPreferences(it).edit().apply {
-            putFloat(LAST_GPS_POINT_X, (location?.latitude?.toFloat()!!))
-            putFloat(LAST_GPS_POINT_Y, (location?.longitude?.toFloat()!!))
-        }
-    }
-
-    return location
-}
-
-fun getSpeed(context: Context): Double {
-    val lastGPSPointX = context.let {
-        getDashXSharedPreferences(it).getFloat(LAST_GPS_POINT_X, 0F)
-    }
-
-    val lastGPSPointY = context.let {
-        getDashXSharedPreferences(it).getFloat(LAST_GPS_POINT_Y, 0F)
-    }
-
-    getLocationCoordinates(context).let {
-        val currentGPSPointX = it?.latitude
-        val currentGPSPointY = it?.longitude
-        val results = FloatArray(1)
-        if (currentGPSPointY != null) {
-            if (currentGPSPointX != null) {
-                Location.distanceBetween(lastGPSPointX.toDouble(), currentGPSPointX.toDouble(), lastGPSPointY.toDouble(), currentGPSPointY.toDouble(), results)
-            }
-        }
-
-        if (currentGPSPointX != null) {
-            val gpsPointX = currentGPSPointX - lastGPSPointX
-            val gpsPointY = currentGPSPointY?.minus(lastGPSPointX)
-            return kotlin.math.sqrt((gpsPointX).pow(2) + (gpsPointY)?.pow(2)!!) / results[0]
-        }
-    }
-    return 0.0
+    return locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
 }
 
 fun getOsName(): String {
