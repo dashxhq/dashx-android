@@ -105,6 +105,4 @@ object SystemContextConstants {
     const val LATITUDE = "latitude"
     const val LONGITUDE = "longitude"
     const val SPEED = "speed"
-    const val LAST_GPS_POINT_X = "lastGPSPointX"
-    const val LAST_GPS_POINT_Y = "lastGPSPointY"
 }

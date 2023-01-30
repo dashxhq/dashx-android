@@ -200,12 +200,14 @@ class SystemContext {
     }
 
     private fun setLocationInfo() {
-        val location = HashMap<String, Any>()
-        getLocationCoordinates(context!!).let {
-            location[LONGITUDE] = it?.longitude ?: 0.0
-            location[LATITUDE] = it?.latitude ?: 0.0
+        val locationData = HashMap<String, Any>()
+        val location = getLocationCoordinates(context!!)
+
+        if (location != null) {
+            locationData[LATITUDE] = location?.latitude ?: 0.0
+            locationData[LONGITUDE] = location?.longitude ?: 0.0
+            locationData[SPEED] = location?.getSpeed() ?: 0F
         }
-        location[SPEED] = getSpeed(context!!)
 
         put(LOCATION, location)
     }

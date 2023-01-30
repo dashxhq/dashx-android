@@ -2,6 +2,7 @@ package com.dashx.sdk
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import com.dashx.graphql.generated.*
@@ -351,12 +352,13 @@ class DashXClient {
         }
     }
 
-    fun uploadAsset(file: File,
-                            resource: String,
-                            attribute: String,
-                            onSuccess: (result: com.dashx.sdk.data.Asset) -> Unit,
-                            onError: (error: String) -> Unit) {
-        val query = PrepareAsset(variables = PrepareAsset.Variables(PrepareAssetInput(resource, attribute)))
+    fun uploadAsset(file: File, resource: String, attribute: String, onSuccess: (result: com.dashx.sdk.data.Asset) -> Unit, onError: (error: String) -> Unit) {
+        val name = file.name
+        val size = file.length().toInt()
+        val uri = Uri.fromFile(file)
+        val mimeType = context!!.contentResolver.getType(uri)
+
+        val query = PrepareAsset(variables = PrepareAsset.Variables(PrepareAssetInput(resource, attribute, name, mimeType, size)))
 
         coroutineScope.launch {
             val result = graphqlClient.execute(query)
@@ -478,7 +480,13 @@ class DashXClient {
     fun track(event: String, data: HashMap<String, String>? = hashMapOf()) {
         val jsonData = data?.toMap()?.let { JSONObject(it).toString() }
 
-        val query = TrackEvent(variables = TrackEvent.Variables(TrackEventInput(accountAnonymousUid = accountAnonymousUid, accountUid = accountUid!!, data = jsonData, event = event, systemContext = gson.fromJson(SystemContext.getInstance().fetchSystemContext().toString(), SystemContextInput::class.java))))
+        val query = TrackEvent(variables = TrackEvent.Variables(TrackEventInput(
+            accountAnonymousUid = accountAnonymousUid,
+            accountUid = accountUid,
+            data = jsonData,
+            event = event,
+            systemContext = gson.fromJson(SystemContext.getInstance().fetchSystemContext().toString(), SystemContextInput::class.java)
+        )))
 
         coroutineScope.launch {
             val result = graphqlClient.execute(query)
