@@ -209,9 +209,7 @@ class SystemContext {
             locationData[SPEED] = location?.getSpeed() ?: 0F
         }
 
-        DashXLog.d("DashXClient location", locationData.toString())
-
-        // put(LOCATION, location)
+        put(LOCATION, location)
     }
 
     fun getAppInfo(): JSONObject {
