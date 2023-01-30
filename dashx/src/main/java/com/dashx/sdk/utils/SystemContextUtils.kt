@@ -65,14 +65,22 @@ fun getAppUserAgent(): String {
     return System.getProperty("http.agent") ?: ""
 }
 
-fun getBluetoothInfo(context: Context?): Boolean {
-    val bluetoothManager = context?.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+fun getBluetoothInfo(context: Context): Boolean {
+    if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.R) {
+        if (!PermissionUtils.hasPermissions(context, android.Manifest.permission.BLUETOOTH)) {
+            return false
+        }
+    }
+
+    val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
     return bluetoothManager.adapter.isEnabled
 }
 
 fun getWifiInfo(context: Context): Boolean {
-    val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-    return wifiManager.isWifiEnabled
+    return if (PermissionUtils.hasPermissions(context, android.Manifest.permission.ACCESS_WIFI_STATE)) {
+        val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+        wifiManager.isWifiEnabled
+    } else false
 }
 
 fun getCellularInfo(context: Context): Boolean? {
@@ -127,12 +135,6 @@ fun getAdvertisingInfo(context: Context?) {
             e.printStackTrace()
         }
     }
-}
-
-fun getLocationAddress(context: Context): List<Address> {
-    val geocoder = Geocoder(context, Locale.getDefault())
-    val location = getLocationCoordinates(context)
-    return geocoder.getFromLocation(location?.latitude ?: 0.0, location?.longitude ?: 0.0, 1)
 }
 
 fun getLocationCoordinates(context: Context): Location? {

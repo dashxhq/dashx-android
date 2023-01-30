@@ -89,7 +89,7 @@ class SystemContext {
 
     private fun setNetworkInfo() {
         val network = hashMapOf<String, Any>()
-        network[BLUETOOTH] = getBluetoothInfo(context)
+        network[BLUETOOTH] = getBluetoothInfo(context!!)
         network[CARRIER] = getCarrierInfo(context!!)
         network[CELLULAR] = getCellularInfo(context!!).toString()
         network[WIFI] = getWifiInfo(context!!)
@@ -204,18 +204,6 @@ class SystemContext {
         getLocationCoordinates(context!!).let {
             location[LONGITUDE] = it?.longitude ?: 0.0
             location[LATITUDE] = it?.latitude ?: 0.0
-        }
-        getLocationAddress(context!!).let {
-            location[CITY] = if (it.isNotEmpty()) {
-                it[0].getAddressLine(0)
-            } else {
-                ""
-            }
-            location[COUNTRY] = if (it.isNotEmpty()) {
-                it[0].countryName
-            } else {
-                ""
-            }
         }
         location[SPEED] = getSpeed(context!!)
 
