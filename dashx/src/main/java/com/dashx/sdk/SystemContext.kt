@@ -200,15 +200,18 @@ class SystemContext {
     }
 
     private fun setLocationInfo() {
-        val location = HashMap<String, Any>()
+        val locationData = HashMap<String, Any>()
+        val location = getLocationCoordinates(context!!)
 
-        getLocationCoordinates(context!!).let {
-            location[LATITUDE] = it?.latitude ?: 0.0
-            location[LONGITUDE] = it?.longitude ?: 0.0
-            location[SPEED] = it?.getSpeed() ?: 0F
+        if (location != null) {
+            locationData[LATITUDE] = location?.latitude ?: 0.0
+            locationData[LONGITUDE] = location?.longitude ?: 0.0
+            locationData[SPEED] = location?.getSpeed() ?: 0F
         }
 
-        put(LOCATION, location)
+        DashXLog.d("DashXClient location", locationData.toString())
+
+        // put(LOCATION, location)
     }
 
     fun getAppInfo(): JSONObject {
