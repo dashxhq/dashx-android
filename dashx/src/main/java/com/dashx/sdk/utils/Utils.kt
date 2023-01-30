@@ -3,9 +3,9 @@
 package com.dashx.sdk.utils
 
 import android.content.Context
-import android.content.SharedPreferences
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
+import android.content.SharedPreferences
 import android.net.Uri
 import java.io.ByteArrayOutputStream
 import java.io.File
