@@ -354,9 +354,12 @@ class DashXClient {
     fun uploadAsset(file: File,
                             resource: String,
                             attribute: String,
+                            name: String,
+                            mimeType: String,
+                            size: Int,
                             onSuccess: (result: com.dashx.sdk.data.Asset) -> Unit,
                             onError: (error: String) -> Unit) {
-        val query = PrepareAsset(variables = PrepareAsset.Variables(PrepareAssetInput(resource, attribute)))
+        val query = PrepareAsset(variables = PrepareAsset.Variables(PrepareAssetInput(resource, attribute, name, mimeType, size)))
 
         coroutineScope.launch {
             val result = graphqlClient.execute(query)
