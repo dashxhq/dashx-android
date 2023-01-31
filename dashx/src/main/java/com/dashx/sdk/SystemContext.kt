@@ -209,7 +209,7 @@ class SystemContext {
             locationData[SPEED] = location?.getSpeed() ?: 0F
         }
 
-        put(LOCATION, location)
+        put(LOCATION, locationData)
     }
 
     fun getAppInfo(): JSONObject {
