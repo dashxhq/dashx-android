@@ -222,9 +222,12 @@ class DashXClient {
     }
 
     fun reset() {
+        unsubscribe()
+
         accountUid = null
         identityToken = null
         accountAnonymousUid = generateAccountAnonymousUid()
+
         saveToStorage()
     }
 
