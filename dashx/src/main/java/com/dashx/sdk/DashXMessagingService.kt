@@ -20,17 +20,7 @@ data class DashXPayload(
 
 class DashXMessagingService : FirebaseMessagingService() {
     private val tag = DashXMessagingService::class.java.simpleName
-    private val dashXClient = DashXClient.getInstance()
     private val notificationReceiverClass: Class<*> = NotificationReceiver::class.java
-
-    override fun onNewToken(token: String) {
-        super.onNewToken(token)
-        DashXLog.d(tag, "onNewToken: $token")
-
-        if (dashXClient != null) {
-            dashXClient.setDeviceToken(token)
-        }
-    }
 
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
         super.onMessageReceived(remoteMessage)
@@ -39,7 +29,7 @@ class DashXMessagingService : FirebaseMessagingService() {
             return
         }
 
-        val dashxDataMap = remoteMessage.getData()["dashx"]
+        val dashxDataMap = remoteMessage.data["dashx"]
 
         if (dashxDataMap != null) {
             val gson = Gson()
