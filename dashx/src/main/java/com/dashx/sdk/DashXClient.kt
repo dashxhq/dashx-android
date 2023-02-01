@@ -22,15 +22,15 @@ import io.ktor.client.*
 import io.ktor.client.plugins.*
 import io.ktor.client.plugins.logging.*
 import io.ktor.client.request.*
+import kotlinx.coroutines.*
+import org.json.JSONObject
 import java.io.File
 import java.io.FileInputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.time.Instant
-import java.util.concurrent.TimeUnit
 import java.util.UUID
-import kotlinx.coroutines.*
-import org.json.JSONObject
+import java.util.concurrent.TimeUnit
 
 class DashXClient {
 
@@ -398,6 +398,7 @@ class DashXClient {
                 result.data?.prepareAsset?.data,
                 PrepareAssetResponse::class.java
             )).upload.url
+
             writeFileToUrl(file, url, result.data?.prepareAsset?.id ?: "", onSuccess, onError)
         }
     }
@@ -462,6 +463,7 @@ class DashXClient {
 
             val asset =
                 gson.fromJson(responseJsonObject.toString(), com.dashx.sdk.data.Asset::class.java)
+
             if (asset.data.asset?.url == null && !asset.data.asset?.playbackIds.isNullOrEmpty()) {
                 asset.data.asset?.url =
                     generateMuxVideoUrl(asset.data.asset?.playbackIds?.get(0)?.id)
@@ -569,6 +571,7 @@ class DashXClient {
         val context = context ?: return
 
         val packageInfo = getPackageInfo(context)
+
         val currentBuild = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             packageInfo.longVersionCode
         } else {
@@ -756,6 +759,7 @@ class DashXClient {
                 )
             )
         )
+
         coroutineScope.launch {
             val result = graphqlClient.execute(query)
 
