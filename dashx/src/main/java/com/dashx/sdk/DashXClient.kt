@@ -167,9 +167,8 @@ class DashXClient {
     }
 
     fun identify(options: HashMap<String, String>? = null) {
-
         if (options == null) {
-            DashXLog.d(tag, "Cannot be called with null, pass options: object")
+            DashXLog.e(tag, "Cannot be called with null, pass options: object")
             return
         }
 
@@ -630,30 +629,30 @@ class DashXClient {
     }
 
     fun subscribe() {
-        val savedToken = getDashXSharedPreferences(context!!).getString(
-            SHARED_PREFERENCES_KEY_DEVICE_TOKEN,
-            null
-        )
-
-        if (savedToken != null) {
-            DashXLog.d(tag, "Already subscribed: $savedToken")
-            return
-        }
-
         FirebaseMessaging.getInstance().token
             .addOnCompleteListener(OnCompleteListener { task ->
                 if (!task.isSuccessful) {
-                    DashXLog.d(
+                    DashXLog.e(
                         tag,
                         "FirebaseMessaging.getInstance().getToken() failed: $task.exception"
                     )
                     return@OnCompleteListener
                 }
 
-                val token = task.result
+                val newToken = task.result
 
-                if (token == null) {
-                    DashXLog.d(tag, "Didn't receive any token from Firebase.")
+                if (newToken == null) {
+                    DashXLog.e(tag, "Didn't receive any token from Firebase.")
+                    return@OnCompleteListener
+                }
+
+                val savedToken = getDashXSharedPreferences(context!!).getString(
+                    SHARED_PREFERENCES_KEY_DEVICE_TOKEN,
+                    null
+                )
+
+                if (savedToken == newToken) {
+                    DashXLog.d(tag, "Already subscribed: $savedToken")
                     return@OnCompleteListener
                 }
 
@@ -669,7 +668,7 @@ class DashXClient {
                             accountAnonymousUid = accountAnonymousUid,
                             name = name,
                             kind = ContactKind.ANDROID,
-                            value = token!!,
+                            value = newToken!!,
                             osName = "Android",
                             osVersion = Build.VERSION.RELEASE,
                             deviceManufacturer = Build.MANUFACTURER,
@@ -687,7 +686,7 @@ class DashXClient {
                         return@launch
                     } else {
                         getDashXSharedPreferences(context!!).edit().apply {
-                            putString(SHARED_PREFERENCES_KEY_DEVICE_TOKEN, token)
+                            putString(SHARED_PREFERENCES_KEY_DEVICE_TOKEN, newToken)
                         }.apply()
                     }
 
@@ -703,14 +702,14 @@ class DashXClient {
         )
 
         if (savedToken == null) {
-            DashXLog.d(tag, "unsubscribe() called without subscribing first")
+            DashXLog.e(tag, "unsubscribe() called without subscribing first")
             return
         }
 
         FirebaseMessaging.getInstance().deleteToken()
             .addOnCompleteListener(OnCompleteListener { task ->
                 if (!task.isSuccessful) {
-                    DashXLog.d(
+                    DashXLog.e(
                         tag,
                         "FirebaseMessaging.getInstance().deleteToken() failed: $task.exception"
                     )
@@ -739,7 +738,7 @@ class DashXClient {
                         DashXLog.e(tag, "Failed to unsubscribe: $errors")
                         return@launch
                     } else {
-                        DashXLog.e(tag, "Unsubscribed $savedToken successfully.")
+                        DashXLog.d(tag, "Unsubscribed $savedToken successfully.")
                     }
 
                     result.data?.unsubscribeContact.let { gson.toJsonTree(it) }

@@ -5,8 +5,6 @@ import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.pm.PackageManager
 import android.content.res.Resources
-import android.location.Address
-import android.location.Geocoder
 import android.location.Location
 import android.location.LocationManager
 import android.net.ConnectivityManager
@@ -23,7 +21,6 @@ import java.net.Inet4Address
 import java.net.Inet6Address
 import java.net.NetworkInterface
 import java.util.*
-import kotlin.math.pow
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
