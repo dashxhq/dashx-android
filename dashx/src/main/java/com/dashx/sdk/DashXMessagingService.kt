@@ -18,8 +18,8 @@ data class DashXPayload(
     @SerializedName("body") val body: String?,
 )
 
-class DashXMessagingService : FirebaseMessagingService() {
-    private val tag = DashXMessagingService::class.java.simpleName
+class DashXFirebaseMessagingService : FirebaseMessagingService() {
+    private val tag = DashXFirebaseMessagingService::class.java.simpleName
     private val notificationReceiverClass: Class<*> = NotificationReceiver::class.java
 
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
