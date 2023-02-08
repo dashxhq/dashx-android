@@ -706,6 +706,9 @@ class DashXClient {
             return
         }
 
+        val uid = accountUid
+        val anonymousUid = accountAnonymousUid
+
         FirebaseMessaging.getInstance().deleteToken()
             .addOnCompleteListener(OnCompleteListener { task ->
                 if (!task.isSuccessful) {
@@ -723,8 +726,8 @@ class DashXClient {
                 val query = UnsubscribeContact(
                     variables = UnsubscribeContact.Variables(
                         UnsubscribeContactInput(
-                            accountUid = accountUid,
-                            accountAnonymousUid = accountAnonymousUid,
+                            accountUid = uid,
+                            accountAnonymousUid = anonymousUid,
                             value = savedToken!!
                         )
                     )
