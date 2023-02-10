@@ -1,0 +1,6 @@
+mutation UnsubscribeContact($input: UnsubscribeContactInput!) {
+    unsubscribeContact(input: $input) {
+        id
+        value
+    }
+}
