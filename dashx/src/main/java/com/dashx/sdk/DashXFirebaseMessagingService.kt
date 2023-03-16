@@ -25,20 +25,18 @@ class DashXFirebaseMessagingService : FirebaseMessagingService() {
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
         super.onMessageReceived(remoteMessage)
 
-        DashXLog.d(tag, "Message received.")
+        DashXLog.d(tag, "Notification received.")
 
         if (appInForeground()) {
-            DashXLog.d(tag, "App in foreground")
+            DashXLog.d(tag, "App in foreground. Skipping...")
             return
         }
 
-        DashXLog.d(tag, "App in background")
-
         val dashxDataMap = remoteMessage.data["dashx"]
 
-        DashXLog.d(tag, dashxDataMap)
-
         if (dashxDataMap != null) {
+            DashXLog.d(tag, "Generating DashX notification...")
+
             val gson = Gson()
             var dashxData = gson.fromJson(dashxDataMap, DashXPayload::class.java)
 
