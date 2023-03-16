@@ -17,12 +17,14 @@ import com.expediagroup.graphql.client.serialization.GraphQLClientKotlinxSeriali
 import com.google.android.gms.tasks.OnCompleteListener
 import com.google.firebase.messaging.FirebaseMessaging
 import com.google.gson.Gson
-import com.google.gson.JsonObject
 import io.ktor.client.*
 import io.ktor.client.plugins.*
 import io.ktor.client.plugins.logging.*
 import io.ktor.client.request.*
 import kotlinx.coroutines.*
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
 import org.json.JSONObject
 import java.io.File
 import java.io.FileInputStream
@@ -31,6 +33,7 @@ import java.net.URL
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.TimeUnit
+import com.google.gson.JsonObject as GJsonObject
 
 class DashXClient {
 
@@ -272,7 +275,7 @@ class DashXClient {
                 return@launch
             }
 
-            result.data?.fetchContent?.let { onSuccess(gson.toJsonTree(it).asJsonObject) }
+            result.data?.fetchContent?.let { onSuccess(it) }
         }
 
 
@@ -295,8 +298,7 @@ class DashXClient {
         val query = SearchContent(
             variables = SearchContent.Variables(
                 SearchContentInput(
-                    contentType = contentType,
-                    returnType = returnType
+                    contentType = contentType, returnType = returnType
                 )
             )
         )
@@ -312,13 +314,12 @@ class DashXClient {
             }
 
             val content = result.data?.searchContent ?: listOf()
-            onSuccess(content.map { gson.toJsonTree(it).asJsonObject })
+            onSuccess(content)
         }
     }
 
     fun fetchCart(
-        onSuccess: (result: JsonObject) -> Unit,
-        onError: (error: String) -> Unit
+        onSuccess: (result: JsonObject) -> Unit, onError: (error: String) -> Unit
     ) {
 
         val query = FetchCart(variables = FetchCart.Variables(FetchCartInput(accountUid!!)))
@@ -333,13 +334,12 @@ class DashXClient {
                 return@launch
             }
 
-            result.data?.fetchCart?.let { onSuccess(gson.toJsonTree(it).asJsonObject) }
+            result.data?.fetchCart?.let { onSuccess(Json.parseToJsonElement(it.toString()).jsonObject) }
         }
     }
 
     fun fetchStoredPreferences(
-        onSuccess: (result: JsonObject) -> Unit,
-        onError: (error: String) -> Unit
+        onSuccess: (result: JsonObject) -> Unit, onError: (error: String) -> Unit
     ) {
         val query = FetchStoredPreferences(
             variables = FetchStoredPreferences.Variables(FetchStoredPreferencesInput(accountUid!!))
@@ -355,7 +355,7 @@ class DashXClient {
                 return@launch
             }
 
-            result.data?.fetchStoredPreferences?.let { onSuccess(gson.toJsonTree(it).asJsonObject) }
+            result.data?.fetchStoredPreferences?.let { onSuccess(Json.parseToJsonElement(it.toString()).jsonObject) }
         }
     }
 
@@ -374,11 +374,7 @@ class DashXClient {
         val query = PrepareAsset(
             variables = PrepareAsset.Variables(
                 PrepareAssetInput(
-                    resource,
-                    attribute,
-                    name,
-                    mimeType,
-                    size
+                    resource, attribute, name, mimeType, size
                 )
             )
         )
@@ -394,8 +390,7 @@ class DashXClient {
             }
 
             val url = (gson.fromJson(
-                result.data?.prepareAsset?.data,
-                PrepareAssetResponse::class.java
+                result.data?.prepareAsset?.data.toString(), PrepareAssetResponse::class.java
             )).upload.url
 
             writeFileToUrl(file, url, result.data?.prepareAsset?.id ?: "", onSuccess, onError)
@@ -473,15 +468,14 @@ class DashXClient {
     }
 
     fun saveStoredPreferences(
-        preferenceData: JSON,
+        preferenceData: GJsonObject,
         onSuccess: (result: JsonObject) -> Unit,
         onError: (error: String) -> Unit
     ) {
         val query = SaveStoredPreferences(
             variables = SaveStoredPreferences.Variables(
                 SaveStoredPreferencesInput(
-                    accountUid!!,
-                    preferenceData
+                    accountUid!!, Json.parseToJsonElement(preferenceData.toString()).jsonObject
                 )
             )
         )
@@ -496,7 +490,7 @@ class DashXClient {
                 return@launch
             }
 
-            onSuccess(gson.toJsonTree(result.data?.saveStoredPreferences).asJsonObject)
+            result.data?.saveStoredPreferences?.let { onSuccess(Json.parseToJsonElement(it.toString()).jsonObject) }
         }
     }
 
@@ -531,12 +525,13 @@ class DashXClient {
                 return@launch
             }
 
-            result.data?.addItemToCart.let { onSuccess(gson.toJsonTree(it).asJsonObject) }
+            result.data?.addItemToCart.let { onSuccess(Json.parseToJsonElement(it.toString()).jsonObject) }
         }
     }
 
     fun track(event: String, data: HashMap<String, String>? = hashMapOf()) {
-        val jsonData = data?.toMap()?.let { JSONObject(it).toString() }
+        val jsonData =
+            data?.toMap()?.let { Json.parseToJsonElement(gson.toJson(it).toString()).jsonObject }
 
         val query = TrackEvent(
             variables = TrackEvent.Variables(
@@ -583,26 +578,23 @@ class DashXClient {
             editor.apply()
         }
 
-        val eventProperties =
-            hashMapOf("version" to packageInfo.versionName, "build" to currentBuild.toString())
+        val eventProperties = hashMapOf(
+            "version" to packageInfo.versionName.toString(), "build" to currentBuild.toString()
+        )
 
-        if (fromBackground) eventProperties.set("from_background", true.toString())
+        if (fromBackground) eventProperties["from_background"] = true.toString()
 
         when {
             getDashXSharedPreferences(context).getLong(
-                SHARED_PREFERENCES_KEY_BUILD,
-                Long.MIN_VALUE
-            ) == Long.MIN_VALUE
-            -> {
+                SHARED_PREFERENCES_KEY_BUILD, Long.MIN_VALUE
+            ) == Long.MIN_VALUE -> {
                 track(INTERNAL_EVENT_APP_INSTALLED, eventProperties)
                 saveBuildInPreferences()
             }
 
             getDashXSharedPreferences(context).getLong(
-                SHARED_PREFERENCES_KEY_BUILD,
-                Long.MIN_VALUE
-            ) < currentBuild
-            -> {
+                SHARED_PREFERENCES_KEY_BUILD, Long.MIN_VALUE
+            ) < currentBuild -> {
                 track(INTERNAL_EVENT_APP_UPDATED, eventProperties)
                 saveBuildInPreferences()
             }
@@ -629,12 +621,10 @@ class DashXClient {
     }
 
     fun subscribe() {
-        FirebaseMessaging.getInstance().token
-            .addOnCompleteListener(OnCompleteListener { task ->
+        FirebaseMessaging.getInstance().token.addOnCompleteListener(OnCompleteListener { task ->
                 if (!task.isSuccessful) {
                     DashXLog.e(
-                        tag,
-                        "FirebaseMessaging.getInstance().getToken() failed: $task.exception"
+                        tag, "FirebaseMessaging.getInstance().getToken() failed: $task.exception"
                     )
                     return@OnCompleteListener
                 }
@@ -647,8 +637,7 @@ class DashXClient {
                 }
 
                 val savedToken = getDashXSharedPreferences(context!!).getString(
-                    SHARED_PREFERENCES_KEY_DEVICE_TOKEN,
-                    null
+                    SHARED_PREFERENCES_KEY_DEVICE_TOKEN, null
                 )
 
                 if (savedToken == newToken) {
@@ -657,8 +646,7 @@ class DashXClient {
                 }
 
                 val name = Settings.Global.getString(
-                    context?.contentResolver,
-                    Settings.Global.DEVICE_NAME
+                    context?.contentResolver, Settings.Global.DEVICE_NAME
                 ) ?: Settings.Secure.getString(context?.contentResolver, "bluetooth_name")
 
                 val query = SubscribeContact(
@@ -697,8 +685,7 @@ class DashXClient {
 
     fun unsubscribe() {
         val savedToken = getDashXSharedPreferences(context!!).getString(
-            SHARED_PREFERENCES_KEY_DEVICE_TOKEN,
-            null
+            SHARED_PREFERENCES_KEY_DEVICE_TOKEN, null
         )
 
         if (savedToken == null) {
@@ -713,8 +700,7 @@ class DashXClient {
             .addOnCompleteListener(OnCompleteListener { task ->
                 if (!task.isSuccessful) {
                     DashXLog.e(
-                        tag,
-                        "FirebaseMessaging.getInstance().deleteToken() failed: $task.exception"
+                        tag, "FirebaseMessaging.getInstance().deleteToken() failed: $task.exception"
                     )
                     return@OnCompleteListener
                 }
@@ -755,9 +741,7 @@ class DashXClient {
         val query = TrackNotification(
             variables = TrackNotification.Variables(
                 TrackNotificationInput(
-                    id = id,
-                    status = status,
-                    timestamp = currentTime
+                    id = id, status = status, timestamp = currentTime
                 )
             )
         )
