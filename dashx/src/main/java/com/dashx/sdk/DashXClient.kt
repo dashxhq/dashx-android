@@ -17,12 +17,15 @@ import com.expediagroup.graphql.client.serialization.GraphQLClientKotlinxSeriali
 import com.google.android.gms.tasks.OnCompleteListener
 import com.google.firebase.messaging.FirebaseMessaging
 import com.google.gson.Gson
-import com.google.gson.JsonObject
+import com.google.gson.JsonObject as GJsonObject
+import kotlinx.serialization.json.JsonObject
 import io.ktor.client.*
 import io.ktor.client.plugins.*
 import io.ktor.client.plugins.logging.*
 import io.ktor.client.request.*
 import kotlinx.coroutines.*
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
 import org.json.JSONObject
 import java.io.File
 import java.io.FileInputStream
@@ -272,7 +275,7 @@ class DashXClient {
                 return@launch
             }
 
-            result.data?.fetchContent?.let { onSuccess(gson.toJsonTree(it).asJsonObject) }
+            result.data?.fetchContent?.let { onSuccess(it) }
         }
 
 
@@ -312,7 +315,7 @@ class DashXClient {
             }
 
             val content = result.data?.searchContent ?: listOf()
-            onSuccess(content.map { gson.toJsonTree(it).asJsonObject })
+            onSuccess(content)
         }
     }
 
@@ -333,7 +336,7 @@ class DashXClient {
                 return@launch
             }
 
-            result.data?.fetchCart?.let { onSuccess(gson.toJsonTree(it).asJsonObject) }
+            result.data?.fetchCart?.let { onSuccess(Json.parseToJsonElement(it.toString()).jsonObject) }
         }
     }
 
@@ -355,7 +358,7 @@ class DashXClient {
                 return@launch
             }
 
-            result.data?.fetchStoredPreferences?.let { onSuccess(gson.toJsonTree(it).asJsonObject) }
+            result.data?.fetchStoredPreferences?.let { onSuccess(Json.parseToJsonElement(it.toString()).jsonObject) }
         }
     }
 
@@ -394,7 +397,7 @@ class DashXClient {
             }
 
             val url = (gson.fromJson(
-                result.data?.prepareAsset?.data,
+                result.data?.prepareAsset?.data.toString(),
                 PrepareAssetResponse::class.java
             )).upload.url
 
@@ -473,7 +476,7 @@ class DashXClient {
     }
 
     fun saveStoredPreferences(
-        preferenceData: JSON,
+        preferenceData: GJsonObject,
         onSuccess: (result: JsonObject) -> Unit,
         onError: (error: String) -> Unit
     ) {
@@ -481,7 +484,7 @@ class DashXClient {
             variables = SaveStoredPreferences.Variables(
                 SaveStoredPreferencesInput(
                     accountUid!!,
-                    preferenceData
+                    Json.parseToJsonElement(preferenceData.toString()).jsonObject
                 )
             )
         )
@@ -496,7 +499,7 @@ class DashXClient {
                 return@launch
             }
 
-            onSuccess(gson.toJsonTree(result.data?.saveStoredPreferences).asJsonObject)
+            result.data?.saveStoredPreferences?.let { onSuccess(Json.parseToJsonElement(it.toString()).jsonObject) }
         }
     }
 
@@ -531,12 +534,12 @@ class DashXClient {
                 return@launch
             }
 
-            result.data?.addItemToCart.let { onSuccess(gson.toJsonTree(it).asJsonObject) }
+            result.data?.addItemToCart.let { onSuccess(Json.parseToJsonElement(it.toString()).jsonObject) }
         }
     }
 
     fun track(event: String, data: HashMap<String, String>? = hashMapOf()) {
-        val jsonData = data?.toMap()?.let { JSONObject(it).toString() }
+        val jsonData = data?.toMap()?.let { Json.parseToJsonElement(gson.toJson(it).toString()).jsonObject }
 
         val query = TrackEvent(
             variables = TrackEvent.Variables(
@@ -583,10 +586,12 @@ class DashXClient {
             editor.apply()
         }
 
-        val eventProperties =
-            hashMapOf("version" to packageInfo.versionName, "build" to currentBuild.toString())
+        val eventProperties: HashMap<String, String> =
+            hashMapOf("version" to packageInfo.versionName.toString(), "build" to currentBuild.toString())
 
-        if (fromBackground) eventProperties.set("from_background", true.toString())
+        if (fromBackground) eventProperties["from_background"] = true.toString()
+
+        DashXLog.d(tag, eventProperties.toString())
 
         when {
             getDashXSharedPreferences(context).getLong(
