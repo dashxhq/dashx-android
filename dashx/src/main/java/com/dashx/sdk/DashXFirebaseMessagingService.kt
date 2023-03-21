@@ -4,6 +4,7 @@ import android.app.*
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.BitmapFactory
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -11,11 +12,16 @@ import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import com.google.gson.Gson
 import com.google.gson.annotations.SerializedName
+import java.io.InputStream
+import java.net.HttpURLConnection
+import java.net.URL
+import javax.net.ssl.HttpsURLConnection
 
 data class DashXPayload(
     @SerializedName("id") val id: String,
     @SerializedName("title") val title: String?,
     @SerializedName("body") val body: String?,
+    @SerializedName("image") val image: String?,
 )
 
 class DashXFirebaseMessagingService : FirebaseMessagingService() {
@@ -38,17 +44,16 @@ class DashXFirebaseMessagingService : FirebaseMessagingService() {
             DashXLog.d(tag, "Generating DashX notification...")
 
             val gson = Gson()
-            var dashxData = gson.fromJson(dashxDataMap, DashXPayload::class.java)
-
-            val id = dashxData.id
-            val title = dashxData.title
-            val body = dashxData.body
+            var dashXData = gson.fromJson(dashxDataMap, DashXPayload::class.java)
+            val id = dashXData.id
+            val title = dashXData.title
+            val body = dashXData.body
 
             if ((title != null) || (body != null)) {
                 createNotificationChannel()
 
                 NotificationManagerCompat.from(this)
-                    .notify(id, 1, createNotification(id, title, body))
+                    .notify(id, 1, createNotification(dashXData))
             }
         }
     }
@@ -69,10 +74,12 @@ class DashXFirebaseMessagingService : FirebaseMessagingService() {
     }
 
     private fun createNotification(
-        id: String,
-        title: String?,
-        body: String?
+        dashXData: DashXPayload
     ): Notification {
+        val title = dashXData.title
+        val body = dashXData.body
+        val image = dashXData.image
+
         val pendingIntent = getNewPendingIntent()
 
         val notificationBuilder = NotificationCompat.Builder(this, CHANNEL_ID)
@@ -82,6 +89,23 @@ class DashXFirebaseMessagingService : FirebaseMessagingService() {
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
+
+        if (image != null) {
+            try {
+                val url = URL(image)
+                val connection = url.openConnection() as HttpURLConnection
+                connection.doInput = true
+                connection.connect()
+                val input: InputStream = connection.inputStream
+                val imageBitmap = BitmapFactory.decodeStream(input)
+
+                notificationBuilder.setStyle(
+                    NotificationCompat.BigPictureStyle().bigPicture(imageBitmap)
+                )
+            } catch (e: java.lang.Exception) {
+                DashXLog.e(tag, e.toString())
+            }
+        }
 
         return notificationBuilder.build()
     }
