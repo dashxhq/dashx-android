@@ -5,7 +5,11 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
+import android.graphics.Color
+import android.media.RingtoneManager
+import android.net.Uri
 import android.os.Build
+import android.webkit.URLUtil
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.google.firebase.messaging.FirebaseMessagingService
@@ -15,13 +19,28 @@ import com.google.gson.annotations.SerializedName
 import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
-import javax.net.ssl.HttpsURLConnection
+
 
 data class DashXPayload(
     @SerializedName("id") val id: String,
     @SerializedName("title") val title: String?,
     @SerializedName("body") val body: String?,
     @SerializedName("image") val image: String?,
+    @SerializedName("small_icon") val smallIcon: String?,
+    @SerializedName("large_icon") val largeIcon: String?,
+    @SerializedName("channel_id") val channelId: String?,
+    @SerializedName("sound") val sound: String?,
+    @SerializedName("visibility") val visibility: String?,
+    @SerializedName("notification_count") val notificationCount: String?,
+    @SerializedName("light_settings") val lightSettings: String?,
+    @SerializedName("color") val color: String?,
+    @SerializedName("click_action") val clickAction: String?,
+)
+
+data class LightSettings(
+    @SerializedName("color") val color: String,
+    @SerializedName("light_on_duration") val on: Int,
+    @SerializedName("light_off_duration") val off: Int,
 )
 
 class DashXFirebaseMessagingService : FirebaseMessagingService() {
@@ -45,12 +64,13 @@ class DashXFirebaseMessagingService : FirebaseMessagingService() {
 
             val gson = Gson()
             var dashXData = gson.fromJson(dashxDataMap, DashXPayload::class.java)
+
             val id = dashXData.id
             val title = dashXData.title
             val body = dashXData.body
 
             if ((title != null) || (body != null)) {
-                createNotificationChannel()
+                createNotificationChannel(dashXData.channelId)
 
                 NotificationManagerCompat.from(this)
                     .notify(id, 1, createNotification(dashXData))
@@ -58,10 +78,10 @@ class DashXFirebaseMessagingService : FirebaseMessagingService() {
         }
     }
 
-    private fun createNotificationChannel() {
+    private fun createNotificationChannel(channelId: String? = CHANNEL_ID) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
-                CHANNEL_ID,
+                channelId,
                 CHANNEL_NAME,
                 NotificationManager.IMPORTANCE_DEFAULT
             )
@@ -76,51 +96,131 @@ class DashXFirebaseMessagingService : FirebaseMessagingService() {
     private fun createNotification(
         dashXData: DashXPayload
     ): Notification {
+        val id = dashXData.id
         val title = dashXData.title
         val body = dashXData.body
-        val image = dashXData.image
+        val channelId = dashXData.channelId ?: CHANNEL_ID
 
         val pendingIntent = getNewPendingIntent()
 
-        val notificationBuilder = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(getSmallIcon())
+        val notificationBuilder = NotificationCompat.Builder(this, channelId)
             .setContentTitle(title)
             .setContentText(body)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
 
-        if (image != null) {
+        dashXData.image?.let { image ->
             try {
-                val url = URL(image)
-                val connection = url.openConnection() as HttpURLConnection
-                connection.doInput = true
-                connection.connect()
-                val input: InputStream = connection.inputStream
-                val imageBitmap = BitmapFactory.decodeStream(input)
+                // Check if it's a URL
+                if (URLUtil.isValidUrl(image)) {
 
-                notificationBuilder.setStyle(
-                    NotificationCompat.BigPictureStyle().bigPicture(imageBitmap)
-                )
+                    val url = URL(image)
+                    val connection = url.openConnection() as HttpURLConnection
+                    connection.doInput = true
+                    connection.connect()
+
+                    val input: InputStream = connection.inputStream
+                    val imageBitmap = BitmapFactory.decodeStream(input)
+
+                    notificationBuilder.setStyle(
+                        NotificationCompat.BigPictureStyle().bigPicture(imageBitmap)
+                    )
+                } else { // Check if it's a resource
+                    val resourceId = resources.getIdentifier(image, "drawable", packageName)
+
+                    if (resourceId != 0) { // Valid resource
+                        val imageBitmap = BitmapFactory.decodeResource(resources, resourceId)
+                        notificationBuilder.setStyle(
+                            NotificationCompat.BigPictureStyle().bigPicture(imageBitmap)
+                        )
+                    } else {
+                        DashXLog.e(tag, "Image resource not found for notification $id")
+                    }
+                }
             } catch (e: java.lang.Exception) {
                 DashXLog.e(tag, e.toString())
             }
+        }
+
+        dashXData.smallIcon?.let { smallIcon ->
+            val resourceId = resources.getIdentifier(smallIcon, "drawable", packageName)
+            if (resourceId != 0) {
+                notificationBuilder.setSmallIcon(resourceId)
+            } else {
+                DashXLog.e(tag, "Image resource not found for notification $id")
+            }
+        }
+
+        dashXData.largeIcon?.let { largeIcon ->
+            try {
+                // Check if it's a URL
+                if (URLUtil.isValidUrl(largeIcon)) {
+
+                    val url = URL(largeIcon)
+                    val connection = url.openConnection() as HttpURLConnection
+                    connection.doInput = true
+                    connection.connect()
+
+                    val input: InputStream = connection.inputStream
+                    val largeIconBitmap = BitmapFactory.decodeStream(input)
+
+                    notificationBuilder.setLargeIcon(largeIconBitmap)
+                } else { // Check if it's a resource
+                    val resourceId = resources.getIdentifier(largeIcon, "drawable", packageName)
+
+                    if (resourceId != 0) { // Valid resource
+                        val largeIconBitmap = BitmapFactory.decodeResource(resources, resourceId)
+                        notificationBuilder.setLargeIcon(largeIconBitmap)
+                    } else {
+                        DashXLog.e(tag, "Large icon resource not found for notification $id")
+                    }
+                }
+            } catch (e: java.lang.Exception) {
+                DashXLog.e(tag, e.toString())
+            }
+        }
+
+        dashXData.sound?.let { sound ->
+            val resourceId = resources.getIdentifier(sound, "raw", packageName)
+            if (resourceId != 0) {
+                notificationBuilder.setSound(Uri.parse("android.resource://$packageName/resourceId"))
+            } else {
+                DashXLog.e(tag, "Sound resource not found for notification $id")
+            }
+        }
+
+        dashXData.visibility?.let { visibility ->
+            notificationBuilder.setVisibility(visibility.toInt())
+        }
+
+        dashXData.notificationCount?.let { count ->
+            notificationBuilder.setNumber(count.toInt())
+        }
+
+        dashXData.lightSettings?.let { lightSettings ->
+            val gson = Gson()
+            var ls = gson.fromJson(lightSettings, LightSettings::class.java)
+            val color = Color.parseColor(ls.color)
+            notificationBuilder.setLights(color, ls.on, ls.off)
+        }
+
+        dashXData.color?.let { color ->
+            val color = Color.parseColor(color)
+            notificationBuilder.setColor(color)
         }
 
         return notificationBuilder.build()
     }
 
     private fun getNewPendingIntent(): PendingIntent {
-        val context = getApplicationContext()
+        val context = applicationContext
         val pendingIntentFlags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
 
         val intent = getNewBaseIntent()
 
         val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
-
-        if (launchIntent == null) {
-            return PendingIntent.getActivity(context, 1, intent, pendingIntentFlags)
-        }
+            ?: return PendingIntent.getActivity(context, 1, intent, pendingIntentFlags)
 
         // Mimic launcher behaviour
         launchIntent.setPackage(null)
@@ -145,44 +245,16 @@ class DashXFirebaseMessagingService : FirebaseMessagingService() {
         )
     }
 
-    private fun getSmallIcon(): Int {
-        val context = getApplicationContext()
-        val ai = context.getPackageManager()
-            .getApplicationInfo(context.getPackageName(), PackageManager.GET_META_DATA)
-
-        var smallIconInt: Int
-
-        try {
-            val smallIcon = ai.metaData.get(DX_NOTIFICATION_ICON)
-
-            if (smallIcon == null) {
-                throw IllegalArgumentException()
-            }
-
-            smallIconInt = context.getResources()
-                .getIdentifier(smallIcon as String, "drawable", context.getPackageName())
-
-            if (smallIconInt == 0) {
-                throw IllegalArgumentException()
-            }
-        } catch (e: IllegalArgumentException) {
-            smallIconInt = ai.icon
-        }
-
-        return smallIconInt
-    }
-
-    fun appInForeground(): Boolean {
-        val context = getApplicationContext()
+    private fun appInForeground(): Boolean {
+        val context = applicationContext
         val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
         val runningAppProcesses = activityManager.runningAppProcesses ?: return false
         return runningAppProcesses.any { it.processName == context.packageName && it.importance == ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND }
     }
 
     companion object {
-        private const val CHANNEL_NAME = "DashX Notification"
+        private const val CHANNEL_NAME = "Default Channel"
         private const val CHANNEL_DESCRIPTION = "DashX's default notification channel"
         private const val CHANNEL_ID = "DASHX_NOTIFICATION_CHANNEL"
-        private const val DX_NOTIFICATION_ICON = "DX_NOTIFICATION_ICON"
     }
 }
