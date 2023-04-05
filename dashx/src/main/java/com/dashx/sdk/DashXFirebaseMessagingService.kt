@@ -1,6 +1,7 @@
 package com.dashx.sdk
 
 import android.app.*
+import android.content.ContentResolver
 import android.content.Context
 import android.content.Intent
 import android.graphics.BitmapFactory
@@ -17,7 +18,8 @@ import com.google.gson.annotations.SerializedName
 import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
-
+import android.content.pm.PackageManager
+import android.media.AudioAttributes
 
 data class DashXPayload(
     @SerializedName("id") val id: String,
@@ -57,6 +59,8 @@ class DashXFirebaseMessagingService : FirebaseMessagingService() {
 
         val dashxDataMap = remoteMessage.data["dashx"]
 
+        DashXLog.d(tag, "DashXDataMap: $dashxDataMap")
+
         if (dashxDataMap != null) {
             DashXLog.d(tag, "Generating DashX notification...")
 
@@ -68,7 +72,7 @@ class DashXFirebaseMessagingService : FirebaseMessagingService() {
             val body = dashXData.body
 
             if ((title != null) || (body != null)) {
-                createNotificationChannel(dashXData.channelId)
+                createNotificationChannel(dashXData)
 
                 NotificationManagerCompat.from(this)
                     .notify(id, 1, createNotification(dashXData))
@@ -76,7 +80,10 @@ class DashXFirebaseMessagingService : FirebaseMessagingService() {
         }
     }
 
-    private fun createNotificationChannel(channelId: String? = CHANNEL_ID) {
+    private fun createNotificationChannel(dashXData: DashXPayload) {
+        val channelId = dashXData.channelId ?: CHANNEL_ID
+        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 channelId,
@@ -84,10 +91,27 @@ class DashXFirebaseMessagingService : FirebaseMessagingService() {
                 NotificationManager.IMPORTANCE_DEFAULT
             )
 
+            dashXData.sound?.let { sound ->
+                buildSoundUri(sound)?.let { uri ->
+                    val audioAttributesBuilder = AudioAttributes.Builder()
+                    audioAttributesBuilder.setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    audioAttributesBuilder.setUsage(AudioAttributes.USAGE_NOTIFICATION)
+
+                    channel.setSound(uri, audioAttributesBuilder.build())
+                }
+            }
+
+            dashXData.lightSettings?.let { lightSettings ->
+                val gson = Gson()
+                var ls = gson.fromJson(lightSettings, LightSettings::class.java)
+
+                channel.enableLights(true)
+                channel.lightColor = Color.parseColor(ls.color)
+            }
+
             channel.description = CHANNEL_DESCRIPTION
 
-            (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
-                .createNotificationChannel(channel)
+            notificationManager.createNotificationChannel(channel)
         }
     }
 
@@ -109,9 +133,12 @@ class DashXFirebaseMessagingService : FirebaseMessagingService() {
             .setAutoCancel(true)
 
         dashXData.image?.let { image ->
+            DashXLog.d(tag, "Trying to attach image")
+
             try {
                 // Check if it's a URL
                 if (URLUtil.isValidUrl(image)) {
+                    DashXLog.d(tag, "Image URL is valid")
 
                     val url = URL(image)
                     val connection = url.openConnection() as HttpURLConnection
@@ -125,9 +152,13 @@ class DashXFirebaseMessagingService : FirebaseMessagingService() {
                         NotificationCompat.BigPictureStyle().bigPicture(imageBitmap)
                     )
                 } else { // Check if it's a resource
+                    DashXLog.d(tag, "Invalid Image URL, checking if it's a resource")
+
                     val resourceId = resources.getIdentifier(image, "drawable", packageName)
 
                     if (resourceId != 0) { // Valid resource
+                        DashXLog.d(tag, "Image is a valid resource")
+
                         val imageBitmap = BitmapFactory.decodeResource(resources, resourceId)
                         notificationBuilder.setStyle(
                             NotificationCompat.BigPictureStyle().bigPicture(imageBitmap)
@@ -146,14 +177,18 @@ class DashXFirebaseMessagingService : FirebaseMessagingService() {
             if (resourceId != 0) {
                 notificationBuilder.setSmallIcon(resourceId)
             } else {
-                DashXLog.e(tag, "Image resource not found for notification $id")
+                DashXLog.e(tag, "Small icon resource not found for notification $id")
+                notificationBuilder.setSmallIcon(getDefaultSmallIcon())
             }
+        }?:run {
+            notificationBuilder.setSmallIcon(getDefaultSmallIcon())
         }
 
         dashXData.largeIcon?.let { largeIcon ->
             try {
                 // Check if it's a URL
                 if (URLUtil.isValidUrl(largeIcon)) {
+                    DashXLog.d(tag, "Large icon URL is valid")
 
                     val url = URL(largeIcon)
                     val connection = url.openConnection() as HttpURLConnection
@@ -165,6 +200,8 @@ class DashXFirebaseMessagingService : FirebaseMessagingService() {
 
                     notificationBuilder.setLargeIcon(largeIconBitmap)
                 } else { // Check if it's a resource
+                    DashXLog.d(tag, "Invalid large icon URL, checking if it's a resource")
+
                     val resourceId = resources.getIdentifier(largeIcon, "drawable", packageName)
 
                     if (resourceId != 0) { // Valid resource
@@ -180,11 +217,10 @@ class DashXFirebaseMessagingService : FirebaseMessagingService() {
         }
 
         dashXData.sound?.let { sound ->
-            val resourceId = resources.getIdentifier(sound, "raw", packageName)
-            if (resourceId != 0) {
-                notificationBuilder.setSound(Uri.parse("android.resource://$packageName/resourceId"))
-            } else {
-                DashXLog.e(tag, "Sound resource not found for notification $id")
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+                buildSoundUri(sound)?.let { uri ->
+                    notificationBuilder.setSound(uri)
+                }
             }
         }
 
@@ -197,10 +233,12 @@ class DashXFirebaseMessagingService : FirebaseMessagingService() {
         }
 
         dashXData.lightSettings?.let { lightSettings ->
-            val gson = Gson()
-            var ls = gson.fromJson(lightSettings, LightSettings::class.java)
-            val color = Color.parseColor(ls.color)
-            notificationBuilder.setLights(color, ls.on, ls.off)
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+                val gson = Gson()
+                var ls = gson.fromJson(lightSettings, LightSettings::class.java)
+                val color = Color.parseColor(ls.color)
+                notificationBuilder.setLights(color, ls.on, ls.off)
+            }
         }
 
         dashXData.color?.let { color ->
@@ -243,6 +281,31 @@ class DashXFirebaseMessagingService : FirebaseMessagingService() {
         )
     }
 
+    private fun getDefaultSmallIcon(): Int {
+        val ai = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            packageManager.getApplicationInfo(packageName, PackageManager.ApplicationInfoFlags.of(0));
+        } else {
+            packageManager.getApplicationInfo(packageName, PackageManager.GET_META_DATA)
+        }
+
+        return ai.icon
+    }
+
+    private fun buildSoundUri(sound: String): Uri? {
+        DashXLog.d(tag, "Trying to fetch sound resource...")
+
+        val resourceId = resources.getIdentifier(sound, "raw", packageName)
+        if (resourceId != 0) {
+            DashXLog.d(tag, "Sound resource found...")
+
+            return Uri.parse(ContentResolver.SCHEME_ANDROID_RESOURCE + "://$packageName/$resourceId")
+        } else {
+            DashXLog.e(tag, "Sound resource not found.")
+        }
+
+        return null
+    }
+
     private fun appInForeground(): Boolean {
         val context = applicationContext
         val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
@@ -252,7 +315,7 @@ class DashXFirebaseMessagingService : FirebaseMessagingService() {
 
     companion object {
         private const val CHANNEL_NAME = "Default Channel"
-        private const val CHANNEL_DESCRIPTION = "DashX's default notification channel"
+        private const val CHANNEL_DESCRIPTION = "Default notification channel"
         private const val CHANNEL_ID = "DASHX_NOTIFICATION_CHANNEL"
     }
 }

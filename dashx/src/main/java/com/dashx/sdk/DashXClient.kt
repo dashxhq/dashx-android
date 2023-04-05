@@ -636,6 +636,8 @@ class DashXClient {
                     return@OnCompleteListener
                 }
 
+                DashXLog.d(tag, "New token generated: $newToken")
+
                 val savedToken = getDashXSharedPreferences(context!!).getString(
                     SHARED_PREFERENCES_KEY_DEVICE_TOKEN, null
                 )
