@@ -622,67 +622,67 @@ class DashXClient {
 
     fun subscribe() {
         FirebaseMessaging.getInstance().token.addOnCompleteListener(OnCompleteListener { task ->
-                if (!task.isSuccessful) {
-                    DashXLog.e(
-                        tag, "FirebaseMessaging.getInstance().getToken() failed: $task.exception"
-                    )
-                    return@OnCompleteListener
-                }
-
-                val newToken = task.result
-
-                if (newToken == null) {
-                    DashXLog.e(tag, "Didn't receive any token from Firebase.")
-                    return@OnCompleteListener
-                }
-
-                DashXLog.d(tag, "New token generated: $newToken")
-
-                val savedToken = getDashXSharedPreferences(context!!).getString(
-                    SHARED_PREFERENCES_KEY_DEVICE_TOKEN, null
+            if (!task.isSuccessful) {
+                DashXLog.e(
+                    tag, "FirebaseMessaging.getInstance().getToken() failed: $task.exception"
                 )
+                return@OnCompleteListener
+            }
 
-                if (savedToken == newToken) {
-                    DashXLog.d(tag, "Already subscribed: $savedToken")
-                    return@OnCompleteListener
-                }
+            val newToken = task.result
 
-                val name = Settings.Global.getString(
-                    context?.contentResolver, Settings.Global.DEVICE_NAME
-                ) ?: Settings.Secure.getString(context?.contentResolver, "bluetooth_name")
+            if (newToken == null) {
+                DashXLog.e(tag, "Didn't receive any token from Firebase.")
+                return@OnCompleteListener
+            }
 
-                val query = SubscribeContact(
-                    variables = SubscribeContact.Variables(
-                        SubscribeContactInput(
-                            accountUid = accountUid,
-                            accountAnonymousUid = accountAnonymousUid,
-                            name = name,
-                            kind = ContactKind.ANDROID,
-                            value = newToken!!,
-                            osName = "Android",
-                            osVersion = Build.VERSION.RELEASE,
-                            deviceManufacturer = Build.MANUFACTURER,
-                            deviceModel = Build.MODEL
-                        )
+            DashXLog.d(tag, "New token generated: $newToken")
+
+            val savedToken = getDashXSharedPreferences(context!!).getString(
+                SHARED_PREFERENCES_KEY_DEVICE_TOKEN, null
+            )
+
+            if (savedToken == newToken) {
+                DashXLog.d(tag, "Already subscribed: $savedToken")
+                return@OnCompleteListener
+            }
+
+            val name = Settings.Global.getString(
+                context?.contentResolver, Settings.Global.DEVICE_NAME
+            ) ?: Settings.Secure.getString(context?.contentResolver, "bluetooth_name")
+
+            val query = SubscribeContact(
+                variables = SubscribeContact.Variables(
+                    SubscribeContactInput(
+                        accountUid = accountUid,
+                        accountAnonymousUid = accountAnonymousUid,
+                        name = name,
+                        kind = ContactKind.ANDROID,
+                        value = newToken!!,
+                        osName = "Android",
+                        osVersion = Build.VERSION.RELEASE,
+                        deviceManufacturer = Build.MANUFACTURER,
+                        deviceModel = Build.MODEL
                     )
                 )
+            )
 
-                coroutineScope.launch {
-                    val result = graphqlClient.execute(query)
+            coroutineScope.launch {
+                val result = graphqlClient.execute(query)
 
-                    if (!result.errors.isNullOrEmpty()) {
-                        val errors = result.errors?.toString() ?: ""
-                        DashXLog.e(tag, "Failed to subscribe: $errors")
-                        return@launch
-                    } else {
-                        getDashXSharedPreferences(context!!).edit().apply {
-                            putString(SHARED_PREFERENCES_KEY_DEVICE_TOKEN, newToken)
-                        }.apply()
-                    }
-
-                    result.data?.subscribeContact.let { gson.toJsonTree(it) }
+                if (!result.errors.isNullOrEmpty()) {
+                    val errors = result.errors?.toString() ?: ""
+                    DashXLog.e(tag, "Failed to subscribe: $errors")
+                    return@launch
+                } else {
+                    getDashXSharedPreferences(context!!).edit().apply {
+                        putString(SHARED_PREFERENCES_KEY_DEVICE_TOKEN, newToken)
+                    }.apply()
                 }
-            })
+
+                result.data?.subscribeContact.let { gson.toJsonTree(it) }
+            }
+        })
     }
 
     fun unsubscribe() {
