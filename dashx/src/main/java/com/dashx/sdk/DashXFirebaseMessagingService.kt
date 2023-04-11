@@ -34,6 +34,7 @@ data class DashXPayload(
     @SerializedName("notification_count") val notificationCount: String?,
     @SerializedName("light_settings") val lightSettings: String?,
     @SerializedName("color") val color: String?,
+    @SerializedName("tag") val tag: String?,
     @SerializedName("click_action") val clickAction: String?,
 )
 
@@ -59,23 +60,21 @@ class DashXFirebaseMessagingService : FirebaseMessagingService() {
 
         val dashxDataMap = remoteMessage.data["dashx"]
 
-        DashXLog.d(tag, "DashXDataMap: $dashxDataMap")
-
         if (dashxDataMap != null) {
             DashXLog.d(tag, "Generating DashX notification...")
 
             val gson = Gson()
             var dashXData = gson.fromJson(dashxDataMap, DashXPayload::class.java)
-
-            val id = dashXData.id
             val title = dashXData.title
             val body = dashXData.body
 
             if ((title != null) || (body != null)) {
                 createNotificationChannel(dashXData)
 
+                val tag = dashXData.tag ?: dashXData.id
+
                 NotificationManagerCompat.from(this)
-                    .notify(id, 1, createNotification(dashXData))
+                    .notify(tag, 1, createNotification(dashXData))
             }
         }
     }
@@ -124,13 +123,10 @@ class DashXFirebaseMessagingService : FirebaseMessagingService() {
         val body = dashXData.body
         val channelId = dashXData.channelId ?: CHANNEL_ID
 
-        val pendingIntent = getNewPendingIntent()
-
         val notificationBuilder = NotificationCompat.Builder(this, channelId)
             .setContentTitle(title)
             .setContentText(body)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-            .setContentIntent(pendingIntent)
             .setAutoCancel(true)
 
         dashXData.image?.let { image ->
@@ -247,14 +243,17 @@ class DashXFirebaseMessagingService : FirebaseMessagingService() {
             notificationBuilder.setColor(color)
         }
 
+        val defaultPendingIntent = getDefaultPendingIntent(dashXData.clickAction)
+        notificationBuilder.setContentIntent(defaultPendingIntent)
+
         return notificationBuilder.build()
     }
 
-    private fun getNewPendingIntent(): PendingIntent {
+    private fun getDefaultPendingIntent(className: String?): PendingIntent {
         val context = applicationContext
         val pendingIntentFlags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
 
-        val intent = getNewBaseIntent()
+        val intent = getNewBaseIntent(className)
 
         val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
             ?: return PendingIntent.getActivity(context, 1, intent, pendingIntentFlags)
@@ -272,10 +271,13 @@ class DashXFirebaseMessagingService : FirebaseMessagingService() {
         )
     }
 
-    private fun getNewBaseIntent(): Intent {
+    private fun getNewBaseIntent(className: String?): Intent {
+        val activityClassName =
+            if (className != null) Class.forName(className) else notificationReceiverClass
+
         return Intent(
             this,
-            notificationReceiverClass
+            activityClassName
         ).addFlags(
             Intent.FLAG_ACTIVITY_SINGLE_TOP or
                 Intent.FLAG_ACTIVITY_CLEAR_TOP

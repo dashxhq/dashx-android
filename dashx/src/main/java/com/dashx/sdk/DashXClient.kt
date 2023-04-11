@@ -9,6 +9,7 @@ import com.dashx.graphql.generated.*
 import com.dashx.graphql.generated.enums.AssetUploadStatus
 import com.dashx.graphql.generated.enums.ContactKind
 import com.dashx.graphql.generated.enums.TrackNotificationStatus
+import com.dashx.graphql.generated.fetchstoredpreferences.FetchStoredPreferencesResponse
 import com.dashx.graphql.generated.inputs.*
 import com.dashx.sdk.data.LibraryInfo
 import com.dashx.sdk.data.PrepareAssetResponse
@@ -277,8 +278,6 @@ class DashXClient {
 
             result.data?.fetchContent?.let { onSuccess(it) }
         }
-
-
     }
 
     fun searchContent(
@@ -339,7 +338,8 @@ class DashXClient {
     }
 
     fun fetchStoredPreferences(
-        onSuccess: (result: JsonObject) -> Unit, onError: (error: String) -> Unit
+        onSuccess: (result: FetchStoredPreferencesResponse) -> Unit,
+        onError: (error: String) -> Unit
     ) {
         val query = FetchStoredPreferences(
             variables = FetchStoredPreferences.Variables(FetchStoredPreferencesInput(accountUid!!))
@@ -355,7 +355,7 @@ class DashXClient {
                 return@launch
             }
 
-            result.data?.fetchStoredPreferences?.let { onSuccess(Json.parseToJsonElement(it.toString()).jsonObject) }
+            result.data?.fetchStoredPreferences?.let { onSuccess(it) }
         }
     }
 
