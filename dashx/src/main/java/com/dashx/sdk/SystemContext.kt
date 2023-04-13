@@ -11,8 +11,6 @@ import com.dashx.sdk.utils.SystemContextConstants.BLUETOOTH
 import com.dashx.sdk.utils.SystemContextConstants.BUILD
 import com.dashx.sdk.utils.SystemContextConstants.CARRIER
 import com.dashx.sdk.utils.SystemContextConstants.CELLULAR
-import com.dashx.sdk.utils.SystemContextConstants.CITY
-import com.dashx.sdk.utils.SystemContextConstants.COUNTRY
 import com.dashx.sdk.utils.SystemContextConstants.DEBUG
 import com.dashx.sdk.utils.SystemContextConstants.DENSITY
 import com.dashx.sdk.utils.SystemContextConstants.DEVICE
@@ -99,8 +97,11 @@ class SystemContext {
 
     private fun setDeviceInfo() {
         val device = HashMap<String, Any>()
-        device[AD_TRACKING_ENABLED] = context?.let { getDashXSharedPreferences(it).getBoolean(AD_TRACKING_ENABLED, false) } ?: false
-        device[ADVERTISING_ID] = context?.let { getDashXSharedPreferences(it).getString(ADVERTISING_ID, "") } ?: ""
+        device[AD_TRACKING_ENABLED] =
+            context?.let { getDashXSharedPreferences(it).getBoolean(AD_TRACKING_ENABLED, false) }
+                ?: false
+        device[ADVERTISING_ID] =
+            context?.let { getDashXSharedPreferences(it).getString(ADVERTISING_ID, "") } ?: ""
         device[ID] = getDeviceId(context!!)
         device[KIND] = getDeviceKind()
         device[MANUFACTURER] = getDeviceManufacturer()
@@ -196,7 +197,12 @@ class SystemContext {
     }
 
     fun getIpAddress(): JSONObject {
-        return JSONObject(hashMapOf(IPV4 to systemContextHashMap[IPV4], IPV6 to systemContextHashMap[IPV6]))
+        return JSONObject(
+            hashMapOf(
+                IPV4 to systemContextHashMap[IPV4],
+                IPV6 to systemContextHashMap[IPV6]
+            )
+        )
     }
 
     private fun setLocationInfo() {
