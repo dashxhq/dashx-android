@@ -6,13 +6,10 @@ import android.content.Context
 import android.content.DialogInterface
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.Manifest
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
-import android.widget.Toast
 import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
 import com.dashx.sdk.DashXLog
 
 object PermissionUtils {
@@ -21,7 +18,11 @@ object PermissionUtils {
     fun hasPermissions(context: Context, vararg permissions: String): Boolean {
         if (requireRuntimePermissions()) {
             for (permission in permissions) {
-                if (ActivityCompat.checkSelfPermission(context, permission) != PackageManager.PERMISSION_GRANTED) {
+                if (ActivityCompat.checkSelfPermission(
+                        context,
+                        permission
+                    ) != PackageManager.PERMISSION_GRANTED
+                ) {
                     return false
                 }
             }
@@ -40,7 +41,8 @@ object PermissionUtils {
             return
         }
 
-        val permissionName = permission.substringAfterLast(".").lowercase().replaceFirstChar { it.titlecase() }
+        val permissionName =
+            permission.substringAfterLast(".").lowercase().replaceFirstChar { it.titlecase() }
 
         if (ActivityCompat.shouldShowRequestPermissionRationale(activity, permission)) {
             val builder = buildAlertDialog(activity)

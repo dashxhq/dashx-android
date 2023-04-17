@@ -50,7 +50,7 @@ coroutineScope.launch {
            return@launch
      }
 
-     result.data?.fetchContent?.let { onSuccess(gson.toJsonTree(it).asJsonObject) }
+     result.data?.fetchContent?.let { onSuccess(it) }
 }
 ```
 

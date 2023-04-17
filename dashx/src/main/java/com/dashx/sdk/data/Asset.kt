@@ -1,8 +1,10 @@
 package com.dashx.sdk.data
 
-import com.google.gson.annotations.SerializedName
 import com.dashx.graphql.generated.enums.AssetUploadStatus
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 
+@Serializable
 data class Asset(
     val id: String,
     val resourceId: String,
@@ -11,19 +13,22 @@ data class Asset(
     val data: AssetData,
 )
 
+@Serializable
 data class AssetData(
-    val asset: UploadData?,
-    val upload: UploadData?
+    val asset: UploadData? = null,
+    val upload: UploadData? = null
 )
 
+@Serializable
 data class UploadData(
     val status: String,
     var url: String,
-    @SerializedName("playback_ids")
+    @SerialName("playback_ids")
     val playbackIds: List<PlaybackData>
 )
 
+@Serializable
 data class PlaybackData(
-    val id: String?,
+    val id: String? = null,
     val policy: String
 )
