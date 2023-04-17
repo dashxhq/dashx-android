@@ -15,33 +15,37 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
-import com.google.gson.Gson
-import com.google.gson.annotations.SerializedName
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.json.Json
 import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 
+@Serializable
 data class DashXPayload(
-    @SerializedName("id") val id: String,
-    @SerializedName("title") val title: String?,
-    @SerializedName("body") val body: String?,
-    @SerializedName("image") val image: String?,
-    @SerializedName("small_icon") val smallIcon: String?,
-    @SerializedName("large_icon") val largeIcon: String?,
-    @SerializedName("channel_id") val channelId: String?,
-    @SerializedName("sound") val sound: String?,
-    @SerializedName("visibility") val visibility: String?,
-    @SerializedName("notification_count") val notificationCount: String?,
-    @SerializedName("light_settings") val lightSettings: String?,
-    @SerializedName("color") val color: String?,
-    @SerializedName("tag") val tag: String?,
-    @SerializedName("click_action") val clickAction: String?,
+    @SerialName("id") val id: String,
+    @SerialName("title") val title: String? = null,
+    @SerialName("body") val body: String? = null,
+    @SerialName("image") val image: String? = null,
+    @SerialName("small_icon") val smallIcon: String? = null,
+    @SerialName("large_icon") val largeIcon: String? = null,
+    @SerialName("channel_id") val channelId: String? = null,
+    @SerialName("sound") val sound: String? = null,
+    @SerialName("visibility") val visibility: String? = null,
+    @SerialName("notification_count") val notificationCount: String? = null,
+    @SerialName("light_settings") val lightSettings: String? = null,
+    @SerialName("color") val color: String? = null,
+    @SerialName("tag") val tag: String? = null,
+    @SerialName("click_action") val clickAction: String? = null,
 )
 
+@Serializable
 data class LightSettings(
-    @SerializedName("color") val color: String,
-    @SerializedName("light_on_duration") val on: Int,
-    @SerializedName("light_off_duration") val off: Int,
+    @SerialName("color") val color: String,
+    @SerialName("light_on_duration") val on: Int,
+    @SerialName("light_off_duration") val off: Int,
 )
 
 class DashXFirebaseMessagingService : FirebaseMessagingService() {
@@ -63,8 +67,9 @@ class DashXFirebaseMessagingService : FirebaseMessagingService() {
         if (dashxDataMap != null) {
             DashXLog.d(tag, "Generating DashX notification...")
 
-            val gson = Gson()
-            var dashXData = gson.fromJson(dashxDataMap, DashXPayload::class.java)
+            var dashXData =
+                Json { ignoreUnknownKeys = true }.decodeFromString<DashXPayload>(dashxDataMap)
+
             val title = dashXData.title
             val body = dashXData.body
 
@@ -102,8 +107,8 @@ class DashXFirebaseMessagingService : FirebaseMessagingService() {
             }
 
             dashXData.lightSettings?.let { lightSettings ->
-                val gson = Gson()
-                var ls = gson.fromJson(lightSettings, LightSettings::class.java)
+                var ls =
+                    Json { ignoreUnknownKeys = true }.decodeFromString<LightSettings>(lightSettings)
 
                 channel.enableLights(true)
                 channel.lightColor = Color.parseColor(ls.color)
@@ -231,9 +236,10 @@ class DashXFirebaseMessagingService : FirebaseMessagingService() {
 
         dashXData.lightSettings?.let { lightSettings ->
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-                val gson = Gson()
-                var ls = gson.fromJson(lightSettings, LightSettings::class.java)
+                var ls =
+                    Json { ignoreUnknownKeys = true }.decodeFromString<LightSettings>(lightSettings)
                 val color = Color.parseColor(ls.color)
+
                 notificationBuilder.setLights(color, ls.on, ls.off)
             }
         }
@@ -289,7 +295,7 @@ class DashXFirebaseMessagingService : FirebaseMessagingService() {
             packageManager.getApplicationInfo(
                 packageName,
                 PackageManager.ApplicationInfoFlags.of(0)
-            );
+            )
         } else {
             packageManager.getApplicationInfo(packageName, PackageManager.GET_META_DATA)
         }

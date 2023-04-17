@@ -2,6 +2,9 @@ package com.dashx.sdk
 
 import android.content.Context
 import android.content.pm.ApplicationInfo
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.core.content.pm.PackageInfoCompat
 import com.dashx.sdk.data.LibraryInfo
 import com.dashx.sdk.utils.*
 import com.dashx.sdk.utils.SystemContextConstants.ADVERTISING_ID
@@ -89,7 +92,7 @@ class SystemContext {
         val network = hashMapOf<String, Any>()
         network[BLUETOOTH] = getBluetoothInfo(context!!)
         network[CARRIER] = getCarrierInfo(context!!)
-        network[CELLULAR] = getCellularInfo(context!!).toString()
+        network[CELLULAR] = getCellularInfo(context!!)
         network[WIFI] = getWifiInfo(context!!)
 
         put(NETWORK, network)
@@ -148,7 +151,17 @@ class SystemContext {
 
     private fun setAppInfo() {
         val packageManager = context?.packageManager
-        val packageInfo = context?.packageName?.let { packageManager?.getPackageInfo(it, 0) }
+        val packageInfo = context?.packageName?.let {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                packageManager?.getPackageInfo(it, PackageManager.PackageInfoFlags.of(0))
+            } else {
+                packageManager?.getPackageInfo(it, 0)
+            }
+        }
+
+        val versionCode =
+            packageInfo?.let { PackageInfoCompat.getLongVersionCode(packageInfo).toString() } ?: ""
+
         val hashMap = HashMap<String, Any>()
         packageInfo?.let {
             if (packageManager != null) {
@@ -156,8 +169,8 @@ class SystemContext {
             }
             hashMap[NAMESPACE] = it.packageName
             hashMap[VERSION_NUMBER] = it.versionName
-            hashMap[VERSION_CODE] = it.versionCode
-            hashMap[BUILD] = it.versionCode
+            hashMap[VERSION_CODE] = versionCode
+            hashMap[BUILD] = versionCode
             hashMap[RELEASE_MODE] =
                 if (0 != context?.applicationInfo?.flags!! and ApplicationInfo.FLAG_DEBUGGABLE) {
                     DEBUG
@@ -210,9 +223,9 @@ class SystemContext {
         val location = getLocationCoordinates(context!!)
 
         if (location != null) {
-            locationData[LATITUDE] = location?.latitude ?: 0.0
-            locationData[LONGITUDE] = location?.longitude ?: 0.0
-            locationData[SPEED] = location?.getSpeed() ?: 0F
+            locationData[LATITUDE] = location.latitude
+            locationData[LONGITUDE] = location.longitude
+            locationData[SPEED] = location.speed
         }
 
         put(LOCATION, locationData)

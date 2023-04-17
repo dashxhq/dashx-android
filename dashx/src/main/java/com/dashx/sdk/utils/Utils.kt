@@ -3,19 +3,21 @@
 package com.dashx.sdk.utils
 
 import android.content.Context
+import android.content.SharedPreferences
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
-import android.content.SharedPreferences
 import android.net.Uri
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.InputStream
 
-fun getPackageInfo(context: Context): PackageInfo = context.packageManager.getPackageInfo(context.packageName, PackageManager.GET_META_DATA)
+fun getPackageInfo(context: Context): PackageInfo =
+    context.packageManager.getPackageInfo(context.packageName, PackageManager.GET_META_DATA)
 
 fun getPrefKey(context: Context) = "$PACKAGE_NAME.$DEFAULT_INSTANCE.packageName"
 
-fun getDashXSharedPreferences(context: Context): SharedPreferences = context.getSharedPreferences(getPrefKey(context), Context.MODE_PRIVATE)
+fun getDashXSharedPreferences(context: Context): SharedPreferences =
+    context.getSharedPreferences(getPrefKey(context), Context.MODE_PRIVATE)
 
 fun getFileContentType(context: Context?, file: File): String {
     val contentResolver = context?.contentResolver

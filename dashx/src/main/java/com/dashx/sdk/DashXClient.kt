@@ -11,20 +11,22 @@ import com.dashx.graphql.generated.enums.ContactKind
 import com.dashx.graphql.generated.enums.TrackNotificationStatus
 import com.dashx.graphql.generated.fetchstoredpreferences.FetchStoredPreferencesResponse
 import com.dashx.graphql.generated.inputs.*
+import com.dashx.graphql.generated.savestoredpreferences.SaveStoredPreferencesResponse
 import com.dashx.sdk.data.LibraryInfo
 import com.dashx.sdk.data.PrepareAssetResponse
 import com.dashx.sdk.utils.*
 import com.expediagroup.graphql.client.serialization.GraphQLClientKotlinxSerializer
 import com.google.android.gms.tasks.OnCompleteListener
 import com.google.firebase.messaging.FirebaseMessaging
-import com.google.gson.Gson
 import io.ktor.client.*
 import io.ktor.client.plugins.*
 import io.ktor.client.plugins.logging.*
 import io.ktor.client.request.*
 import kotlinx.coroutines.*
+import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.jsonObject
 import org.json.JSONObject
 import java.io.File
@@ -34,7 +36,6 @@ import java.net.URL
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.TimeUnit
-import com.google.gson.JsonObject as GJsonObject
 
 class DashXClient {
 
@@ -51,7 +52,6 @@ class DashXClient {
     private var context: Context? = null
 
     private var pollCounter = 1
-    private val gson by lazy { Gson() }
     private val coroutineScope = CoroutineScope(Dispatchers.IO)
 
     companion object {
@@ -211,7 +211,7 @@ class DashXClient {
                 return@launch
             }
 
-            DashXLog.d(tag, result.data?.identifyAccount?.let { gson.toJsonTree(it) }.toString())
+            DashXLog.d(tag, result.data?.identifyAccount?.toString())
         }
 
     }
@@ -318,7 +318,8 @@ class DashXClient {
     }
 
     fun fetchCart(
-        onSuccess: (result: JsonObject) -> Unit, onError: (error: String) -> Unit
+        onSuccess: (result: com.dashx.graphql.generated.fetchcart.Order) -> Unit,
+        onError: (error: String) -> Unit
     ) {
 
         val query = FetchCart(variables = FetchCart.Variables(FetchCartInput(accountUid!!)))
@@ -333,7 +334,7 @@ class DashXClient {
                 return@launch
             }
 
-            result.data?.fetchCart?.let { onSuccess(Json.parseToJsonElement(it.toString()).jsonObject) }
+            result.data?.fetchCart?.let { onSuccess(it) }
         }
     }
 
@@ -389,11 +390,21 @@ class DashXClient {
                 return@launch
             }
 
-            val url = (gson.fromJson(
-                result.data?.prepareAsset?.data.toString(), PrepareAssetResponse::class.java
-            )).upload.url
+            val prepareAssetResponse = result.data?.prepareAsset?.data?.let {
+                Json { ignoreUnknownKeys = true }.decodeFromJsonElement<PrepareAssetResponse>(
+                    it
+                )
+            }
 
-            writeFileToUrl(file, url, result.data?.prepareAsset?.id ?: "", onSuccess, onError)
+            if (prepareAssetResponse?.upload != null) {
+                writeFileToUrl(
+                    file,
+                    prepareAssetResponse.upload.url,
+                    result.data?.prepareAsset?.id ?: "",
+                    onSuccess,
+                    onError
+                )
+            }
         }
     }
 
@@ -452,11 +463,13 @@ class DashXClient {
             pollCounter = 1
             val responseObject = result.data?.asset
             val externalDataJsonObject = responseObject?.data?.let { JSONObject(it) }
-            val responseJsonObject = JSONObject(gson.toJson(responseObject))
+            val responseJsonObject = JSONObject(responseObject.toString())
             responseJsonObject.put(DATA, externalDataJsonObject)
 
             val asset =
-                gson.fromJson(responseJsonObject.toString(), com.dashx.sdk.data.Asset::class.java)
+                Json { ignoreUnknownKeys = true }.decodeFromString<com.dashx.sdk.data.Asset>(
+                    responseJsonObject.toString()
+                )
 
             if (asset.data.asset?.url == null && !asset.data.asset?.playbackIds.isNullOrEmpty()) {
                 asset.data.asset?.url =
@@ -468,8 +481,8 @@ class DashXClient {
     }
 
     fun saveStoredPreferences(
-        preferenceData: GJsonObject,
-        onSuccess: (result: JsonObject) -> Unit,
+        preferenceData: JsonObject,
+        onSuccess: (result: SaveStoredPreferencesResponse) -> Unit,
         onError: (error: String) -> Unit
     ) {
         val query = SaveStoredPreferences(
@@ -490,7 +503,7 @@ class DashXClient {
                 return@launch
             }
 
-            result.data?.saveStoredPreferences?.let { onSuccess(Json.parseToJsonElement(it.toString()).jsonObject) }
+            result.data?.saveStoredPreferences?.let { onSuccess(it) }
         }
     }
 
@@ -500,7 +513,7 @@ class DashXClient {
         quantity: String,
         reset: Boolean,
         custom: JsonObject? = null,
-        onSuccess: (result: JsonObject) -> Unit,
+        onSuccess: (result: com.dashx.graphql.generated.additemtocart.Order) -> Unit,
         onError: (error: String) -> Unit
     ) {
         val query = AddItemToCart(
@@ -525,13 +538,19 @@ class DashXClient {
                 return@launch
             }
 
-            result.data?.addItemToCart.let { onSuccess(Json.parseToJsonElement(it.toString()).jsonObject) }
+            result.data?.let { onSuccess(it.addItemToCart) }
         }
     }
 
     fun track(event: String, data: HashMap<String, String>? = hashMapOf()) {
         val jsonData =
-            data?.toMap()?.let { Json.parseToJsonElement(gson.toJson(it).toString()).jsonObject }
+            data?.toMap()?.let { Json.parseToJsonElement(JSONObject(it).toString()).jsonObject }
+
+        val systemContext = Json {
+            ignoreUnknownKeys = true
+        }.decodeFromString<SystemContextInput>(
+            SystemContext.getInstance().fetchSystemContext().toString()
+        )
 
         val query = TrackEvent(
             variables = TrackEvent.Variables(
@@ -540,10 +559,7 @@ class DashXClient {
                     accountUid = accountUid,
                     data = jsonData,
                     event = event,
-                    systemContext = gson.fromJson(
-                        SystemContext.getInstance().fetchSystemContext().toString(),
-                        SystemContextInput::class.java
-                    )
+                    systemContext = systemContext
                 )
             )
         )
@@ -557,7 +573,7 @@ class DashXClient {
                 return@launch
             }
 
-            DashXLog.d(tag, result.data?.trackEvent.let { gson.toJsonTree(it) }.toString())
+            DashXLog.d(tag, result.data?.trackEvent?.toString())
         }
     }
 
@@ -658,7 +674,7 @@ class DashXClient {
                         accountAnonymousUid = accountAnonymousUid,
                         name = name,
                         kind = ContactKind.ANDROID,
-                        value = newToken!!,
+                        value = newToken,
                         osName = "Android",
                         osVersion = Build.VERSION.RELEASE,
                         deviceManufacturer = Build.MANUFACTURER,
@@ -680,7 +696,7 @@ class DashXClient {
                     }.apply()
                 }
 
-                result.data?.subscribeContact.let { gson.toJsonTree(it) }
+                DashXLog.d(tag, result.data?.subscribeContact?.toString())
             }
         })
     }
@@ -716,7 +732,7 @@ class DashXClient {
                         UnsubscribeContactInput(
                             accountUid = uid,
                             accountAnonymousUid = anonymousUid,
-                            value = savedToken!!
+                            value = savedToken
                         )
                     )
                 )
@@ -732,9 +748,9 @@ class DashXClient {
                         DashXLog.d(tag, "Unsubscribed $savedToken successfully.")
                     }
 
-                    result.data?.unsubscribeContact.let { gson.toJsonTree(it) }
+                    DashXLog.d(tag, result.data?.unsubscribeContact?.toString())
                 }
-            });
+            })
     }
 
     fun trackNotification(id: String, status: TrackNotificationStatus) {
@@ -757,7 +773,7 @@ class DashXClient {
                 return@launch
             }
 
-            result.data?.trackNotification.let { gson.toJsonTree(it) }
+            DashXLog.d(tag, result.data?.trackNotification?.toString())
         }
 
     }

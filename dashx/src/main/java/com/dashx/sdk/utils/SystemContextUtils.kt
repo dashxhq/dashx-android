@@ -14,16 +14,16 @@ import android.os.Build
 import android.provider.Settings
 import android.telephony.TelephonyManager
 import androidx.core.content.ContextCompat
-import com.dashx.sdk.utils.SystemContextConstants.AD_TRACKING_ENABLED
 import com.dashx.sdk.utils.SystemContextConstants.ADVERTISING_ID
+import com.dashx.sdk.utils.SystemContextConstants.AD_TRACKING_ENABLED
 import com.google.android.gms.ads.identifier.AdvertisingIdClient
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import java.net.Inet4Address
 import java.net.Inet6Address
 import java.net.NetworkInterface
 import java.util.*
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 
 private val displayMetricsInfo = Resources.getSystem().displayMetrics
 
@@ -73,8 +73,13 @@ fun getBluetoothInfo(context: Context): Boolean {
 }
 
 fun getWifiInfo(context: Context): Boolean {
-    return if (PermissionUtils.hasPermissions(context, android.Manifest.permission.ACCESS_WIFI_STATE)) {
-        val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+    return if (PermissionUtils.hasPermissions(
+            context,
+            android.Manifest.permission.ACCESS_WIFI_STATE
+        )
+    ) {
+        val wifiManager =
+            context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
         wifiManager.isWifiEnabled
     } else false
 }
@@ -82,10 +87,12 @@ fun getWifiInfo(context: Context): Boolean {
 @SuppressLint("MissingPermission")
 fun getCellularInfo(context: Context): Boolean {
     if (PermissionUtils.hasPermissions(context, android.Manifest.permission.ACCESS_NETWORK_STATE)) {
-        val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val connectivityManager =
+            context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
 
-        if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val capabilities = connectivityManager.getNetworkCapabilities(connectivityManager.activeNetwork)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val capabilities =
+                connectivityManager.getNetworkCapabilities(connectivityManager.activeNetwork)
 
             if (capabilities != null) {
                 if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) {
@@ -126,9 +133,9 @@ fun getDeviceName(): String {
     val model = Build.MODEL
     val manufacturer = Build.MANUFACTURER
     return if (model.startsWith(manufacturer)) {
-        model.capitalize(Locale.ROOT)
+        model.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.ROOT) else it.toString() }
     } else {
-        "$manufacturer $model".capitalize(Locale.ROOT)
+        "$manufacturer $model".replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.ROOT) else it.toString() }
     }
 }
 
@@ -156,8 +163,14 @@ fun getAdvertisingInfo(context: Context?) {
 @SuppressLint("MissingPermission")
 fun getLocationCoordinates(context: Context): Location? {
     if (
-        ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
-        ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
+        ContextCompat.checkSelfPermission(
+            context,
+            android.Manifest.permission.ACCESS_COARSE_LOCATION
+        ) != PackageManager.PERMISSION_GRANTED &&
+        ContextCompat.checkSelfPermission(
+            context,
+            android.Manifest.permission.ACCESS_FINE_LOCATION
+        ) != PackageManager.PERMISSION_GRANTED
     ) {
         return null
     }
