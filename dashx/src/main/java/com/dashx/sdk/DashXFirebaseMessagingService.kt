@@ -295,7 +295,7 @@ class DashXFirebaseMessagingService : FirebaseMessagingService() {
             packageManager.getApplicationInfo(
                 packageName,
                 PackageManager.ApplicationInfoFlags.of(0)
-            );
+            )
         } else {
             packageManager.getApplicationInfo(packageName, PackageManager.GET_META_DATA)
         }

@@ -223,9 +223,9 @@ class SystemContext {
         val location = getLocationCoordinates(context!!)
 
         if (location != null) {
-            locationData[LATITUDE] = location?.latitude ?: 0.0
-            locationData[LONGITUDE] = location?.longitude ?: 0.0
-            locationData[SPEED] = location?.getSpeed() ?: 0F
+            locationData[LATITUDE] = location.latitude
+            locationData[LONGITUDE] = location.longitude
+            locationData[SPEED] = location.speed
         }
 
         put(LOCATION, locationData)

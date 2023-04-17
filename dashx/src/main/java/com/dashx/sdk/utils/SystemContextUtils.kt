@@ -90,7 +90,7 @@ fun getCellularInfo(context: Context): Boolean {
         val connectivityManager =
             context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
 
-        if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val capabilities =
                 connectivityManager.getNetworkCapabilities(connectivityManager.activeNetwork)
 
@@ -133,9 +133,9 @@ fun getDeviceName(): String {
     val model = Build.MODEL
     val manufacturer = Build.MANUFACTURER
     return if (model.startsWith(manufacturer)) {
-        model.capitalize(Locale.ROOT)
+        model.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.ROOT) else it.toString() }
     } else {
-        "$manufacturer $model".capitalize(Locale.ROOT)
+        "$manufacturer $model".replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.ROOT) else it.toString() }
     }
 }
 

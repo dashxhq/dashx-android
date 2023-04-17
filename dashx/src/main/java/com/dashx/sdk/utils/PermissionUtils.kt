@@ -81,7 +81,7 @@ object PermissionUtils {
     private fun goToAppSettings(activity: Activity) {
         val intent = Intent(
             Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-            Uri.fromParts("package", activity.getPackageName(), null)
+            Uri.fromParts("package", activity.packageName, null)
         )
         intent.addCategory(Intent.CATEGORY_DEFAULT)
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)

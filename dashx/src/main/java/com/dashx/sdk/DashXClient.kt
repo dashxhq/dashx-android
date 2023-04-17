@@ -9,7 +9,6 @@ import com.dashx.graphql.generated.*
 import com.dashx.graphql.generated.enums.AssetUploadStatus
 import com.dashx.graphql.generated.enums.ContactKind
 import com.dashx.graphql.generated.enums.TrackNotificationStatus
-import com.dashx.graphql.generated.fetchcart.Order
 import com.dashx.graphql.generated.fetchstoredpreferences.FetchStoredPreferencesResponse
 import com.dashx.graphql.generated.inputs.*
 import com.dashx.graphql.generated.savestoredpreferences.SaveStoredPreferencesResponse
@@ -319,7 +318,8 @@ class DashXClient {
     }
 
     fun fetchCart(
-        onSuccess: (result: Order) -> Unit, onError: (error: String) -> Unit
+        onSuccess: (result: com.dashx.graphql.generated.fetchcart.Order) -> Unit,
+        onError: (error: String) -> Unit
     ) {
 
         val query = FetchCart(variables = FetchCart.Variables(FetchCartInput(accountUid!!)))
@@ -674,7 +674,7 @@ class DashXClient {
                         accountAnonymousUid = accountAnonymousUid,
                         name = name,
                         kind = ContactKind.ANDROID,
-                        value = newToken!!,
+                        value = newToken,
                         osName = "Android",
                         osVersion = Build.VERSION.RELEASE,
                         deviceManufacturer = Build.MANUFACTURER,
@@ -732,7 +732,7 @@ class DashXClient {
                         UnsubscribeContactInput(
                             accountUid = uid,
                             accountAnonymousUid = anonymousUid,
-                            value = savedToken!!
+                            value = savedToken
                         )
                     )
                 )
@@ -750,7 +750,7 @@ class DashXClient {
 
                     DashXLog.d(tag, result.data?.unsubscribeContact?.toString())
                 }
-            });
+            })
     }
 
     fun trackNotification(id: String, status: TrackNotificationStatus) {
