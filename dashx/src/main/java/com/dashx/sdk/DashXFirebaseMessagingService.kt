@@ -23,6 +23,7 @@ import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 
+
 @Serializable
 data class DashXPayload(
     @SerialName("id") val id: String,
@@ -50,7 +51,6 @@ data class LightSettings(
 
 class DashXFirebaseMessagingService : FirebaseMessagingService() {
     private val tag = DashXFirebaseMessagingService::class.java.simpleName
-    private val notificationReceiverClass: Class<*> = NotificationReceiver::class.java
 
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
         super.onMessageReceived(remoteMessage)
@@ -78,7 +78,7 @@ class DashXFirebaseMessagingService : FirebaseMessagingService() {
 
                 val tag = dashXData.tag ?: dashXData.id
 
-                NotificationManagerCompat.from(this)
+                NotificationManagerCompat.from(applicationContext)
                     .notify(tag, 1, createNotification(dashXData))
             }
         }
@@ -128,7 +128,7 @@ class DashXFirebaseMessagingService : FirebaseMessagingService() {
         val body = dashXData.body
         val channelId = dashXData.channelId ?: CHANNEL_ID
 
-        val notificationBuilder = NotificationCompat.Builder(this, channelId)
+        val notificationBuilder = NotificationCompat.Builder(applicationContext, channelId)
             .setContentTitle(title)
             .setContentText(body)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
@@ -252,6 +252,9 @@ class DashXFirebaseMessagingService : FirebaseMessagingService() {
         val defaultPendingIntent = getDefaultPendingIntent(dashXData.clickAction)
         notificationBuilder.setContentIntent(defaultPendingIntent)
 
+        val dismissedPendingIntent = getDismissedPendingIntent(id)
+        notificationBuilder.setDeleteIntent(dismissedPendingIntent)
+
         return notificationBuilder.build()
     }
 
@@ -277,16 +280,36 @@ class DashXFirebaseMessagingService : FirebaseMessagingService() {
         )
     }
 
-    private fun getNewBaseIntent(className: String?): Intent {
-        val activityClassName =
-            if (className != null) Class.forName(className) else notificationReceiverClass
 
-        return Intent(
-            this,
-            activityClassName
+
+    private fun getNewBaseIntent(className: String?): Intent {
+        val intent = Intent(
+            applicationContext,
+            NotificationReceiver::class.java
         ).addFlags(
             Intent.FLAG_ACTIVITY_SINGLE_TOP or
                 Intent.FLAG_ACTIVITY_CLEAR_TOP
+        )
+
+        if (className != null) {
+            intent.putExtra(NotificationReceiver.NOTIFICATION_CLICK_ACTION, className)
+        }
+
+        return intent
+    }
+
+    private fun getDismissedPendingIntent(notificationId: String): PendingIntent {
+        val dismissIntent =
+            Intent(applicationContext, NotificationDismissedReceiver::class.java).apply {
+                action = NotificationDismissedReceiver.ACTION_DISMISS_NOTIFICATION
+                putExtra(NotificationDismissedReceiver.EXTRA_NOTIFICATION_ID, notificationId)
+            }
+
+        return PendingIntent.getBroadcast(
+            applicationContext,
+            1,
+            dismissIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
     }
 

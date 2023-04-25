@@ -141,7 +141,7 @@ class DashXClient {
             }
             install(Logging) {
                 logger = Logger.DEFAULT
-                level = LogLevel.HEADERS
+                level = LogLevel.NONE
             }
 
             defaultRequest {

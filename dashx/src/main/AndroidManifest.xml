@@ -2,5 +2,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.dashx.sdk">
 
-    <uses-permission android:name="com.google.android.gms.permission.AD_ID"/>
+    <uses-permission android:name="com.google.android.gms.permission.AD_ID" />
+    <application>
+        <receiver
+            android:name="com.dashx.sdk.NotificationDismissedReceiver"
+            android:exported="true" />
+    </application>
 </manifest>
