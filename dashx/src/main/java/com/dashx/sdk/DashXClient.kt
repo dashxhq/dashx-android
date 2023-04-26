@@ -34,6 +34,7 @@ import java.io.FileInputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.time.Instant
+import java.time.format.DateTimeFormatter
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
@@ -754,7 +755,7 @@ class DashXClient {
     }
 
     fun trackNotification(id: String, status: TrackNotificationStatus) {
-        val currentTime = Instant.now().toString()
+        val currentTime = DateTimeFormatter.ISO_INSTANT.format(Instant.now())
 
         val query = TrackNotification(
             variables = TrackNotification.Variables(
@@ -775,7 +776,6 @@ class DashXClient {
 
             DashXLog.d(tag, result.data?.trackNotification?.toString())
         }
-
     }
 
     fun getBaseUri(): String? {
