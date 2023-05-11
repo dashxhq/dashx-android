@@ -1,0 +1,12 @@
+mutation PrepareAsset($input: PrepareAssetInput!) {
+    prepareAsset(input: $input) {
+        id
+        resourceId
+        attributeId
+        storageProviderId
+        uploadStatus
+        data
+        createdAt
+        updatedAt
+    }
+}

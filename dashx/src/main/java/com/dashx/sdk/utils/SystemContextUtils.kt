@@ -5,29 +5,25 @@ import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.pm.PackageManager
 import android.content.res.Resources
-import android.location.Address
-import android.location.Geocoder
 import android.location.Location
 import android.location.LocationManager
 import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.provider.Settings
 import android.telephony.TelephonyManager
 import androidx.core.content.ContextCompat
-import com.dashx.sdk.utils.SystemContextConstants.AD_TRACKING_ENABLED
 import com.dashx.sdk.utils.SystemContextConstants.ADVERTISING_ID
-import com.dashx.sdk.utils.SystemContextConstants.LAST_GPS_POINT_X
-import com.dashx.sdk.utils.SystemContextConstants.LAST_GPS_POINT_Y
+import com.dashx.sdk.utils.SystemContextConstants.AD_TRACKING_ENABLED
 import com.google.android.gms.ads.identifier.AdvertisingIdClient
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import java.net.Inet4Address
 import java.net.Inet6Address
 import java.net.NetworkInterface
 import java.util.*
-import kotlin.math.pow
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 
 private val displayMetricsInfo = Resources.getSystem().displayMetrics
 
@@ -65,19 +61,54 @@ fun getAppUserAgent(): String {
     return System.getProperty("http.agent") ?: ""
 }
 
-fun getBluetoothInfo(context: Context?): Boolean {
-    val bluetoothManager = context?.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+fun getBluetoothInfo(context: Context): Boolean {
+    if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.R) {
+        if (!PermissionUtils.hasPermissions(context, android.Manifest.permission.BLUETOOTH)) {
+            return false
+        }
+    }
+
+    val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
     return bluetoothManager.adapter.isEnabled
 }
 
 fun getWifiInfo(context: Context): Boolean {
-    val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-    return wifiManager.isWifiEnabled
+    return if (PermissionUtils.hasPermissions(
+            context,
+            android.Manifest.permission.ACCESS_WIFI_STATE
+        )
+    ) {
+        val wifiManager =
+            context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+        wifiManager.isWifiEnabled
+    } else false
 }
 
-fun getCellularInfo(context: Context): Boolean? {
-    val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-    return connectivityManager.activeNetworkInfo?.isConnected
+@SuppressLint("MissingPermission")
+fun getCellularInfo(context: Context): Boolean {
+    if (PermissionUtils.hasPermissions(context, android.Manifest.permission.ACCESS_NETWORK_STATE)) {
+        val connectivityManager =
+            context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val capabilities =
+                connectivityManager.getNetworkCapabilities(connectivityManager.activeNetwork)
+
+            if (capabilities != null) {
+                if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) {
+                    return true
+                }
+            }
+        } else {
+            val activeNetworkInfo = connectivityManager.activeNetworkInfo
+
+            if (activeNetworkInfo != null && activeNetworkInfo.isConnected) {
+                return true
+            }
+        }
+    }
+
+    return false
 }
 
 fun getCarrierInfo(context: Context): String {
@@ -102,9 +133,9 @@ fun getDeviceName(): String {
     val model = Build.MODEL
     val manufacturer = Build.MANUFACTURER
     return if (model.startsWith(manufacturer)) {
-        model.capitalize(Locale.ROOT)
+        model.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.ROOT) else it.toString() }
     } else {
-        "$manufacturer $model".capitalize(Locale.ROOT)
+        "$manufacturer $model".replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.ROOT) else it.toString() }
     }
 }
 
@@ -129,61 +160,24 @@ fun getAdvertisingInfo(context: Context?) {
     }
 }
 
-fun getLocationAddress(context: Context): List<Address> {
-    val geocoder = Geocoder(context, Locale.getDefault())
-    val location = getLocationCoordinates(context)
-    return geocoder.getFromLocation(location?.latitude ?: 0.0, location?.longitude ?: 0.0, 1)
-}
-
+@SuppressLint("MissingPermission")
 fun getLocationCoordinates(context: Context): Location? {
-    val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager?
-    var location: Location? = null
-
-    try {
-        if (
-            ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
-            ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
-        ) {
-            location = locationManager!!.getLastKnownLocation(LocationManager.GPS_PROVIDER)
-            context.let {
-                getDashXSharedPreferences(it).edit().apply {
-                    putFloat(LAST_GPS_POINT_X, (location?.latitude?.toFloat()!!))
-                    putFloat(LAST_GPS_POINT_Y, (location.longitude.toFloat()))
-                }
-            }
-        }
-    } catch (e: Exception) {
-        e.printStackTrace()
-    }
-    return location
-}
-
-fun getSpeed(context: Context): Double {
-    val lastGPSPointX = context.let {
-        getDashXSharedPreferences(it).getFloat(LAST_GPS_POINT_X, 0F)
+    if (
+        ContextCompat.checkSelfPermission(
+            context,
+            android.Manifest.permission.ACCESS_COARSE_LOCATION
+        ) != PackageManager.PERMISSION_GRANTED &&
+        ContextCompat.checkSelfPermission(
+            context,
+            android.Manifest.permission.ACCESS_FINE_LOCATION
+        ) != PackageManager.PERMISSION_GRANTED
+    ) {
+        return null
     }
 
-    val lastGPSPointY = context.let {
-        getDashXSharedPreferences(it).getFloat(LAST_GPS_POINT_Y, 0F)
-    }
+    val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
 
-    getLocationCoordinates(context).let {
-        val currentGPSPointX = it?.latitude
-        val currentGPSPointY = it?.longitude
-        val results = FloatArray(1)
-        if (currentGPSPointY != null) {
-            if (currentGPSPointX != null) {
-                Location.distanceBetween(lastGPSPointX.toDouble(), currentGPSPointX.toDouble(), lastGPSPointY.toDouble(), currentGPSPointY.toDouble(), results)
-            }
-        }
-
-        if (currentGPSPointX != null) {
-            val gpsPointX = currentGPSPointX - lastGPSPointX
-            val gpsPointY = currentGPSPointY?.minus(lastGPSPointX)
-            return kotlin.math.sqrt((gpsPointX).pow(2) + (gpsPointY)?.pow(2)!!) / results[0]
-        }
-    }
-    return 0.0
+    return locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
 }
 
 fun getOsName(): String {

@@ -2,6 +2,9 @@ package com.dashx.sdk
 
 import android.content.Context
 import android.content.pm.ApplicationInfo
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.core.content.pm.PackageInfoCompat
 import com.dashx.sdk.data.LibraryInfo
 import com.dashx.sdk.utils.*
 import com.dashx.sdk.utils.SystemContextConstants.ADVERTISING_ID
@@ -11,8 +14,6 @@ import com.dashx.sdk.utils.SystemContextConstants.BLUETOOTH
 import com.dashx.sdk.utils.SystemContextConstants.BUILD
 import com.dashx.sdk.utils.SystemContextConstants.CARRIER
 import com.dashx.sdk.utils.SystemContextConstants.CELLULAR
-import com.dashx.sdk.utils.SystemContextConstants.CITY
-import com.dashx.sdk.utils.SystemContextConstants.COUNTRY
 import com.dashx.sdk.utils.SystemContextConstants.DEBUG
 import com.dashx.sdk.utils.SystemContextConstants.DENSITY
 import com.dashx.sdk.utils.SystemContextConstants.DEVICE
@@ -89,9 +90,9 @@ class SystemContext {
 
     private fun setNetworkInfo() {
         val network = hashMapOf<String, Any>()
-        network[BLUETOOTH] = getBluetoothInfo(context)
+        network[BLUETOOTH] = getBluetoothInfo(context!!)
         network[CARRIER] = getCarrierInfo(context!!)
-        network[CELLULAR] = getCellularInfo(context!!).toString()
+        network[CELLULAR] = getCellularInfo(context!!)
         network[WIFI] = getWifiInfo(context!!)
 
         put(NETWORK, network)
@@ -99,8 +100,11 @@ class SystemContext {
 
     private fun setDeviceInfo() {
         val device = HashMap<String, Any>()
-        device[AD_TRACKING_ENABLED] = context?.let { getDashXSharedPreferences(it).getBoolean(AD_TRACKING_ENABLED, false) } ?: false
-        device[ADVERTISING_ID] = context?.let { getDashXSharedPreferences(it).getString(ADVERTISING_ID, "") } ?: ""
+        device[AD_TRACKING_ENABLED] =
+            context?.let { getDashXSharedPreferences(it).getBoolean(AD_TRACKING_ENABLED, false) }
+                ?: false
+        device[ADVERTISING_ID] =
+            context?.let { getDashXSharedPreferences(it).getString(ADVERTISING_ID, "") } ?: ""
         device[ID] = getDeviceId(context!!)
         device[KIND] = getDeviceKind()
         device[MANUFACTURER] = getDeviceManufacturer()
@@ -147,7 +151,17 @@ class SystemContext {
 
     private fun setAppInfo() {
         val packageManager = context?.packageManager
-        val packageInfo = context?.packageName?.let { packageManager?.getPackageInfo(it, 0) }
+        val packageInfo = context?.packageName?.let {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                packageManager?.getPackageInfo(it, PackageManager.PackageInfoFlags.of(0))
+            } else {
+                packageManager?.getPackageInfo(it, 0)
+            }
+        }
+
+        val versionCode =
+            packageInfo?.let { PackageInfoCompat.getLongVersionCode(packageInfo).toString() } ?: ""
+
         val hashMap = HashMap<String, Any>()
         packageInfo?.let {
             if (packageManager != null) {
@@ -155,8 +169,8 @@ class SystemContext {
             }
             hashMap[NAMESPACE] = it.packageName
             hashMap[VERSION_NUMBER] = it.versionName
-            hashMap[VERSION_CODE] = it.versionCode
-            hashMap[BUILD] = it.versionCode
+            hashMap[VERSION_CODE] = versionCode
+            hashMap[BUILD] = versionCode
             hashMap[RELEASE_MODE] =
                 if (0 != context?.applicationInfo?.flags!! and ApplicationInfo.FLAG_DEBUGGABLE) {
                     DEBUG
@@ -196,30 +210,25 @@ class SystemContext {
     }
 
     fun getIpAddress(): JSONObject {
-        return JSONObject(hashMapOf(IPV4 to systemContextHashMap[IPV4], IPV6 to systemContextHashMap[IPV6]))
+        return JSONObject(
+            hashMapOf(
+                IPV4 to systemContextHashMap[IPV4],
+                IPV6 to systemContextHashMap[IPV6]
+            )
+        )
     }
 
     private fun setLocationInfo() {
-        val location = HashMap<String, Any>()
-        getLocationCoordinates(context!!).let {
-            location[LONGITUDE] = it?.longitude ?: 0.0
-            location[LATITUDE] = it?.latitude ?: 0.0
-        }
-        getLocationAddress(context!!).let {
-            location[CITY] = if (it.isNotEmpty()) {
-                it[0].getAddressLine(0)
-            } else {
-                ""
-            }
-            location[COUNTRY] = if (it.isNotEmpty()) {
-                it[0].countryName
-            } else {
-                ""
-            }
-        }
-        location[SPEED] = getSpeed(context!!)
+        val locationData = HashMap<String, Any>()
+        val location = getLocationCoordinates(context!!)
 
-        put(LOCATION, location)
+        if (location != null) {
+            locationData[LATITUDE] = location.latitude
+            locationData[LONGITUDE] = location.longitude
+            locationData[SPEED] = location.speed
+        }
+
+        put(LOCATION, locationData)
     }
 
     fun getAppInfo(): JSONObject {

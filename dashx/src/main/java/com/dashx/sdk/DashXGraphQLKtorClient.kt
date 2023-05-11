@@ -29,7 +29,10 @@ class DashXGraphQLKtorClient(
     private val serializer: GraphQLClientSerializer = defaultGraphQLSerializer()
 ) : GraphQLClient<HttpRequestBuilder>, Closeable {
 
-    override suspend fun <T : Any> execute(request: GraphQLClientRequest<T>, requestCustomizer: HttpRequestBuilder.() -> Unit): GraphQLClientResponse<T> {
+    override suspend fun <T : Any> execute(
+        request: GraphQLClientRequest<T>,
+        requestCustomizer: HttpRequestBuilder.() -> Unit
+    ): GraphQLClientResponse<T> {
         return try {
             val rawResult = httpClient.post(url) {
                 expectSuccess = true
@@ -37,12 +40,15 @@ class DashXGraphQLKtorClient(
                 setBody(TextContent(serializer.serialize(request), ContentType.Application.Json))
             }
             serializer.deserialize(parseGraphQLResult(rawResult), request.responseType())
-        } catch (e:Exception){
+        } catch (e: Exception) {
             KotlinxGraphQLResponse(null, listOf(KotlinxGraphQLError(e.message ?: "")))
         }
     }
 
-    override suspend fun execute(requests: List<GraphQLClientRequest<*>>, requestCustomizer: HttpRequestBuilder.() -> Unit): List<GraphQLClientResponse<*>> {
+    override suspend fun execute(
+        requests: List<GraphQLClientRequest<*>>,
+        requestCustomizer: HttpRequestBuilder.() -> Unit
+    ): List<GraphQLClientResponse<*>> {
         val rawResult: String = httpClient.post(url) {
             expectSuccess = true
             apply(requestCustomizer)
