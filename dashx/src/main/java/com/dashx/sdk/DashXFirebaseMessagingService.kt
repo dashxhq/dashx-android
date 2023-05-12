@@ -31,6 +31,7 @@ data class DashXPayload(
     @SerialName("title") val title: String? = null,
     @SerialName("body") val body: String? = null,
     @SerialName("image") val image: String? = null,
+    @SerialName("url") val url: String? = null,
     @SerialName("small_icon") val smallIcon: String? = null,
     @SerialName("large_icon") val largeIcon: String? = null,
     @SerialName("channel_id") val channelId: String? = null,
@@ -254,7 +255,7 @@ class DashXFirebaseMessagingService : FirebaseMessagingService() {
             notificationBuilder.setColor(color)
         }
 
-        val defaultPendingIntent = getDefaultPendingIntent(id, dashXData.clickAction)
+        val defaultPendingIntent = getDefaultPendingIntent(id, dashXData)
         notificationBuilder.setContentIntent(defaultPendingIntent)
 
         val dismissedPendingIntent = getDismissedPendingIntent(id)
@@ -263,15 +264,19 @@ class DashXFirebaseMessagingService : FirebaseMessagingService() {
         return notificationBuilder.build()
     }
 
-    private fun getDefaultPendingIntent(id: String, className: String?): PendingIntent {
+    private fun getDefaultPendingIntent(id: String, payload: DashXPayload): PendingIntent {
         val context = applicationContext
         val pendingIntentFlags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         val intent = getNewBaseIntent()
 
         intent.putExtra(NotificationReceiver.DASHX_NOTIFICATION_ID, id)
 
-        if (className != null) {
-            intent.putExtra(NotificationReceiver.NOTIFICATION_CLICK_ACTION, className)
+        if (payload.clickAction != null) {
+            intent.putExtra(NotificationReceiver.NOTIFICATION_CLICK_ACTION, payload.clickAction)
+        }
+
+        if (payload.url != null) {
+            intent.putExtra(NotificationReceiver.NOTIFICATION_URL, payload.url)
         }
 
         val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
