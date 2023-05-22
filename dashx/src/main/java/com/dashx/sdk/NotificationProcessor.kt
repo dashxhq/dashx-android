@@ -15,7 +15,12 @@ class NotificationProcessor {
             val extras = intent.extras
             val notificationId = extras?.getString(NotificationReceiver.DASHX_NOTIFICATION_ID)
 
-            notificationId?.let { id ->  dashXClient.trackNotification(id, TrackNotificationStatus.OPENED)}
+            notificationId?.let { id ->
+                dashXClient.trackNotification(
+                    id,
+                    TrackNotificationStatus.OPENED
+                )
+            }
 
             if (context !is Activity) {
                 DashXLog.e(tag, "'context' must be an instance of Activity class")
@@ -42,7 +47,7 @@ class NotificationProcessor {
 
             val intent = if (trimmedStr.startsWith("tel:")) {
                 Intent(Intent.ACTION_DIAL, Uri.parse(trimmedStr))
-            } else if (trimmedStr.startsWith("mailto:")){
+            } else if (trimmedStr.startsWith("mailto:")) {
                 Intent(Intent.ACTION_SENDTO, Uri.parse(trimmedStr))
             } else {
                 Intent(Intent.ACTION_VIEW, Uri.parse(trimmedStr))
