@@ -26,8 +26,7 @@ class NotificationProcessor {
             val clickUrl = extras?.getString(NotificationReceiver.NOTIFICATION_URL)
 
             if (clickUrl != null) {
-                val url = Uri.parse(clickUrl.trim { it <= ' ' })
-                val urlIntent = urlOpenIntent(url)
+                val urlIntent = urlOpenIntent(clickUrl)
                 context.startActivity(urlIntent)
                 return
             }
@@ -38,8 +37,17 @@ class NotificationProcessor {
             }
         }
 
-        private fun urlOpenIntent(url: Uri): Intent {
-            val intent = Intent(Intent.ACTION_VIEW, url)
+        private fun urlOpenIntent(clickUrl: String): Intent {
+            val trimmedStr = clickUrl.trim()
+
+            val intent = if (trimmedStr.startsWith("tel:")) {
+                Intent(Intent.ACTION_DIAL, Uri.parse(trimmedStr))
+            } else if (trimmedStr.startsWith("mailto:")){
+                Intent(Intent.ACTION_SENDTO, Uri.parse(trimmedStr))
+            } else {
+                Intent(Intent.ACTION_VIEW, Uri.parse(trimmedStr))
+            }
+
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             return intent
         }
