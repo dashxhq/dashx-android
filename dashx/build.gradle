@@ -6,6 +6,7 @@ apply plugin: 'kotlin-android'
 apply plugin: 'maven-publish'
 apply plugin: 'com.expediagroup.graphql'
 apply plugin: 'org.jetbrains.kotlin.plugin.serialization'
+apply plugin: 'com.google.devtools.ksp'
 
 group = 'com.dashx'
 version = '1.0.12'
@@ -43,6 +44,12 @@ android {
 dependencies {
     implementation 'com.squareup.okhttp3:okhttp:5.0.0-alpha.11'
 
+    // For Database
+    implementation "androidx.room:room-ktx:$roomVersion"
+    implementation "androidx.room:room-runtime:$roomVersion"
+    annotationProcessor "androidx.room:room-compiler:$roomVersion"
+    ksp "androidx.room:room-compiler:$roomVersion"
+
     // Kotlin Graphql
     implementation 'org.slf4j:slf4j-simple:2.0.7'
     implementation "com.expediagroup:graphql-kotlin-ktor-client:$latestGraphQLKotlinVersion"
@@ -58,6 +65,7 @@ dependencies {
     implementation 'com.google.firebase:firebase-messaging-ktx:23.1.2'
 
     implementation 'com.google.android.gms:play-services-ads-identifier:18.0.1'
+    implementation 'androidx.core:core-ktx:+'
 
     testImplementation 'junit:junit:4.13.2'
     androidTestImplementation 'androidx.test.ext:junit:1.1.5'
@@ -79,3 +87,4 @@ android.sourceSets {
 }
 
 apply from: "${rootProject.projectDir}/scripts/publish-module.gradle"
+apply plugin: 'org.jetbrains.kotlin.android'

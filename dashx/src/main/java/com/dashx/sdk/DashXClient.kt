@@ -5,6 +5,8 @@ import android.content.SharedPreferences
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import androidx.room.Room
+import com.dashx.data.DashXDatabase
 import com.dashx.graphql.generated.*
 import com.dashx.graphql.generated.enums.AssetUploadStatus
 import com.dashx.graphql.generated.enums.ContactKind
@@ -55,8 +57,11 @@ class DashXClient {
     private var pollCounter = 1
     private val coroutineScope = CoroutineScope(Dispatchers.IO)
 
+    private var dashXDb: DashXDatabase? = null
+
     companion object {
         private var INSTANCE: DashXClient = DashXClient()
+        private var DB_INSTANCE: DashXDatabase? = null
         private val tag = DashXClient::class.java.simpleName
 
         fun configure(
@@ -78,6 +83,14 @@ class DashXClient {
             }
             return INSTANCE
         }
+
+        fun getDashXDbInstance(): DashXDatabase {
+            if (INSTANCE.context == null) {
+                throw NullPointerException("Configure DashXClient before accessing the database.")
+            }
+
+            return INSTANCE.dashXDb!!;
+        }
     }
 
     private fun init(
@@ -92,10 +105,20 @@ class DashXClient {
         this.targetEnvironment = targetEnvironment
         this.context = context
 
+        initDb(context);
         SystemContext.configure(context)
         SystemContext.setLibraryInfo(libraryInfo)
         loadFromStorage()
         createGraphqlClient()
+    }
+
+    private fun initDb(context: Context) {
+        if (dashXDb == null) {
+            this.dashXDb = Room.databaseBuilder(
+                context,
+                DashXDatabase::class.java, "dashx"
+            ).build()
+        }
     }
 
     private fun loadFromStorage() {
