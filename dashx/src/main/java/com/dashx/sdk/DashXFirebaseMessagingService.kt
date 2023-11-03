@@ -52,7 +52,7 @@ data class LightSettings(
 )
 
 class DashXFirebaseMessagingService : FirebaseMessagingService() {
-    private val dashXClient = DashXClient.getInstance()
+    private val dashXClient = DashX
     private val tag = DashXFirebaseMessagingService::class.java.simpleName
 
     override fun onMessageReceived(remoteMessage: RemoteMessage) {

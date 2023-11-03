@@ -7,7 +7,7 @@ import android.content.pm.PackageManager
 import android.os.Bundle
 
 class DashXActivityLifecycleCallbacks : Application.ActivityLifecycleCallbacks {
-    private val dashXClient = DashXClient.getInstance()
+    private val dashXClient = DashX
     private var startSession = System.currentTimeMillis().toDouble()
 
     init {

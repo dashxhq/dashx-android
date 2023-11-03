@@ -9,7 +9,7 @@ import com.dashx.graphql.generated.enums.TrackNotificationStatus
 class NotificationProcessor {
     companion object {
         private val tag = NotificationProcessor::class.java.simpleName
-        private val dashXClient = DashXClient.getInstance()
+        private val dashXClient = DashX
 
         fun handleClick(context: Context, intent: Intent) {
             val extras = intent.extras
@@ -58,4 +58,3 @@ class NotificationProcessor {
         }
     }
 }
-

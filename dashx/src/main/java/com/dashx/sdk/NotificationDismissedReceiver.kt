@@ -6,7 +6,7 @@ import android.content.Intent
 import com.dashx.graphql.generated.enums.TrackNotificationStatus
 
 class NotificationDismissedReceiver : BroadcastReceiver() {
-    private val dashXClient = DashXClient.getInstance()
+    private val dashXClient = DashX
 
     companion object {
         private val tag = NotificationDismissedReceiver::class.java.simpleName
@@ -17,7 +17,12 @@ class NotificationDismissedReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action == ACTION_DISMISS_NOTIFICATION) {
             val notificationId = intent.getStringExtra(EXTRA_NOTIFICATION_ID)
-            notificationId?.let { id ->  dashXClient.trackNotification(id, TrackNotificationStatus.DISMISSED)}
+            notificationId?.let { id ->
+                dashXClient.trackNotification(
+                    id,
+                    TrackNotificationStatus.DISMISSED
+                )
+            }
             DashXLog.d(tag, "Notification dismissed: $notificationId")
         }
     }
