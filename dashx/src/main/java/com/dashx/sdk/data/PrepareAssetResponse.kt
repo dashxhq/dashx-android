@@ -1,9 +1,13 @@
 package com.dashx.sdk.data
 
-data class PrepareExternalAssetResponse(
+import kotlinx.serialization.Serializable
+
+@Serializable
+data class PrepareAssetResponse(
     val upload: UploadAssetUrl,
 )
 
+@Serializable
 data class UploadAssetUrl(
     val url: String
 )
