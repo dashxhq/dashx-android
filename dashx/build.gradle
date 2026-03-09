@@ -1,17 +1,27 @@
 import com.expediagroup.graphql.plugin.gradle.config.GraphQLSerializer
 import com.expediagroup.graphql.plugin.gradle.config.GraphQLScalar
 
-apply plugin: 'com.android.library'
-apply plugin: 'kotlin-android'
-apply plugin: 'maven-publish'
-apply plugin: 'com.expediagroup.graphql'
-apply plugin: 'org.jetbrains.kotlin.plugin.serialization'
+plugins {
+    id 'com.android.library'
+    id 'com.expediagroup.graphql'
+    id 'org.jetbrains.kotlin.android'
+    id 'org.jetbrains.kotlin.plugin.serialization'
+    id 'signing'
+    id 'com.vanniktech.maven.publish'
+}
 
-group = 'com.dashx'
-version = '1.0.14'
+def version = libs.versions.dashxAndroid.get()
+def group = libs.versions.group.get()
+def artifactId = libs.versions.dashxAndroidArtifactId.get()
 
 android {
+    namespace 'com.dashx.android'
+
     compileSdk 33
+
+    buildFeatures {
+        buildConfig = true
+    }
 
     defaultConfig {
         minSdk 21
@@ -31,17 +41,21 @@ android {
         }
     }
 
-    kotlinOptions {
-        jvmTarget = '1.8'
-    }
-
     compileOptions {
         coreLibraryDesugaringEnabled true
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = "17"
     }
 }
 
 dependencies {
     implementation 'com.squareup.okhttp3:okhttp:5.0.0-alpha.11'
+
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'
 
     // Kotlin Graphql
     implementation 'org.slf4j:slf4j-simple:2.0.7'
@@ -78,4 +92,39 @@ android.sourceSets {
     main.kotlin.srcDirs 'build/generated/source/graphql/main'
 }
 
-apply from: "${rootProject.projectDir}/scripts/publish-module.gradle"
+mavenPublishing {
+    coordinates(group, artifactId, version)
+
+    publishToMavenCentral(true)
+
+    pom {
+        name = 'DashX Android'
+        description = 'DashX Android SDK'
+        url = 'https://github.com/dashxhq/dashx-android'
+
+        licenses {
+            license {
+                name = 'MIT License'
+                url = 'https://github.com/dashxhq/dashx-android/blob/main/LICENSE'
+            }
+        }
+
+        developers {
+            developer {
+                id = 'gulshan.dashx'
+                name = 'Gulshan Dhingra'
+            }
+        }
+
+        scm {
+            connection = 'scm:git:github.com/dashxhq/dashx-android.git'
+            developerConnection = 'scm:git:ssh://github.com/dashxhq/dashx-android.git'
+            url = 'https://github.com/dashxhq/dashx-android'
+        }
+    }
+}
+
+signing {
+    useGpgCmd()
+    sign publishing.publications
+}

@@ -1,4 +1,4 @@
-package com.dashx.sdk.data
+package com.dashx.android.data
 
 import kotlinx.serialization.Serializable
 

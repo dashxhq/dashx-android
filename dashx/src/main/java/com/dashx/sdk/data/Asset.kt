@@ -1,4 +1,4 @@
-package com.dashx.sdk.data
+package com.dashx.android.data
 
 import com.dashx.graphql.generated.enums.AssetUploadStatus
 import kotlinx.serialization.SerialName

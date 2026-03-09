@@ -1,18 +1,26 @@
 @file:JvmName("Utils")
 
-package com.dashx.sdk.utils
+package com.dashx.android.utils
 
 import android.content.Context
 import android.content.SharedPreferences
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.InputStream
 
 fun getPackageInfo(context: Context): PackageInfo =
-    context.packageManager.getPackageInfo(context.packageName, PackageManager.GET_META_DATA)
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        context.packageManager.getPackageInfo(
+            context.packageName,
+            PackageManager.PackageInfoFlags.of(PackageManager.GET_META_DATA.toLong())
+        )
+    } else {
+        context.packageManager.getPackageInfo(context.packageName, PackageManager.GET_META_DATA)
+    }
 
 fun getPrefKey(context: Context) = "$PACKAGE_NAME.$DEFAULT_INSTANCE.packageName"
 

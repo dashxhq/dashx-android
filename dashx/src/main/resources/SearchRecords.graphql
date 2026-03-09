@@ -1,0 +1,3 @@
+query SearchRecords($input: SearchRecordsInput!) {
+  searchRecords(input: $input)
+}

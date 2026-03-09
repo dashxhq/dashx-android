@@ -1,4 +1,4 @@
-package com.dashx.sdk
+package com.dashx.android
 
 import android.app.*
 import android.content.ContentResolver
@@ -13,7 +13,7 @@ import android.os.Build
 import android.webkit.URLUtil
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
-import com.dashx.graphql.generated.enums.TrackNotificationStatus
+import com.dashx.graphql.generated.enums.TrackMessageStatus
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import kotlinx.serialization.SerialName
@@ -54,6 +54,7 @@ data class LightSettings(
 class DashXFirebaseMessagingService : FirebaseMessagingService() {
     private val dashXClient = DashX
     private val tag = DashXFirebaseMessagingService::class.java.simpleName
+    private val json = Json { ignoreUnknownKeys = true }
 
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
         super.onMessageReceived(remoteMessage)
@@ -70,8 +71,7 @@ class DashXFirebaseMessagingService : FirebaseMessagingService() {
         if (dashxDataMap != null) {
             DashXLog.d(tag, "Generating DashX notification...")
 
-            var dashXData =
-                Json { ignoreUnknownKeys = true }.decodeFromString<DashXPayload>(dashxDataMap)
+            val dashXData = json.decodeFromString<DashXPayload>(dashxDataMap)
 
             val id = dashXData.id
             val title = dashXData.title
@@ -85,7 +85,7 @@ class DashXFirebaseMessagingService : FirebaseMessagingService() {
                 NotificationManagerCompat.from(applicationContext)
                     .notify(tag, 1, createNotification(dashXData))
 
-                dashXClient.trackNotification(id, TrackNotificationStatus.DELIVERED)
+                dashXClient.trackMessage(id, TrackMessageStatus.DELIVERED)
             }
         }
     }
@@ -113,8 +113,7 @@ class DashXFirebaseMessagingService : FirebaseMessagingService() {
             }
 
             dashXData.lightSettings?.let { lightSettings ->
-                var ls =
-                    Json { ignoreUnknownKeys = true }.decodeFromString<LightSettings>(lightSettings)
+                val ls = json.decodeFromString<LightSettings>(lightSettings)
 
                 channel.enableLights(true)
                 channel.lightColor = Color.parseColor(ls.color)
@@ -242,8 +241,7 @@ class DashXFirebaseMessagingService : FirebaseMessagingService() {
 
         dashXData.lightSettings?.let { lightSettings ->
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-                var ls =
-                    Json { ignoreUnknownKeys = true }.decodeFromString<LightSettings>(lightSettings)
+                val ls = json.decodeFromString<LightSettings>(lightSettings)
                 val color = Color.parseColor(ls.color)
 
                 notificationBuilder.setLights(color, ls.on, ls.off)

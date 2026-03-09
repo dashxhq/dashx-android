@@ -1,10 +1,10 @@
-package com.dashx.sdk
+package com.dashx.android
 
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import com.dashx.graphql.generated.enums.TrackNotificationStatus
+import com.dashx.graphql.generated.enums.TrackMessageStatus
 
 class NotificationProcessor {
     companion object {
@@ -16,9 +16,9 @@ class NotificationProcessor {
             val notificationId = extras?.getString(NotificationReceiver.DASHX_NOTIFICATION_ID)
 
             notificationId?.let { id ->
-                dashXClient.trackNotification(
+                dashXClient.trackMessage(
                     id,
-                    TrackNotificationStatus.OPENED
+                    TrackMessageStatus.OPENED
                 )
             }
 

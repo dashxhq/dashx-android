@@ -1,4 +1,4 @@
-package com.dashx.sdk
+package com.dashx.android
 
 import android.util.Log
 

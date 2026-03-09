@@ -1,20 +1,21 @@
-package com.dashx.sdk
+package com.dashx.android
 
 import android.content.Context
 import android.content.SharedPreferences
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import androidx.core.content.pm.PackageInfoCompat
 import com.dashx.graphql.generated.*
 import com.dashx.graphql.generated.enums.AssetUploadStatus
 import com.dashx.graphql.generated.enums.ContactKind
-import com.dashx.graphql.generated.enums.TrackNotificationStatus
+import com.dashx.graphql.generated.enums.TrackMessageStatus
 import com.dashx.graphql.generated.fetchstoredpreferences.FetchStoredPreferencesResponse
 import com.dashx.graphql.generated.inputs.*
 import com.dashx.graphql.generated.savestoredpreferences.SaveStoredPreferencesResponse
-import com.dashx.sdk.data.LibraryInfo
-import com.dashx.sdk.data.PrepareAssetResponse
-import com.dashx.sdk.utils.*
+import com.dashx.android.data.LibraryInfo
+import com.dashx.android.data.PrepareAssetResponse
+import com.dashx.android.utils.*
 import com.expediagroup.graphql.client.serialization.GraphQLClientKotlinxSerializer
 import com.google.android.gms.tasks.OnCompleteListener
 import com.google.firebase.messaging.FirebaseMessaging
@@ -55,6 +56,7 @@ class DashX {
         private var pollCounter = 1
         private val coroutineScope = CoroutineScope(Dispatchers.IO)
         private val tag = DashX::class.java.simpleName
+        private val json = Json { ignoreUnknownKeys = true }
 
         fun configure(
             context: Context,
@@ -221,29 +223,29 @@ class DashX {
             saveToStorage()
         }
 
-        fun fetchContent(
+        fun fetchRecord(
             urn: String,
             preview: Boolean? = true,
             language: String? = null,
-            fields: List<String>? = null,
-            include: List<String>? = null,
-            exclude: List<String>? = null,
+            fields: List<JsonObject>? = null,
+            include: List<JsonObject>? = null,
+            exclude: List<JsonObject>? = null,
             onSuccess: (result: JsonObject) -> Unit,
             onError: (error: String) -> Unit
         ) {
             if (!urn.contains('/')) {
-                throw Exception("URN must be of form: {contentType}/{content}")
+                throw Exception("URN must be of form: {resource}/{recordId}")
             }
 
             val urnArray = urn.split('/')
-            val content = urnArray[1]
-            val contentType = urnArray[0]
+            val resource = urnArray[0]
+            val recordId = urnArray[1]
 
-            val query = FetchContent(
-                variables = FetchContent.Variables(
-                    FetchContentInput(
-                        contentType = contentType,
-                        content = content,
+            val query = FetchRecord(
+                variables = FetchRecord.Variables(
+                    FetchRecordInput(
+                        resource = resource,
+                        recordId = recordId,
                         preview = preview,
                         language = language,
                         fields = fields,
@@ -263,28 +265,35 @@ class DashX {
                     return@launch
                 }
 
-                result.data?.fetchContent?.let { onSuccess(it) }
+                result.data?.fetchRecord?.let { onSuccess(it) }
             }
         }
 
-        fun searchContent(
-            contentType: String,
-            returnType: String = "all",
+        fun searchRecords(
+            resource: String,
             filter: JsonObject? = null,
-            order: JsonObject? = null,
+            order: List<JsonObject>? = null,
             limit: Int? = null,
             preview: Boolean? = true,
             language: String? = null,
-            fields: List<String>? = null,
-            include: List<String>? = null,
-            exclude: List<String>? = null,
+            fields: List<JsonObject>? = null,
+            include: List<JsonObject>? = null,
+            exclude: List<JsonObject>? = null,
             onSuccess: (result: List<JsonObject>) -> Unit,
             onError: (error: String) -> Unit
         ) {
-            val query = SearchContent(
-                variables = SearchContent.Variables(
-                    SearchContentInput(
-                        contentType = contentType, returnType = returnType
+            val query = SearchRecords(
+                variables = SearchRecords.Variables(
+                    SearchRecordsInput(
+                        resource = resource,
+                        filter = filter,
+                        order = order,
+                        limit = limit,
+                        preview = preview,
+                        language = language,
+                        fields = fields,
+                        include = include,
+                        exclude = exclude
                     )
                 )
             )
@@ -299,8 +308,8 @@ class DashX {
                     return@launch
                 }
 
-                val content = result.data?.searchContent ?: listOf()
-                onSuccess(content)
+                val records = result.data?.searchRecords ?: listOf()
+                onSuccess(records)
             }
         }
 
@@ -351,18 +360,22 @@ class DashX {
             file: File,
             resource: String,
             attribute: String,
-            onSuccess: (result: com.dashx.sdk.data.Asset) -> Unit,
+            onSuccess: (result: com.dashx.android.data.Asset) -> Unit,
             onError: (error: String) -> Unit
         ) {
             val name = file.name
             val size = file.length().toInt()
             val uri = Uri.fromFile(file)
-            val mimeType = context!!.contentResolver.getType(uri)
+            val mimeType = context!!.contentResolver.getType(uri)!!
 
             val query = PrepareAsset(
                 variables = PrepareAsset.Variables(
                     PrepareAssetInput(
-                        resource, attribute, name, mimeType, size
+                        attribute = attribute,
+                        name = name,
+                        resource = resource,
+                        mimeType = mimeType,
+                        size = size,
                     )
                 )
             )
@@ -378,9 +391,7 @@ class DashX {
                 }
 
                 val prepareAssetResponse = result.data?.prepareAsset?.data?.let {
-                    Json { ignoreUnknownKeys = true }.decodeFromJsonElement<PrepareAssetResponse>(
-                        it
-                    )
+                    json.decodeFromJsonElement<PrepareAssetResponse>(it)
                 }
 
                 if (prepareAssetResponse?.upload != null) {
@@ -399,7 +410,7 @@ class DashX {
             file: File,
             url: String,
             id: String,
-            onSuccess: (result: com.dashx.sdk.data.Asset) -> Unit,
+            onSuccess: (result: com.dashx.android.data.Asset) -> Unit,
             onError: (error: String) -> Unit
         ) {
             withContext(Dispatchers.IO) {
@@ -432,7 +443,7 @@ class DashX {
 
         private suspend fun asset(
             id: String,
-            onSuccess: (result: com.dashx.sdk.data.Asset) -> Unit,
+            onSuccess: (result: com.dashx.android.data.Asset) -> Unit,
             onError: (error: String) -> Unit
         ) {
             val query = Asset(variables = Asset.Variables(id))
@@ -456,14 +467,13 @@ class DashX {
                 val responseJsonObject = JSONObject(responseObject.toString())
                 responseJsonObject.put(DATA, externalDataJsonObject)
 
-                val asset =
-                    Json { ignoreUnknownKeys = true }.decodeFromString<com.dashx.sdk.data.Asset>(
-                        responseJsonObject.toString()
-                    )
+                val asset = json.decodeFromString<com.dashx.android.data.Asset>(
+                    responseJsonObject.toString()
+                )
 
-                if (asset.data.asset?.url == null && !asset.data.asset?.playbackIds.isNullOrEmpty()) {
-                    asset.data.asset?.url =
-                        generateMuxVideoUrl(asset.data.asset?.playbackIds?.get(0)?.id)
+                val uploadAsset = asset.data.asset
+                if (uploadAsset != null && uploadAsset.url.isEmpty() && uploadAsset.playbackIds.isNotEmpty()) {
+                    uploadAsset.url = generateMuxVideoUrl(uploadAsset.playbackIds[0].id)
                 }
 
                 onSuccess(asset)
@@ -536,9 +546,7 @@ class DashX {
             val jsonData =
                 data?.toMap()?.let { Json.parseToJsonElement(JSONObject(it).toString()).jsonObject }
 
-            val systemContext = Json {
-                ignoreUnknownKeys = true
-            }.decodeFromString<SystemContextInput>(
+            val systemContext = json.decodeFromString<SystemContextInput>(
                 SystemContext.getInstance().fetchSystemContext().toString()
             )
 
@@ -572,11 +580,7 @@ class DashX {
 
             val packageInfo = getPackageInfo(context)
 
-            val currentBuild = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                packageInfo.longVersionCode
-            } else {
-                packageInfo.versionCode.toLong()
-            }
+            val currentBuild = PackageInfoCompat.getLongVersionCode(packageInfo)
 
             fun saveBuildInPreferences() {
                 val editor: SharedPreferences.Editor = getDashXSharedPreferences(context).edit()
@@ -744,12 +748,12 @@ class DashX {
                 })
         }
 
-        fun trackNotification(id: String, status: TrackNotificationStatus) {
+        fun trackMessage(id: String, status: TrackMessageStatus) {
             val currentTime = DateTimeFormatter.ISO_INSTANT.format(Instant.now())
 
-            val query = TrackNotification(
-                variables = TrackNotification.Variables(
-                    TrackNotificationInput(
+            val query = TrackMessage(
+                variables = TrackMessage.Variables(
+                    TrackMessageInput(
                         id = id, status = status, timestamp = currentTime
                     )
                 )
@@ -764,7 +768,7 @@ class DashX {
                     return@launch
                 }
 
-                DashXLog.d(tag, result.data?.trackNotification?.toString())
+                DashXLog.d(tag, result.data?.trackMessage?.toString())
             }
         }
 
