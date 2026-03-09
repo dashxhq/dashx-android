@@ -24,8 +24,8 @@ android {
     }
 
     defaultConfig {
-        minSdk 21
-        targetSdk 35
+        minSdk 26
+        targetSdk 36
         versionCode 6
         versionName version
 
@@ -42,7 +42,6 @@ android {
     }
 
     compileOptions {
-        coreLibraryDesugaringEnabled true
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
@@ -54,8 +53,6 @@ android {
 
 dependencies {
     implementation 'com.squareup.okhttp3:okhttp:5.0.0-alpha.11'
-
-    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'
 
     // Kotlin Graphql
     implementation 'org.slf4j:slf4j-simple:2.0.7'
