@@ -20,7 +20,6 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
-import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -83,7 +82,7 @@ class DashXFirebaseMessagingService : FirebaseMessagingService() {
                 val tag = dashXData.tag ?: dashXData.id
 
                 NotificationManagerCompat.from(applicationContext)
-                    .notify(tag, 1, createNotification(dashXData))
+                    .notify(tag, id.hashCode(), createNotification(dashXData))
 
                 dashXClient.trackMessage(id, TrackMessageStatus.DELIVERED)
             }
@@ -143,29 +142,30 @@ class DashXFirebaseMessagingService : FirebaseMessagingService() {
             DashXLog.d(tag, "Trying to attach image")
 
             try {
-                // Check if it's a URL
                 if (URLUtil.isValidUrl(image)) {
                     DashXLog.d(tag, "Image URL is valid")
 
                     val url = URL(image)
                     val connection = url.openConnection() as HttpURLConnection
-                    connection.doInput = true
-                    connection.connect()
-
-                    val input: InputStream = connection.inputStream
-                    val imageBitmap = BitmapFactory.decodeStream(input)
-
-                    notificationBuilder.setStyle(
-                        NotificationCompat.BigPictureStyle().bigPicture(imageBitmap)
-                    )
-                } else { // Check if it's a resource
+                    try {
+                        connection.doInput = true
+                        connection.connect()
+                        connection.inputStream.use { input ->
+                            val imageBitmap = BitmapFactory.decodeStream(input)
+                            notificationBuilder.setStyle(
+                                NotificationCompat.BigPictureStyle().bigPicture(imageBitmap)
+                            )
+                        }
+                    } finally {
+                        connection.disconnect()
+                    }
+                } else {
                     DashXLog.d(tag, "Invalid Image URL, checking if it's a resource")
 
                     val resourceId = resources.getIdentifier(image, "drawable", packageName)
 
-                    if (resourceId != 0) { // Valid resource
+                    if (resourceId != 0) {
                         DashXLog.d(tag, "Image is a valid resource")
-
                         val imageBitmap = BitmapFactory.decodeResource(resources, resourceId)
                         notificationBuilder.setStyle(
                             NotificationCompat.BigPictureStyle().bigPicture(imageBitmap)
@@ -193,25 +193,27 @@ class DashXFirebaseMessagingService : FirebaseMessagingService() {
 
         dashXData.largeIcon?.let { largeIcon ->
             try {
-                // Check if it's a URL
                 if (URLUtil.isValidUrl(largeIcon)) {
                     DashXLog.d(tag, "Large icon URL is valid")
 
                     val url = URL(largeIcon)
                     val connection = url.openConnection() as HttpURLConnection
-                    connection.doInput = true
-                    connection.connect()
-
-                    val input: InputStream = connection.inputStream
-                    val largeIconBitmap = BitmapFactory.decodeStream(input)
-
-                    notificationBuilder.setLargeIcon(largeIconBitmap)
-                } else { // Check if it's a resource
+                    try {
+                        connection.doInput = true
+                        connection.connect()
+                        connection.inputStream.use { input ->
+                            val largeIconBitmap = BitmapFactory.decodeStream(input)
+                            notificationBuilder.setLargeIcon(largeIconBitmap)
+                        }
+                    } finally {
+                        connection.disconnect()
+                    }
+                } else {
                     DashXLog.d(tag, "Invalid large icon URL, checking if it's a resource")
 
                     val resourceId = resources.getIdentifier(largeIcon, "drawable", packageName)
 
-                    if (resourceId != 0) { // Valid resource
+                    if (resourceId != 0) {
                         val largeIconBitmap = BitmapFactory.decodeResource(resources, resourceId)
                         notificationBuilder.setLargeIcon(largeIconBitmap)
                     } else {
@@ -265,6 +267,7 @@ class DashXFirebaseMessagingService : FirebaseMessagingService() {
     private fun getDefaultPendingIntent(id: String, payload: DashXPayload): PendingIntent {
         val context = applicationContext
         val pendingIntentFlags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        val requestCode = id.hashCode()
         val intent = getNewBaseIntent()
 
         intent.putExtra(NotificationReceiver.DASHX_NOTIFICATION_ID, id)
@@ -278,16 +281,15 @@ class DashXFirebaseMessagingService : FirebaseMessagingService() {
         }
 
         val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
-            ?: return PendingIntent.getActivity(context, 1, intent, pendingIntentFlags)
+            ?: return PendingIntent.getActivity(context, requestCode, intent, pendingIntentFlags)
 
-        // Mimic launcher behaviour
         launchIntent.setPackage(null)
         launchIntent.flags =
             Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
 
         return PendingIntent.getActivities(
             context,
-            1,
+            requestCode,
             arrayOf(launchIntent, intent),
             pendingIntentFlags
         )
@@ -312,7 +314,7 @@ class DashXFirebaseMessagingService : FirebaseMessagingService() {
 
         return PendingIntent.getBroadcast(
             applicationContext,
-            1,
+            notificationId.hashCode(),
             dismissIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )

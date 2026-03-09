@@ -8,7 +8,8 @@ import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
-import java.io.ByteArrayOutputStream
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKeys
 import java.io.File
 import java.io.InputStream
 
@@ -24,8 +25,46 @@ fun getPackageInfo(context: Context): PackageInfo =
 
 fun getPrefKey(context: Context) = "$PACKAGE_NAME.$DEFAULT_INSTANCE.packageName"
 
-fun getDashXSharedPreferences(context: Context): SharedPreferences =
-    context.getSharedPreferences(getPrefKey(context), Context.MODE_PRIVATE)
+private const val ENCRYPTED_PREFS_FILE = "$PACKAGE_NAME.$DEFAULT_INSTANCE.secure"
+
+fun getDashXSharedPreferences(context: Context): SharedPreferences {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        try {
+            val masterKeyAlias = MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC)
+            val encryptedPrefs = EncryptedSharedPreferences.create(
+                ENCRYPTED_PREFS_FILE,
+                masterKeyAlias,
+                context,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
+            migrateFromLegacyPrefs(context, encryptedPrefs)
+            return encryptedPrefs
+        } catch (_: Exception) {
+            // Fall through to unencrypted SharedPreferences
+        }
+    }
+    return context.getSharedPreferences(getPrefKey(context), Context.MODE_PRIVATE)
+}
+
+private fun migrateFromLegacyPrefs(context: Context, encryptedPrefs: SharedPreferences) {
+    val legacyPrefs = context.getSharedPreferences(getPrefKey(context), Context.MODE_PRIVATE)
+    val entries = legacyPrefs.all
+    if (entries.isEmpty()) return
+
+    val editor = encryptedPrefs.edit()
+    for ((key, value) in entries) {
+        when (value) {
+            is String -> editor.putString(key, value)
+            is Boolean -> editor.putBoolean(key, value)
+            is Long -> editor.putLong(key, value)
+            is Int -> editor.putInt(key, value)
+            is Float -> editor.putFloat(key, value)
+        }
+    }
+    editor.apply()
+    legacyPrefs.edit().clear().apply()
+}
 
 fun getFileContentType(context: Context?, file: File): String {
     val contentResolver = context?.contentResolver
@@ -36,20 +75,6 @@ fun getFileContentType(context: Context?, file: File): String {
         return FileConstants.VIDEO_CONTENT_TYPE
     }
     return FileConstants.FILE_CONTENT
-}
-
-fun getBytes(inputStream: InputStream): ByteArray {
-    val byteBuffer = ByteArrayOutputStream()
-    val bufferSize = 1024
-    val buffer = ByteArray(bufferSize)
-    var len = inputStream.read(buffer)
-    while (len != -1) {
-        if (len == -1)
-            break
-        byteBuffer.write(buffer, 0, len)
-        len = inputStream.read(buffer)
-    }
-    return byteBuffer.toByteArray()
 }
 
 fun generateMuxVideoUrl(playbackId: String?): String {
