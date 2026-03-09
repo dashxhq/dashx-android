@@ -38,6 +38,7 @@ import java.time.Instant
 import java.time.format.DateTimeFormatter
 import java.util.UUID
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 
 class DashX {
     companion object {
@@ -47,13 +48,13 @@ class DashX {
         private var targetEnvironment: String? = null
 
         // Account variables
-        private var accountAnonymousUid: String? = null
-        private var accountUid: String? = null
-        private var identityToken: String? = null
+        @Volatile private var accountAnonymousUid: String? = null
+        @Volatile private var accountUid: String? = null
+        @Volatile private var identityToken: String? = null
 
-        private var context: Context? = null
+        @Volatile private var context: Context? = null
 
-        private var pollCounter = 1
+        private val pollCounter = AtomicInteger(1)
         private val coroutineScope = CoroutineScope(Dispatchers.IO)
         private val tag = DashX::class.java.simpleName
         private val json = Json { ignoreUnknownKeys = true }
@@ -87,7 +88,11 @@ class DashX {
         }
 
         private fun loadFromStorage() {
-            val dashXSharedPreferences = getDashXSharedPreferences(context!!)
+            val ctx = context ?: run {
+                DashXLog.e(tag, "loadFromStorage: context is null, configure() must be called first")
+                return
+            }
+            val dashXSharedPreferences = getDashXSharedPreferences(ctx)
             accountUid = dashXSharedPreferences.getString(SHARED_PREFERENCES_KEY_ACCOUNT_UID, null)
             accountAnonymousUid =
                 dashXSharedPreferences.getString(SHARED_PREFERENCES_KEY_ACCOUNT_ANONYMOUS_UID, null)
@@ -101,14 +106,18 @@ class DashX {
         }
 
         private fun saveToStorage() {
-            getDashXSharedPreferences(context!!).edit().apply {
+            val ctx = context ?: run {
+                DashXLog.e(tag, "saveToStorage: context is null, configure() must be called first")
+                return
+            }
+            getDashXSharedPreferences(ctx).edit().apply {
                 putString(SHARED_PREFERENCES_KEY_ACCOUNT_UID, accountUid)
                 putString(SHARED_PREFERENCES_KEY_ACCOUNT_ANONYMOUS_UID, accountAnonymousUid)
                 putString(SHARED_PREFERENCES_KEY_IDENTITY_TOKEN, identityToken)
             }.apply()
         }
 
-        private var graphqlClient = getGraphqlClient()
+        @Volatile private var graphqlClient = getGraphqlClient()
 
         private fun createGraphqlClient() {
             graphqlClient = getGraphqlClient()
@@ -317,8 +326,12 @@ class DashX {
             onSuccess: (result: com.dashx.graphql.generated.fetchcart.Order) -> Unit,
             onError: (error: String) -> Unit
         ) {
+            val uid = accountUid ?: run {
+                onError("fetchCart: accountUid is not set. Call setIdentity() first.")
+                return
+            }
 
-            val query = FetchCart(variables = FetchCart.Variables(FetchCartInput(accountUid!!)))
+            val query = FetchCart(variables = FetchCart.Variables(FetchCartInput(uid)))
 
             coroutineScope.launch {
                 val result = graphqlClient.execute(query)
@@ -338,8 +351,12 @@ class DashX {
             onSuccess: (result: FetchStoredPreferencesResponse) -> Unit,
             onError: (error: String) -> Unit
         ) {
+            val uid = accountUid ?: run {
+                onError("fetchStoredPreferences: accountUid is not set. Call setIdentity() first.")
+                return
+            }
             val query = FetchStoredPreferences(
-                variables = FetchStoredPreferences.Variables(FetchStoredPreferencesInput(accountUid!!))
+                variables = FetchStoredPreferences.Variables(FetchStoredPreferencesInput(uid))
             )
 
             coroutineScope.launch {
@@ -363,10 +380,17 @@ class DashX {
             onSuccess: (result: com.dashx.android.data.Asset) -> Unit,
             onError: (error: String) -> Unit
         ) {
+            val ctx = context ?: run {
+                onError("uploadAsset: context is null, configure() must be called first")
+                return
+            }
             val name = file.name
             val size = file.length().toInt()
             val uri = Uri.fromFile(file)
-            val mimeType = context!!.contentResolver.getType(uri)!!
+            val mimeType = ctx.contentResolver.getType(uri) ?: run {
+                onError("uploadAsset: could not determine MIME type for file")
+                return
+            }
 
             val query = PrepareAsset(
                 variables = PrepareAsset.Variables(
@@ -456,12 +480,12 @@ class DashX {
                 return
             }
 
-            if (result.data?.asset?.uploadStatus != AssetUploadStatus.UPLOADED && pollCounter <= UploadConstants.POLL_TIME_OUT) {
+            if (result.data?.asset?.uploadStatus != AssetUploadStatus.UPLOADED && pollCounter.get() <= UploadConstants.POLL_TIME_OUT) {
                 delay(UploadConstants.POLL_INTERVAL)
+                pollCounter.incrementAndGet()
                 asset(id, onSuccess, onError)
-                pollCounter += 1
             } else {
-                pollCounter = 1
+                pollCounter.set(1)
                 val responseObject = result.data?.asset
                 val externalDataJsonObject = responseObject?.data?.let { JSONObject(it) }
                 val responseJsonObject = JSONObject(responseObject.toString())
@@ -485,10 +509,14 @@ class DashX {
             onSuccess: (result: SaveStoredPreferencesResponse) -> Unit,
             onError: (error: String) -> Unit
         ) {
+            val uid = accountUid ?: run {
+                onError("saveStoredPreferences: accountUid is not set. Call setIdentity() first.")
+                return
+            }
             val query = SaveStoredPreferences(
                 variables = SaveStoredPreferences.Variables(
                     SaveStoredPreferencesInput(
-                        accountUid!!, Json.parseToJsonElement(preferenceData.toString()).jsonObject
+                        uid, Json.parseToJsonElement(preferenceData.toString()).jsonObject
                     )
                 )
             )
@@ -516,10 +544,14 @@ class DashX {
             onSuccess: (result: com.dashx.graphql.generated.additemtocart.Order) -> Unit,
             onError: (error: String) -> Unit
         ) {
+            val uid = accountUid ?: run {
+                onError("addItemToCart: accountUid is not set. Call setIdentity() first.")
+                return
+            }
             val query = AddItemToCart(
                 variables = AddItemToCart.Variables(
                     AddItemToCartInput(
-                        accountUid = accountUid!!,
+                        accountUid = uid,
                         itemId = itemId,
                         pricingId = pricingId,
                         quantity = quantity,
@@ -648,7 +680,12 @@ class DashX {
 
                 DashXLog.d(tag, "New token generated: $newToken")
 
-                val savedToken = getDashXSharedPreferences(context!!).getString(
+                val ctx = context ?: run {
+                    DashXLog.e(tag, "subscribe: context is null, configure() must be called first")
+                    return@OnCompleteListener
+                }
+
+                val savedToken = getDashXSharedPreferences(ctx).getString(
                     SHARED_PREFERENCES_KEY_DEVICE_TOKEN, null
                 )
 
@@ -685,9 +722,11 @@ class DashX {
                         DashXLog.e(tag, "Failed to subscribe: $errors")
                         return@launch
                     } else {
-                        getDashXSharedPreferences(context!!).edit().apply {
-                            putString(SHARED_PREFERENCES_KEY_DEVICE_TOKEN, newToken)
-                        }.apply()
+                        context?.let { ctx ->
+                            getDashXSharedPreferences(ctx).edit().apply {
+                                putString(SHARED_PREFERENCES_KEY_DEVICE_TOKEN, newToken)
+                            }.apply()
+                        }
                     }
 
                     DashXLog.d(tag, result.data?.subscribeContact?.toString())
@@ -696,7 +735,11 @@ class DashX {
         }
 
         fun unsubscribe() {
-            val savedToken = getDashXSharedPreferences(context!!).getString(
+            val ctx = context ?: run {
+                DashXLog.e(tag, "unsubscribe: context is null, configure() must be called first")
+                return
+            }
+            val savedToken = getDashXSharedPreferences(ctx).getString(
                 SHARED_PREFERENCES_KEY_DEVICE_TOKEN, null
             )
 
@@ -718,9 +761,11 @@ class DashX {
                         return@OnCompleteListener
                     }
 
-                    getDashXSharedPreferences(context!!).edit().apply {
-                        remove(SHARED_PREFERENCES_KEY_DEVICE_TOKEN)
-                    }.apply()
+                    context?.let { ctx ->
+                        getDashXSharedPreferences(ctx).edit().apply {
+                            remove(SHARED_PREFERENCES_KEY_DEVICE_TOKEN)
+                        }.apply()
+                    }
 
                     val query = UnsubscribeContact(
                         variables = UnsubscribeContact.Variables(

@@ -47,11 +47,12 @@ import com.dashx.android.utils.SystemContextConstants.VERSION_NUMBER
 import com.dashx.android.utils.SystemContextConstants.WIDTH
 import com.dashx.android.utils.SystemContextConstants.WIFI
 import org.json.JSONObject
+import java.util.concurrent.ConcurrentHashMap
 
 class SystemContext {
 
     private var context: Context? = null
-    private var systemContextHashMap = hashMapOf<String, Any>()
+    private val systemContextHashMap = ConcurrentHashMap<String, Any>()
 
     companion object {
 
@@ -89,23 +90,24 @@ class SystemContext {
     }
 
     private fun setNetworkInfo() {
+        val ctx = context ?: return
         val network = hashMapOf<String, Any>()
-        network[BLUETOOTH] = getBluetoothInfo(context!!)
-        network[CARRIER] = getCarrierInfo(context!!)
-        network[CELLULAR] = getCellularInfo(context!!)
-        network[WIFI] = getWifiInfo(context!!)
+        network[BLUETOOTH] = getBluetoothInfo(ctx)
+        network[CARRIER] = getCarrierInfo(ctx)
+        network[CELLULAR] = getCellularInfo(ctx)
+        network[WIFI] = getWifiInfo(ctx)
 
         put(NETWORK, network)
     }
 
     private fun setDeviceInfo() {
+        val ctx = context ?: return
         val device = HashMap<String, Any>()
         device[AD_TRACKING_ENABLED] =
-            context?.let { getDashXSharedPreferences(it).getBoolean(AD_TRACKING_ENABLED, false) }
-                ?: false
+            getDashXSharedPreferences(ctx).getBoolean(AD_TRACKING_ENABLED, false)
         device[ADVERTISING_ID] =
-            context?.let { getDashXSharedPreferences(it).getString(ADVERTISING_ID, "") } ?: ""
-        device[ID] = getDeviceId(context!!)
+            getDashXSharedPreferences(ctx).getString(ADVERTISING_ID, "") ?: ""
+        device[ID] = getDeviceId(ctx)
         device[KIND] = getDeviceKind()
         device[MANUFACTURER] = getDeviceManufacturer()
         device[MODEL] = getDeviceModel()
@@ -132,7 +134,8 @@ class SystemContext {
     }
 
     private fun setLocale() {
-        getAppLocale(context!!)?.let { put(LOCALE, it) }
+        val ctx = context ?: return
+        getAppLocale(ctx)?.let { put(LOCALE, it) }
     }
 
     private fun setTimeZone() {
@@ -165,14 +168,14 @@ class SystemContext {
         val hashMap = HashMap<String, Any>()
         packageInfo?.let {
             if (packageManager != null) {
-                hashMap[NAME] = it.applicationInfo.loadLabel(packageManager)
+                it.applicationInfo?.let { ai -> hashMap[NAME] = ai.loadLabel(packageManager) }
             }
             hashMap[NAMESPACE] = it.packageName
-            hashMap[VERSION_NUMBER] = it.versionName
+            hashMap[VERSION_NUMBER] = it.versionName ?: ""
             hashMap[VERSION_CODE] = versionCode
             hashMap[BUILD] = versionCode
             hashMap[RELEASE_MODE] =
-                if (0 != context?.applicationInfo?.flags!! and ApplicationInfo.FLAG_DEBUGGABLE) {
+                if ((context?.applicationInfo?.flags ?: 0) and ApplicationInfo.FLAG_DEBUGGABLE != 0) {
                     DEBUG
                 } else {
                     RELEASE
@@ -219,8 +222,9 @@ class SystemContext {
     }
 
     private fun setLocationInfo() {
+        val ctx = context ?: return
         val locationData = HashMap<String, Any>()
-        val location = getLocationCoordinates(context!!)
+        val location = getLocationCoordinates(ctx)
 
         if (location != null) {
             locationData[LATITUDE] = location.latitude
