@@ -1,4 +1,4 @@
-package com.dashx.sdk
+package com.dashx.android
 
 import android.app.Activity
 import android.content.Intent
@@ -6,9 +6,9 @@ import android.os.Bundle
 
 class NotificationReceiver : Activity() {
     companion object {
-        const val DASHX_NOTIFICATION_ID = "com.dashx.sdk.DASHX_NOTIFICATION_ID"
-        const val NOTIFICATION_CLICK_ACTION = "com.dashx.sdk.NOTIFICATION_CLICK_ACTION"
-        const val NOTIFICATION_URL = "com.dashx.sdk.NOTIFICATION_URL"
+        const val DASHX_NOTIFICATION_ID = "com.dashx.android.DASHX_NOTIFICATION_ID"
+        const val NOTIFICATION_CLICK_ACTION = "com.dashx.android.NOTIFICATION_CLICK_ACTION"
+        const val NOTIFICATION_URL = "com.dashx.android.NOTIFICATION_URL"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -19,6 +19,7 @@ class NotificationReceiver : Activity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        NotificationProcessor.handleClick(this, intent)
         finish()
     }
 }

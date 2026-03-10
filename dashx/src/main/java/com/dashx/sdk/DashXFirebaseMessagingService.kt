@@ -1,4 +1,4 @@
-package com.dashx.sdk
+package com.dashx.android
 
 import android.app.*
 import android.content.ContentResolver
@@ -13,14 +13,13 @@ import android.os.Build
 import android.webkit.URLUtil
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
-import com.dashx.graphql.generated.enums.TrackNotificationStatus
+import com.dashx.android.graphql.generated.type.TrackMessageStatus
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
-import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -54,6 +53,13 @@ data class LightSettings(
 class DashXFirebaseMessagingService : FirebaseMessagingService() {
     private val dashXClient = DashX
     private val tag = DashXFirebaseMessagingService::class.java.simpleName
+    private val json = Json { ignoreUnknownKeys = true }
+
+    override fun onNewToken(token: String) {
+        super.onNewToken(token)
+        DashXLog.d(tag, "FCM token updated.")
+        dashXClient.subscribe(token)
+    }
 
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
         super.onMessageReceived(remoteMessage)
@@ -69,9 +75,12 @@ class DashXFirebaseMessagingService : FirebaseMessagingService() {
 
         if (dashxDataMap != null) {
             DashXLog.d(tag, "Generating DashX notification...")
-
-            var dashXData =
-                Json { ignoreUnknownKeys = true }.decodeFromString<DashXPayload>(dashxDataMap)
+            val dashXData = try {
+                json.decodeFromString<DashXPayload>(dashxDataMap)
+            } catch (t: Throwable) {
+                DashXLog.e(tag, "Failed to parse DashX payload: ${t.message}")
+                return
+            }
 
             val id = dashXData.id
             val title = dashXData.title
@@ -83,9 +92,9 @@ class DashXFirebaseMessagingService : FirebaseMessagingService() {
                 val tag = dashXData.tag ?: dashXData.id
 
                 NotificationManagerCompat.from(applicationContext)
-                    .notify(tag, 1, createNotification(dashXData))
+                    .notify(tag, id.hashCode(), createNotification(dashXData))
 
-                dashXClient.trackNotification(id, TrackNotificationStatus.DELIVERED)
+                dashXClient.trackMessage(id, TrackMessageStatus.DELIVERED)
             }
         }
     }
@@ -113,8 +122,7 @@ class DashXFirebaseMessagingService : FirebaseMessagingService() {
             }
 
             dashXData.lightSettings?.let { lightSettings ->
-                var ls =
-                    Json { ignoreUnknownKeys = true }.decodeFromString<LightSettings>(lightSettings)
+                val ls = json.decodeFromString<LightSettings>(lightSettings)
 
                 channel.enableLights(true)
                 channel.lightColor = Color.parseColor(ls.color)
@@ -144,29 +152,32 @@ class DashXFirebaseMessagingService : FirebaseMessagingService() {
             DashXLog.d(tag, "Trying to attach image")
 
             try {
-                // Check if it's a URL
                 if (URLUtil.isValidUrl(image)) {
                     DashXLog.d(tag, "Image URL is valid")
 
                     val url = URL(image)
                     val connection = url.openConnection() as HttpURLConnection
-                    connection.doInput = true
-                    connection.connect()
-
-                    val input: InputStream = connection.inputStream
-                    val imageBitmap = BitmapFactory.decodeStream(input)
-
-                    notificationBuilder.setStyle(
-                        NotificationCompat.BigPictureStyle().bigPicture(imageBitmap)
-                    )
-                } else { // Check if it's a resource
+                    try {
+                        connection.doInput = true
+                        connection.connectTimeout = 5000
+                        connection.readTimeout = 5000
+                        connection.connect()
+                        connection.inputStream.use { input ->
+                            val imageBitmap = BitmapFactory.decodeStream(input)
+                            notificationBuilder.setStyle(
+                                NotificationCompat.BigPictureStyle().bigPicture(imageBitmap)
+                            )
+                        }
+                    } finally {
+                        connection.disconnect()
+                    }
+                } else {
                     DashXLog.d(tag, "Invalid Image URL, checking if it's a resource")
 
                     val resourceId = resources.getIdentifier(image, "drawable", packageName)
 
-                    if (resourceId != 0) { // Valid resource
+                    if (resourceId != 0) {
                         DashXLog.d(tag, "Image is a valid resource")
-
                         val imageBitmap = BitmapFactory.decodeResource(resources, resourceId)
                         notificationBuilder.setStyle(
                             NotificationCompat.BigPictureStyle().bigPicture(imageBitmap)
@@ -194,25 +205,29 @@ class DashXFirebaseMessagingService : FirebaseMessagingService() {
 
         dashXData.largeIcon?.let { largeIcon ->
             try {
-                // Check if it's a URL
                 if (URLUtil.isValidUrl(largeIcon)) {
                     DashXLog.d(tag, "Large icon URL is valid")
 
                     val url = URL(largeIcon)
                     val connection = url.openConnection() as HttpURLConnection
-                    connection.doInput = true
-                    connection.connect()
-
-                    val input: InputStream = connection.inputStream
-                    val largeIconBitmap = BitmapFactory.decodeStream(input)
-
-                    notificationBuilder.setLargeIcon(largeIconBitmap)
-                } else { // Check if it's a resource
+                    try {
+                        connection.doInput = true
+                        connection.connectTimeout = 5000
+                        connection.readTimeout = 5000
+                        connection.connect()
+                        connection.inputStream.use { input ->
+                            val largeIconBitmap = BitmapFactory.decodeStream(input)
+                            notificationBuilder.setLargeIcon(largeIconBitmap)
+                        }
+                    } finally {
+                        connection.disconnect()
+                    }
+                } else {
                     DashXLog.d(tag, "Invalid large icon URL, checking if it's a resource")
 
                     val resourceId = resources.getIdentifier(largeIcon, "drawable", packageName)
 
-                    if (resourceId != 0) { // Valid resource
+                    if (resourceId != 0) {
                         val largeIconBitmap = BitmapFactory.decodeResource(resources, resourceId)
                         notificationBuilder.setLargeIcon(largeIconBitmap)
                     } else {
@@ -233,26 +248,32 @@ class DashXFirebaseMessagingService : FirebaseMessagingService() {
         }
 
         dashXData.visibility?.let { visibility ->
-            notificationBuilder.setVisibility(visibility.toInt())
+            visibility.toIntOrNull()?.let { notificationBuilder.setVisibility(it) }
         }
 
         dashXData.notificationCount?.let { count ->
-            notificationBuilder.setNumber(count.toInt())
+            count.toIntOrNull()?.let { notificationBuilder.setNumber(it) }
         }
 
         dashXData.lightSettings?.let { lightSettings ->
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-                var ls =
-                    Json { ignoreUnknownKeys = true }.decodeFromString<LightSettings>(lightSettings)
-                val color = Color.parseColor(ls.color)
-
-                notificationBuilder.setLights(color, ls.on, ls.off)
+                try {
+                    val ls = json.decodeFromString<LightSettings>(lightSettings)
+                    val color = Color.parseColor(ls.color)
+                    notificationBuilder.setLights(color, ls.on, ls.off)
+                } catch (t: Throwable) {
+                    DashXLog.e(tag, "Invalid light_settings: ${t.message}")
+                }
             }
         }
 
         dashXData.color?.let { color ->
-            val color = Color.parseColor(color)
-            notificationBuilder.setColor(color)
+            try {
+                val parsed = Color.parseColor(color)
+                notificationBuilder.setColor(parsed)
+            } catch (_: Throwable) {
+                // ignore invalid color
+            }
         }
 
         val defaultPendingIntent = getDefaultPendingIntent(id, dashXData)
@@ -267,6 +288,7 @@ class DashXFirebaseMessagingService : FirebaseMessagingService() {
     private fun getDefaultPendingIntent(id: String, payload: DashXPayload): PendingIntent {
         val context = applicationContext
         val pendingIntentFlags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        val requestCode = id.hashCode()
         val intent = getNewBaseIntent()
 
         intent.putExtra(NotificationReceiver.DASHX_NOTIFICATION_ID, id)
@@ -280,16 +302,15 @@ class DashXFirebaseMessagingService : FirebaseMessagingService() {
         }
 
         val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
-            ?: return PendingIntent.getActivity(context, 1, intent, pendingIntentFlags)
+            ?: return PendingIntent.getActivity(context, requestCode, intent, pendingIntentFlags)
 
-        // Mimic launcher behaviour
         launchIntent.setPackage(null)
         launchIntent.flags =
             Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
 
         return PendingIntent.getActivities(
             context,
-            1,
+            requestCode,
             arrayOf(launchIntent, intent),
             pendingIntentFlags
         )
@@ -314,7 +335,7 @@ class DashXFirebaseMessagingService : FirebaseMessagingService() {
 
         return PendingIntent.getBroadcast(
             applicationContext,
-            1,
+            notificationId.hashCode(),
             dismissIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )

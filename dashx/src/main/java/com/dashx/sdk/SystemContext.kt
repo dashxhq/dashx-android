@@ -1,57 +1,57 @@
-package com.dashx.sdk
+package com.dashx.android
 
 import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.content.pm.PackageInfoCompat
-import com.dashx.sdk.data.LibraryInfo
-import com.dashx.sdk.utils.*
-import com.dashx.sdk.utils.SystemContextConstants.ADVERTISING_ID
-import com.dashx.sdk.utils.SystemContextConstants.AD_TRACKING_ENABLED
-import com.dashx.sdk.utils.SystemContextConstants.APP
-import com.dashx.sdk.utils.SystemContextConstants.BLUETOOTH
-import com.dashx.sdk.utils.SystemContextConstants.BUILD
-import com.dashx.sdk.utils.SystemContextConstants.CARRIER
-import com.dashx.sdk.utils.SystemContextConstants.CELLULAR
-import com.dashx.sdk.utils.SystemContextConstants.DEBUG
-import com.dashx.sdk.utils.SystemContextConstants.DENSITY
-import com.dashx.sdk.utils.SystemContextConstants.DEVICE
-import com.dashx.sdk.utils.SystemContextConstants.HEIGHT
-import com.dashx.sdk.utils.SystemContextConstants.ID
-import com.dashx.sdk.utils.SystemContextConstants.IPV4
-import com.dashx.sdk.utils.SystemContextConstants.IPV6
-import com.dashx.sdk.utils.SystemContextConstants.KIND
-import com.dashx.sdk.utils.SystemContextConstants.LATITUDE
-import com.dashx.sdk.utils.SystemContextConstants.LIBRARY
-import com.dashx.sdk.utils.SystemContextConstants.LOCALE
-import com.dashx.sdk.utils.SystemContextConstants.LOCATION
-import com.dashx.sdk.utils.SystemContextConstants.LONGITUDE
-import com.dashx.sdk.utils.SystemContextConstants.MANUFACTURER
-import com.dashx.sdk.utils.SystemContextConstants.MODEL
-import com.dashx.sdk.utils.SystemContextConstants.NAME
-import com.dashx.sdk.utils.SystemContextConstants.NAMESPACE
-import com.dashx.sdk.utils.SystemContextConstants.NETWORK
-import com.dashx.sdk.utils.SystemContextConstants.OS
-import com.dashx.sdk.utils.SystemContextConstants.OS_NAME
-import com.dashx.sdk.utils.SystemContextConstants.OS_VERSION
-import com.dashx.sdk.utils.SystemContextConstants.RELEASE
-import com.dashx.sdk.utils.SystemContextConstants.RELEASE_MODE
-import com.dashx.sdk.utils.SystemContextConstants.SCREEN
-import com.dashx.sdk.utils.SystemContextConstants.SPEED
-import com.dashx.sdk.utils.SystemContextConstants.TIME_ZONE
-import com.dashx.sdk.utils.SystemContextConstants.USER_AGENT
-import com.dashx.sdk.utils.SystemContextConstants.VERSION
-import com.dashx.sdk.utils.SystemContextConstants.VERSION_CODE
-import com.dashx.sdk.utils.SystemContextConstants.VERSION_NUMBER
-import com.dashx.sdk.utils.SystemContextConstants.WIDTH
-import com.dashx.sdk.utils.SystemContextConstants.WIFI
+import com.dashx.android.utils.*
+import com.dashx.android.utils.SystemContextConstants.ADVERTISING_ID
+import com.dashx.android.utils.SystemContextConstants.AD_TRACKING_ENABLED
+import com.dashx.android.utils.SystemContextConstants.APP
+import com.dashx.android.utils.SystemContextConstants.BLUETOOTH
+import com.dashx.android.utils.SystemContextConstants.BUILD
+import com.dashx.android.utils.SystemContextConstants.CARRIER
+import com.dashx.android.utils.SystemContextConstants.CELLULAR
+import com.dashx.android.utils.SystemContextConstants.DEBUG
+import com.dashx.android.utils.SystemContextConstants.DENSITY
+import com.dashx.android.utils.SystemContextConstants.DEVICE
+import com.dashx.android.utils.SystemContextConstants.HEIGHT
+import com.dashx.android.utils.SystemContextConstants.ID
+import com.dashx.android.utils.SystemContextConstants.IPV4
+import com.dashx.android.utils.SystemContextConstants.IPV6
+import com.dashx.android.utils.SystemContextConstants.KIND
+import com.dashx.android.utils.SystemContextConstants.LATITUDE
+import com.dashx.android.utils.SystemContextConstants.LIBRARY
+import com.dashx.android.utils.SystemContextConstants.LOCALE
+import com.dashx.android.utils.SystemContextConstants.LOCATION
+import com.dashx.android.utils.SystemContextConstants.LONGITUDE
+import com.dashx.android.utils.SystemContextConstants.MANUFACTURER
+import com.dashx.android.utils.SystemContextConstants.MODEL
+import com.dashx.android.utils.SystemContextConstants.NAME
+import com.dashx.android.utils.SystemContextConstants.NAMESPACE
+import com.dashx.android.utils.SystemContextConstants.NETWORK
+import com.dashx.android.utils.SystemContextConstants.OS
+import com.dashx.android.utils.SystemContextConstants.OS_NAME
+import com.dashx.android.utils.SystemContextConstants.OS_VERSION
+import com.dashx.android.utils.SystemContextConstants.RELEASE
+import com.dashx.android.utils.SystemContextConstants.RELEASE_MODE
+import com.dashx.android.utils.SystemContextConstants.SCREEN
+import com.dashx.android.utils.SystemContextConstants.SPEED
+import com.dashx.android.utils.SystemContextConstants.TIME_ZONE
+import com.dashx.android.utils.SystemContextConstants.USER_AGENT
+import com.dashx.android.utils.SystemContextConstants.VERSION
+import com.dashx.android.utils.SystemContextConstants.VERSION_CODE
+import com.dashx.android.utils.SystemContextConstants.VERSION_NUMBER
+import com.dashx.android.utils.SystemContextConstants.WIDTH
+import com.dashx.android.utils.SystemContextConstants.WIFI
 import org.json.JSONObject
+import java.util.concurrent.ConcurrentHashMap
 
 class SystemContext {
 
     private var context: Context? = null
-    private var systemContextHashMap = hashMapOf<String, Any>()
+    private val systemContextHashMap = ConcurrentHashMap<String, Any>()
 
     companion object {
 
@@ -64,13 +64,6 @@ class SystemContext {
             INSTANCE.init(context)
             getAdvertisingInfo(context)
             return INSTANCE
-        }
-
-        fun setLibraryInfo(libraryInfo: LibraryInfo?) {
-            if (libraryInfo != null) {
-                libraryName = libraryInfo.name
-                libraryVersion = libraryInfo.version
-            }
         }
 
         @JvmName("getSystemContextInstance")
@@ -89,23 +82,24 @@ class SystemContext {
     }
 
     private fun setNetworkInfo() {
+        val ctx = context ?: return
         val network = hashMapOf<String, Any>()
-        network[BLUETOOTH] = getBluetoothInfo(context!!)
-        network[CARRIER] = getCarrierInfo(context!!)
-        network[CELLULAR] = getCellularInfo(context!!)
-        network[WIFI] = getWifiInfo(context!!)
+        network[BLUETOOTH] = getBluetoothInfo(ctx)
+        network[CARRIER] = getCarrierInfo(ctx)
+        network[CELLULAR] = getCellularInfo(ctx)
+        network[WIFI] = getWifiInfo(ctx)
 
         put(NETWORK, network)
     }
 
     private fun setDeviceInfo() {
+        val ctx = context ?: return
         val device = HashMap<String, Any>()
         device[AD_TRACKING_ENABLED] =
-            context?.let { getDashXSharedPreferences(it).getBoolean(AD_TRACKING_ENABLED, false) }
-                ?: false
+            getDashXSharedPreferences(ctx).getBoolean(AD_TRACKING_ENABLED, false)
         device[ADVERTISING_ID] =
-            context?.let { getDashXSharedPreferences(it).getString(ADVERTISING_ID, "") } ?: ""
-        device[ID] = getDeviceId(context!!)
+            getDashXSharedPreferences(ctx).getString(ADVERTISING_ID, "") ?: ""
+        device[ID] = getDeviceId(ctx)
         device[KIND] = getDeviceKind()
         device[MANUFACTURER] = getDeviceManufacturer()
         device[MODEL] = getDeviceModel()
@@ -132,7 +126,8 @@ class SystemContext {
     }
 
     private fun setLocale() {
-        getAppLocale(context!!)?.let { put(LOCALE, it) }
+        val ctx = context ?: return
+        getAppLocale(ctx)?.let { put(LOCALE, it) }
     }
 
     private fun setTimeZone() {
@@ -165,14 +160,14 @@ class SystemContext {
         val hashMap = HashMap<String, Any>()
         packageInfo?.let {
             if (packageManager != null) {
-                hashMap[NAME] = it.applicationInfo.loadLabel(packageManager)
+                it.applicationInfo?.let { ai -> hashMap[NAME] = ai.loadLabel(packageManager) }
             }
             hashMap[NAMESPACE] = it.packageName
-            hashMap[VERSION_NUMBER] = it.versionName
+            hashMap[VERSION_NUMBER] = it.versionName ?: ""
             hashMap[VERSION_CODE] = versionCode
             hashMap[BUILD] = versionCode
             hashMap[RELEASE_MODE] =
-                if (0 != context?.applicationInfo?.flags!! and ApplicationInfo.FLAG_DEBUGGABLE) {
+                if ((context?.applicationInfo?.flags ?: 0) and ApplicationInfo.FLAG_DEBUGGABLE != 0) {
                     DEBUG
                 } else {
                     RELEASE
@@ -219,8 +214,9 @@ class SystemContext {
     }
 
     private fun setLocationInfo() {
+        val ctx = context ?: return
         val locationData = HashMap<String, Any>()
-        val location = getLocationCoordinates(context!!)
+        val location = getLocationCoordinates(ctx)
 
         if (location != null) {
             locationData[LATITUDE] = location.latitude

@@ -1,10 +1,10 @@
-package com.dashx.sdk
+package com.dashx.android
 
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import com.dashx.graphql.generated.enums.TrackNotificationStatus
+import com.dashx.android.graphql.generated.type.TrackMessageStatus
 
 class NotificationProcessor {
     companion object {
@@ -16,9 +16,9 @@ class NotificationProcessor {
             val notificationId = extras?.getString(NotificationReceiver.DASHX_NOTIFICATION_ID)
 
             notificationId?.let { id ->
-                dashXClient.trackNotification(
+                dashXClient.trackMessage(
                     id,
-                    TrackNotificationStatus.OPENED
+                    TrackMessageStatus.OPENED
                 )
             }
 
@@ -37,8 +37,22 @@ class NotificationProcessor {
             }
 
             if (clickAction != null) {
-                val clickActionActivity = Intent(context, Class.forName(clickAction))
-                context.startActivity(clickActionActivity)
+                // Support both fully-qualified Activity class names and Intent action strings.
+                try {
+                    val clickActionActivity = Intent(context, Class.forName(clickAction))
+                    context.startActivity(clickActionActivity)
+                    return
+                } catch (_: Throwable) {
+                    // Fall through to action-based intent
+                }
+
+                val actionIntent = Intent(clickAction).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                val resolved = actionIntent.resolveActivity(context.packageManager)
+                if (resolved != null) {
+                    context.startActivity(actionIntent)
+                } else {
+                    DashXLog.e(tag, "No Activity found for click_action: $clickAction")
+                }
             }
         }
 

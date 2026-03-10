@@ -1,9 +1,10 @@
-package com.dashx.sdk
+package com.dashx.android
 
 import android.app.Activity
 import android.app.Application
 import android.content.Context
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 
 class DashXActivityLifecycleCallbacks : Application.ActivityLifecycleCallbacks {
@@ -37,10 +38,16 @@ class DashXActivityLifecycleCallbacks : Application.ActivityLifecycleCallbacks {
         }
 
         val packageManager = activity.packageManager
-        val info =
-            packageManager?.getActivityInfo(activity.componentName, PackageManager.GET_META_DATA)
-        val activityLabel = info?.loadLabel(packageManager)
-        activityLabel?.let { it -> dashXClient.screen(it.toString(), hashMapOf()) }
+        val info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            packageManager.getActivityInfo(
+                activity.componentName,
+                PackageManager.ComponentInfoFlags.of(PackageManager.GET_META_DATA.toLong())
+            )
+        } else {
+            packageManager.getActivityInfo(activity.componentName, PackageManager.GET_META_DATA)
+        }
+        val activityLabel = info.loadLabel(packageManager)
+        dashXClient.screen(activityLabel.toString(), hashMapOf())
     }
 
     override fun onActivityDestroyed(activity: Activity) {

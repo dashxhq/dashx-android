@@ -29,7 +29,7 @@ $ ./gradlew build
 - Now you can use FetchContent operation like so:
 
 ```kotlin
-import com.dashx.graphql.generated.* // Note the package name
+import com.dashx.android.graphql.generated.* // Note the package name
 
 val query = FetchContent(variables = FetchContent.Variables(FetchContentInput(
             contentType = contentType,

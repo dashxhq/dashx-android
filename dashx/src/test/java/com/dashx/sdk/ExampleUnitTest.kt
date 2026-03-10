@@ -1,4 +1,4 @@
-package com.dashx.sdk
+package com.dashx.android
 
 import org.junit.Assert.assertEquals
 import org.junit.Test
