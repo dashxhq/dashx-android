@@ -37,8 +37,22 @@ class NotificationProcessor {
             }
 
             if (clickAction != null) {
-                val clickActionActivity = Intent(context, Class.forName(clickAction))
-                context.startActivity(clickActionActivity)
+                // Support both fully-qualified Activity class names and Intent action strings.
+                try {
+                    val clickActionActivity = Intent(context, Class.forName(clickAction))
+                    context.startActivity(clickActionActivity)
+                    return
+                } catch (_: Throwable) {
+                    // Fall through to action-based intent
+                }
+
+                val actionIntent = Intent(clickAction).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                val resolved = actionIntent.resolveActivity(context.packageManager)
+                if (resolved != null) {
+                    context.startActivity(actionIntent)
+                } else {
+                    DashXLog.e(tag, "No Activity found for click_action: $clickAction")
+                }
             }
         }
 

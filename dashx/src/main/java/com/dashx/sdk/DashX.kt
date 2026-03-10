@@ -667,20 +667,29 @@ class DashX {
                     return@OnCompleteListener
                 }
 
-                DashXLog.d(tag, "New token generated: $newToken")
+                subscribe(newToken)
+            })
+        }
+
+        /**
+         * Subscribe this device for push notifications using an already-known FCM token.
+         * Useful when integrating with an app's own [FirebaseMessagingService.onNewToken].
+         */
+        fun subscribe(token: String) {
+            DashXLog.d(tag, "Subscribing with token.")
 
                 val ctx = context ?: run {
                     DashXLog.e(tag, "subscribe: context is null, configure() must be called first")
-                    return@OnCompleteListener
+                    return
                 }
 
                 val savedToken = getDashXSharedPreferences(ctx).getString(
                     SHARED_PREFERENCES_KEY_DEVICE_TOKEN, null
                 )
 
-                if (savedToken == newToken) {
+                if (savedToken == token) {
                     DashXLog.d(tag, "Already subscribed: $savedToken")
-                    return@OnCompleteListener
+                    return
                 }
 
                 val name = Settings.Global.getString(
@@ -693,7 +702,7 @@ class DashX {
                         accountAnonymousUid = accountAnonymousUid?.let { Optional.Present(it) } ?: Optional.Absent,
                         name = name?.let { Optional.Present(it) } ?: Optional.Absent,
                         kind = ContactKind.ANDROID,
-                        value = newToken,
+                        value = token,
                         osName = Optional.Present("Android"),
                         osVersion = Build.VERSION.RELEASE.let { Optional.Present(it) },
                         deviceManufacturer = Optional.Present(Build.MANUFACTURER),
@@ -706,12 +715,11 @@ class DashX {
                 }) { result ->
                     context?.let { c ->
                         getDashXSharedPreferences(c).edit().apply {
-                            putString(SHARED_PREFERENCES_KEY_DEVICE_TOKEN, newToken)
+                            putString(SHARED_PREFERENCES_KEY_DEVICE_TOKEN, token)
                         }.apply()
                     }
                     DashXLog.d(tag, result.data?.subscribeContact?.toString())
                 }
-            })
         }
 
         fun unsubscribe() {

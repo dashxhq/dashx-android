@@ -4,8 +4,23 @@
     <uses-sdk tools:overrideLibrary="androidx.security.crypto" />
     <uses-permission android:name="com.google.android.gms.permission.AD_ID" />
     <application>
+        <service
+            android:name="com.dashx.android.DashXFirebaseMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <activity
+            android:name="com.dashx.android.NotificationReceiver"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTop"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
         <receiver
             android:name="com.dashx.android.NotificationDismissedReceiver"
-            android:exported="true" />
+            android:exported="false" />
     </application>
 </manifest>

@@ -19,6 +19,7 @@ class NotificationReceiver : Activity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        NotificationProcessor.handleClick(this, intent)
         finish()
     }
 }
