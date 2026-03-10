@@ -12,7 +12,6 @@ import com.apollographql.apollo.api.Optional
 import com.apollographql.apollo.api.Query
 import com.apollographql.apollo.api.Mutation
 import com.dashx.graphql.generated.AssetQuery
-import com.dashx.graphql.generated.FetchCartQuery
 import com.dashx.graphql.generated.FetchRecordQuery
 import com.dashx.graphql.generated.FetchStoredPreferencesQuery
 import com.dashx.graphql.generated.IdentifyAccountMutation
@@ -23,10 +22,8 @@ import com.dashx.graphql.generated.SubscribeContactMutation
 import com.dashx.graphql.generated.TrackEventMutation
 import com.dashx.graphql.generated.TrackMessageMutation
 import com.dashx.graphql.generated.UnsubscribeContactMutation
-import com.dashx.graphql.generated.AddItemToCartMutation
 import com.dashx.graphql.generated.type.AssetUploadStatus
 import com.dashx.graphql.generated.type.ContactKind
-import com.dashx.graphql.generated.type.FetchCartInput
 import com.dashx.graphql.generated.type.FetchRecordInput
 import com.dashx.graphql.generated.type.FetchStoredPreferencesInput
 import com.dashx.graphql.generated.type.IdentifyAccountInput
@@ -37,7 +34,6 @@ import com.dashx.graphql.generated.type.SubscribeContactInput
 import com.dashx.graphql.generated.type.SystemContextInput
 import com.dashx.graphql.generated.type.TrackEventInput
 import com.dashx.graphql.generated.type.TrackMessageInput
-import com.dashx.graphql.generated.type.AddItemToCartInput
 import com.dashx.graphql.generated.type.TrackMessageStatus
 import com.dashx.graphql.generated.type.UnsubscribeContactInput
 import com.dashx.android.data.LibraryInfo
@@ -74,6 +70,13 @@ class DashX {
 
         @Volatile private var context: Context? = null
 
+        /**
+         * [CoroutineDispatcher] on which [onSuccess] and [onError] callbacks are invoked.
+         * Defaults to [Dispatchers.Main.immediate] so UI updates are safe from callbacks.
+         * Set via [configure] or [setCallbackDispatcher].
+         */
+        @Volatile private var callbackDispatcher: CoroutineDispatcher = Dispatchers.Main.immediate
+
         private val pollCounter = AtomicInteger(1)
         private val coroutineScope = CoroutineScope(Dispatchers.IO)
         private val tag = DashX::class.java.simpleName
@@ -84,9 +87,18 @@ class DashX {
             publicKey: String,
             baseURI: String? = null,
             targetEnvironment: String? = null,
-            libraryInfo: LibraryInfo? = null
+            libraryInfo: LibraryInfo? = null,
+            callbackDispatcher: CoroutineDispatcher? = null
         ) {
-            init(context, publicKey, baseURI, targetEnvironment, libraryInfo)
+            init(context, publicKey, baseURI, targetEnvironment, libraryInfo, callbackDispatcher)
+        }
+
+        /**
+         * Sets the dispatcher used for success/error callbacks. Useful for tests or when
+         * you prefer callbacks on a specific thread (e.g. a single-thread executor).
+         */
+        fun setCallbackDispatcher(dispatcher: CoroutineDispatcher) {
+            callbackDispatcher = dispatcher
         }
 
         private fun init(
@@ -94,12 +106,14 @@ class DashX {
             publicKey: String,
             baseURI: String? = null,
             targetEnvironment: String? = null,
-            libraryInfo: LibraryInfo? = null
+            libraryInfo: LibraryInfo? = null,
+            callbackDispatcher: CoroutineDispatcher? = null
         ) {
             this.baseURI = baseURI
             this.publicKey = publicKey
             this.targetEnvironment = targetEnvironment
             this.context = context
+            callbackDispatcher?.let { this.callbackDispatcher = it }
 
             SystemContext.configure(context)
             SystemContext.setLibraryInfo(libraryInfo)
@@ -137,6 +151,7 @@ class DashX {
             }.apply()
         }
 
+        /** Recreated when identity/token changes (setIdentityToken, setIdentity, init). */
         @Volatile private var apolloClient = createApolloClient()
 
         private fun createGraphqlClient() {
@@ -189,8 +204,11 @@ class DashX {
         ) {
             coroutineScope.launch {
                 val response = apolloClient.mutation(mutation).execute()
-                if (hasApolloErrors(response.errors, response.exception, onError)) return@launch
-                onSuccess(response)
+                withContext(callbackDispatcher) {
+                    if (!hasApolloErrors(response.errors, response.exception, onError)) {
+                        onSuccess(response)
+                    }
+                }
             }
         }
 
@@ -201,8 +219,11 @@ class DashX {
         ) {
             coroutineScope.launch {
                 val response = apolloClient.query(query).execute()
-                if (hasApolloErrors(response.errors, response.exception, onError)) return@launch
-                onSuccess(response)
+                withContext(callbackDispatcher) {
+                    if (!hasApolloErrors(response.errors, response.exception, onError)) {
+                        onSuccess(response)
+                    }
+                }
             }
         }
 
@@ -274,7 +295,9 @@ class DashX {
             onError: (error: DashXError) -> Unit
         ) {
             if (!urn.contains('/')) {
-                onError(DashXError.NetworkError("URN must be of form: {resource}/{recordId}"))
+                coroutineScope.launch(callbackDispatcher) {
+                    onError(DashXError.NetworkError("URN must be of form: {resource}/{recordId}"))
+                }
                 return
             }
 
@@ -332,56 +355,12 @@ class DashX {
             }
         }
 
-        fun fetchCart(
-            onSuccess: (result: FetchCartQuery.FetchCart) -> Unit,
-            onError: (error: DashXError) -> Unit
-        ) {
-            val uid = accountUid ?: run {
-                onError(DashXError.NotIdentified())
-                return
-            }
-
-            val query = FetchCartQuery(input = FetchCartInput(accountUid = Optional.Present(uid)))
-
-            executeQuery(query, onError) { result ->
-                result.data?.fetchCart?.let(onSuccess)
-            }
-        }
-
-        fun addItemToCart(
-            itemId: String,
-            pricingId: String,
-            quantity: String,
-            reset: Boolean,
-            custom: JsonObject? = null,
-            onSuccess: (result: AddItemToCartMutation.AddItemToCart) -> Unit,
-            onError: (error: DashXError) -> Unit
-        ) {
-            val uid = accountUid ?: run {
-                onError(DashXError.NotIdentified())
-                return
-            }
-            val mutation = AddItemToCartMutation(
-                input = AddItemToCartInput(
-                    accountUid = Optional.Present(uid),
-                    itemId = itemId,
-                    pricingId = pricingId,
-                    quantity = quantity,
-                    reset = reset
-                )
-            )
-
-            executeMutation(mutation, onError) { result ->
-                result.data?.addItemToCart?.let(onSuccess)
-            }
-        }
-
         fun fetchStoredPreferences(
             onSuccess: (result: FetchStoredPreferencesQuery.FetchStoredPreferences) -> Unit,
             onError: (error: DashXError) -> Unit
         ) {
             val uid = accountUid ?: run {
-                onError(DashXError.NotIdentified())
+                coroutineScope.launch(callbackDispatcher) { onError(DashXError.NotIdentified()) }
                 return
             }
             val query = FetchStoredPreferencesQuery(input = FetchStoredPreferencesInput(uid))
@@ -397,7 +376,7 @@ class DashX {
             onError: (error: DashXError) -> Unit
         ) {
             val uid = accountUid ?: run {
-                onError(DashXError.NotIdentified())
+                coroutineScope.launch(callbackDispatcher) { onError(DashXError.NotIdentified()) }
                 return
             }
             val mutation = SaveStoredPreferencesMutation(
@@ -420,14 +399,16 @@ class DashX {
             onError: (error: DashXError) -> Unit
         ) {
             val ctx = context ?: run {
-                onError(DashXError.NotConfigured())
+                coroutineScope.launch(callbackDispatcher) { onError(DashXError.NotConfigured()) }
                 return
             }
             val name = file.name
             val size = file.length().toInt()
             val uri = Uri.fromFile(file)
             val mimeType = ctx.contentResolver.getType(uri) ?: run {
-                onError(DashXError.AssetError("Could not determine MIME type for file"))
+                coroutineScope.launch(callbackDispatcher) {
+                    onError(DashXError.AssetError("Could not determine MIME type for file"))
+                }
                 return
             }
 
@@ -443,12 +424,13 @@ class DashX {
 
             coroutineScope.launch {
                 val response = apolloClient.mutation(mutation).execute()
-                if (hasApolloErrors(response.errors, response.exception, onError)) return@launch
-
+                val hasErrors = withContext(callbackDispatcher) {
+                    hasApolloErrors(response.errors, response.exception, onError)
+                }
+                if (hasErrors) return@launch
                 val prepareAssetResponse = response.data?.prepareAsset?.`data`?.let {
                     json.decodeFromJsonElement<PrepareAssetResponse>(it)
                 }
-
                 if (prepareAssetResponse?.upload != null) {
                     writeFileToUrl(
                         file,
@@ -488,9 +470,15 @@ class DashX {
                     }
 
                     if (connection.responseCode == HttpURLConnection.HTTP_OK) {
-                        asset(id, onSuccess, onError)
+                        asset(
+                            id,
+                            onSuccess = { r -> coroutineScope.launch(callbackDispatcher) { onSuccess(r) } },
+                            onError = { e -> coroutineScope.launch(callbackDispatcher) { onError(e) } }
+                        )
                     } else {
-                        onError(DashXError.AssetError("Upload failed with HTTP ${connection.responseCode}"))
+                        withContext(callbackDispatcher) {
+                            onError(DashXError.AssetError("Upload failed with HTTP ${connection.responseCode}"))
+                        }
                     }
                 } finally {
                     connection.disconnect()
@@ -505,14 +493,16 @@ class DashX {
         ) {
             val query = AssetQuery(id = id)
             val response = apolloClient.query(query).execute()
-
-            if (hasApolloErrors(response.errors, response.exception, onError)) return
+            val dispatchedOnError: (DashXError) -> Unit = { e ->
+                coroutineScope.launch(callbackDispatcher) { onError(e) }
+            }
+            if (hasApolloErrors(response.errors, response.exception, dispatchedOnError)) return
 
             val responseAsset = response.data?.asset
             if (responseAsset?.uploadStatus != AssetUploadStatus.UPLOADED && pollCounter.get() <= UploadConstants.POLL_TIME_OUT) {
                 delay(UploadConstants.POLL_INTERVAL)
                 pollCounter.incrementAndGet()
-                asset(id, onSuccess, onError)
+                asset(id, onSuccess, dispatchedOnError)
             } else {
                 pollCounter.set(1)
                 val responseJsonObject = JSONObject().apply {
@@ -523,16 +513,16 @@ class DashX {
                     put(DATA, responseAsset?.`data`?.let { JSONObject(it.toString()) })
                 }
 
-                val asset = json.decodeFromString<com.dashx.android.data.Asset>(
+                val decodedAsset = json.decodeFromString<com.dashx.android.data.Asset>(
                     responseJsonObject.toString()
                 )
 
-                val uploadAsset = asset.data.asset
+                val uploadAsset = decodedAsset.data.asset
                 if (uploadAsset != null && uploadAsset.url.isEmpty() && uploadAsset.playbackIds.isNotEmpty()) {
                     uploadAsset.url = generateMuxVideoUrl(uploadAsset.playbackIds[0].id)
                 }
 
-                onSuccess(asset)
+                withContext(callbackDispatcher) { onSuccess(decodedAsset) }
             }
         }
 
