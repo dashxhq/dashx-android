@@ -13,7 +13,7 @@ def artifactId = libs.versions.dashxAndroidArtifactId.get()
 android {
     namespace 'com.dashx.android'
 
-    compileSdk 35
+    compileSdk 34
 
     buildFeatures {
         buildConfig = true

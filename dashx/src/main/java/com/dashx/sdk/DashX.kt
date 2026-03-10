@@ -31,10 +31,11 @@ import com.dashx.graphql.generated.type.PrepareAssetInput
 import com.dashx.graphql.generated.type.SaveStoredPreferencesInput
 import com.dashx.graphql.generated.type.SearchRecordsInput
 import com.dashx.graphql.generated.type.SubscribeContactInput
-import com.dashx.graphql.generated.type.SystemContextInput
+import com.dashx.android.utils.SystemContextMapper
 import com.dashx.graphql.generated.type.TrackEventInput
 import com.dashx.graphql.generated.type.TrackMessageInput
 import com.dashx.graphql.generated.type.TrackMessageStatus
+import com.dashx.graphql.generated.type.JSON
 import com.dashx.graphql.generated.type.UnsubscribeContactInput
 import com.dashx.android.data.LibraryInfo
 import com.dashx.android.data.PrepareAssetResponse
@@ -161,6 +162,7 @@ class DashX {
         private fun createApolloClient(): ApolloClient {
             return ApolloClient.Builder()
                 .serverUrl(baseURI ?: "https://api.dashx.com/graphql")
+                .addCustomScalarAdapter(JSON.type, JsonObjectScalarAdapter)
                 .apply {
                     publicKey?.let { addHttpHeader("X-Public-Key", it) }
                     targetEnvironment?.let { addHttpHeader("X-Target-Environment", it) }
@@ -530,8 +532,8 @@ class DashX {
             val jsonData =
                 data?.toMap()?.let { Json.parseToJsonElement(JSONObject(it).toString()).jsonObject }
 
-            val systemContext = json.decodeFromString<SystemContextInput>(
-                SystemContext.getInstance().fetchSystemContext().toString()
+            val systemContext = SystemContextMapper.toSystemContextInput(
+                SystemContext.getInstance().fetchSystemContext()
             )
 
             val mutation = TrackEventMutation(
@@ -553,8 +555,8 @@ class DashX {
             val jsonData =
                 data?.toMap()?.let { Json.parseToJsonElement(JSONObject(it).toString()).jsonObject }
 
-            val systemContext = json.decodeFromString<SystemContextInput>(
-                SystemContext.getInstance().fetchSystemContext().toString()
+            val systemContext = SystemContextMapper.toSystemContextInput(
+                SystemContext.getInstance().fetchSystemContext()
             )
 
             val mutation = TrackEventMutation(
