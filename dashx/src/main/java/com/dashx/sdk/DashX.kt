@@ -37,7 +37,6 @@ import com.dashx.graphql.generated.type.TrackMessageInput
 import com.dashx.graphql.generated.type.TrackMessageStatus
 import com.dashx.graphql.generated.type.JSON
 import com.dashx.graphql.generated.type.UnsubscribeContactInput
-import com.dashx.android.data.LibraryInfo
 import com.dashx.android.data.PrepareAssetResponse
 import com.dashx.android.utils.*
 import com.google.android.gms.tasks.OnCompleteListener
@@ -88,10 +87,9 @@ class DashX {
             publicKey: String,
             baseURI: String? = null,
             targetEnvironment: String? = null,
-            libraryInfo: LibraryInfo? = null,
             callbackDispatcher: CoroutineDispatcher? = null
         ) {
-            init(context, publicKey, baseURI, targetEnvironment, libraryInfo, callbackDispatcher)
+            init(context, publicKey, baseURI, targetEnvironment, callbackDispatcher)
         }
 
         /**
@@ -107,7 +105,6 @@ class DashX {
             publicKey: String,
             baseURI: String? = null,
             targetEnvironment: String? = null,
-            libraryInfo: LibraryInfo? = null,
             callbackDispatcher: CoroutineDispatcher? = null
         ) {
             this.baseURI = baseURI
@@ -117,7 +114,6 @@ class DashX {
             callbackDispatcher?.let { this.callbackDispatcher = it }
 
             SystemContext.configure(context)
-            SystemContext.setLibraryInfo(libraryInfo)
             loadFromStorage()
             createGraphqlClient()
         }

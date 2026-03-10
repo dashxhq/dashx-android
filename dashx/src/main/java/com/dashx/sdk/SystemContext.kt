@@ -5,7 +5,6 @@ import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.content.pm.PackageInfoCompat
-import com.dashx.android.data.LibraryInfo
 import com.dashx.android.utils.*
 import com.dashx.android.utils.SystemContextConstants.ADVERTISING_ID
 import com.dashx.android.utils.SystemContextConstants.AD_TRACKING_ENABLED
@@ -65,13 +64,6 @@ class SystemContext {
             INSTANCE.init(context)
             getAdvertisingInfo(context)
             return INSTANCE
-        }
-
-        fun setLibraryInfo(libraryInfo: LibraryInfo?) {
-            if (libraryInfo != null) {
-                libraryName = libraryInfo.name
-                libraryVersion = libraryInfo.version
-            }
         }
 
         @JvmName("getSystemContextInstance")
