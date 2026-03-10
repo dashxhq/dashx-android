@@ -98,6 +98,8 @@ mavenPublishing {
 
     publishToMavenCentral(true)
 
+    signAllPublications()
+
     pom {
         name = 'DashX Android'
         description = 'DashX Android SDK'
