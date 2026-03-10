@@ -1,6 +1,6 @@
 [versions]
 group = "com.dashx"
-dashxAndroid = "1.0.15"
+dashxAndroid = "1.1.0"
 dashxAndroidArtifactId = "dashx-android"
 vanniktechMavenPublish = "0.36.0"
 
