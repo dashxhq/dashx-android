@@ -11,7 +11,7 @@ jobs:
         runs-on: ubuntu-latest
         steps:
             -   name: Check out code
-                uses: actions/checkout@v3
+                uses: actions/checkout@v4
 
             -   name: Set up JDK 17
                 uses: actions/setup-java@v4
@@ -19,13 +19,11 @@ jobs:
                     distribution: temurin
                     java-version: 17
 
-            # Optional: smoke test release build before publishing
             -   name: Release build
-                run: ./gradlew :dashx:assembleRelease
+                run: ./gradlew build
 
-            # Publish dashx module to Maven Central using Vanniktech maven-publish
             -   name: Publish to MavenCentral
-                run: ./gradlew :dashx:publish --no-configuration-cache
+                run: ./gradlew publishToMavenCentral
                 env:
                     ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
                     ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
