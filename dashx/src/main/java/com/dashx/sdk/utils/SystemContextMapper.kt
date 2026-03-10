@@ -1,15 +1,15 @@
 package com.dashx.android.utils
 
 import com.apollographql.apollo.api.Optional
-import com.dashx.graphql.generated.type.SystemContextAppInput
-import com.dashx.graphql.generated.type.SystemContextCampaignInput
-import com.dashx.graphql.generated.type.SystemContextDeviceInput
-import com.dashx.graphql.generated.type.SystemContextInput
-import com.dashx.graphql.generated.type.SystemContextLibraryInput
-import com.dashx.graphql.generated.type.SystemContextLocationInput
-import com.dashx.graphql.generated.type.SystemContextNetworkInput
-import com.dashx.graphql.generated.type.SystemContextOsInput
-import com.dashx.graphql.generated.type.SystemContextScreenInput
+import com.dashx.android.graphql.generated.type.SystemContextAppInput
+import com.dashx.android.graphql.generated.type.SystemContextCampaignInput
+import com.dashx.android.graphql.generated.type.SystemContextDeviceInput
+import com.dashx.android.graphql.generated.type.SystemContextInput
+import com.dashx.android.graphql.generated.type.SystemContextLibraryInput
+import com.dashx.android.graphql.generated.type.SystemContextLocationInput
+import com.dashx.android.graphql.generated.type.SystemContextNetworkInput
+import com.dashx.android.graphql.generated.type.SystemContextOsInput
+import com.dashx.android.graphql.generated.type.SystemContextScreenInput
 import org.json.JSONObject
 
 /**

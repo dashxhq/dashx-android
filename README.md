@@ -227,7 +227,7 @@ DashX.screen("Home", hashMapOf())
 Tracks message delivery/open/dismiss status for DashX pushes.
 
 ```kotlin
-DashX.trackMessage("message-id", com.dashx.graphql.generated.type.TrackMessageStatus.OPENED)
+DashX.trackMessage("message-id", com.dashx.android.graphql.generated.type.TrackMessageStatus.OPENED)
 ```
 
 #### `DashX.subscribe()` / `DashX.subscribe(token)` / `DashX.unsubscribe()`

@@ -71,7 +71,7 @@ dependencies {
 
 apollo {
     service("service") {
-        packageName = "com.dashx.graphql.generated"
+        packageName = "com.dashx.android.graphql.generated"
 
         srcDir("src/main/graphql")
 

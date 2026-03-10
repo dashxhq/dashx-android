@@ -4,7 +4,7 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import com.dashx.graphql.generated.type.TrackMessageStatus
+import com.dashx.android.graphql.generated.type.TrackMessageStatus
 
 class NotificationProcessor {
     companion object {
