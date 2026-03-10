@@ -12,27 +12,23 @@ jobs:
         steps:
             -   name: Check out code
                 uses: actions/checkout@v3
-            -   name: Set up JDK 11
-                uses: actions/setup-java@v2
-                with:
-                    distribution: adopt
-                    java-version: 11
 
-                # Builds the release artifacts of the library
+            -   name: Set up JDK 17
+                uses: actions/setup-java@v4
+                with:
+                    distribution: temurin
+                    java-version: 17
+
+            # Optional: smoke test release build before publishing
             -   name: Release build
                 run: ./gradlew :dashx:assembleRelease
 
-                # Generates other artifacts (javadocJar is optional)
-            -   name: Source jar and dokka
-                run: ./gradlew androidSourcesJar
-
-                # Runs upload, and then closes & releases the repository
+            # Publish dashx module to Maven Central using Vanniktech maven-publish
             -   name: Publish to MavenCentral
-                run: ./gradlew publishReleasePublicationToSonatypeRepository --max-workers 1 closeAndReleaseSonatypeStagingRepository
+                run: ./gradlew :dashx:publish --no-configuration-cache
                 env:
-                    OSSRH_USERNAME: ${{ secrets.OSSRH_USERNAME }}
-                    OSSRH_PASSWORD: ${{ secrets.OSSRH_PASSWORD }}
-                    SIGNING_KEY_ID: ${{ secrets.SIGNING_KEY_ID }}
-                    SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
-                    SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
-                    SONATYPE_STAGING_PROFILE_ID: ${{ secrets.SONATYPE_STAGING_PROFILE_ID }}
+                    ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+                    ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+                    ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_IN_MEMORY_KEY }}
+                    ORG_GRADLE_PROJECT_signingInMemoryKeyId: ${{ secrets.SIGNING_IN_MEMORY_KEY_ID }}
+                    ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_IN_MEMORY_KEY_PASSWORD }}
