@@ -3,7 +3,7 @@ package com.dashx.android
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import com.dashx.graphql.generated.enums.TrackMessageStatus
+import com.dashx.graphql.generated.type.TrackMessageStatus
 
 class NotificationDismissedReceiver : BroadcastReceiver() {
     private val dashXClient = DashX

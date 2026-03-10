@@ -6,25 +6,45 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import androidx.core.content.pm.PackageInfoCompat
-import com.dashx.graphql.generated.*
-import com.dashx.graphql.generated.enums.AssetUploadStatus
-import com.dashx.graphql.generated.enums.ContactKind
-import com.dashx.graphql.generated.enums.TrackMessageStatus
-import com.dashx.graphql.generated.fetchstoredpreferences.FetchStoredPreferencesResponse
-import com.dashx.graphql.generated.inputs.*
-import com.dashx.graphql.generated.savestoredpreferences.SaveStoredPreferencesResponse
+import com.apollographql.apollo.ApolloClient
+import com.apollographql.apollo.api.ApolloResponse
+import com.apollographql.apollo.api.Optional
+import com.apollographql.apollo.api.Query
+import com.apollographql.apollo.api.Mutation
+import com.dashx.graphql.generated.AssetQuery
+import com.dashx.graphql.generated.FetchCartQuery
+import com.dashx.graphql.generated.FetchRecordQuery
+import com.dashx.graphql.generated.FetchStoredPreferencesQuery
+import com.dashx.graphql.generated.IdentifyAccountMutation
+import com.dashx.graphql.generated.PrepareAssetMutation
+import com.dashx.graphql.generated.SaveStoredPreferencesMutation
+import com.dashx.graphql.generated.SearchRecordsQuery
+import com.dashx.graphql.generated.SubscribeContactMutation
+import com.dashx.graphql.generated.TrackEventMutation
+import com.dashx.graphql.generated.TrackMessageMutation
+import com.dashx.graphql.generated.UnsubscribeContactMutation
+import com.dashx.graphql.generated.AddItemToCartMutation
+import com.dashx.graphql.generated.type.AssetUploadStatus
+import com.dashx.graphql.generated.type.ContactKind
+import com.dashx.graphql.generated.type.FetchCartInput
+import com.dashx.graphql.generated.type.FetchRecordInput
+import com.dashx.graphql.generated.type.FetchStoredPreferencesInput
+import com.dashx.graphql.generated.type.IdentifyAccountInput
+import com.dashx.graphql.generated.type.PrepareAssetInput
+import com.dashx.graphql.generated.type.SaveStoredPreferencesInput
+import com.dashx.graphql.generated.type.SearchRecordsInput
+import com.dashx.graphql.generated.type.SubscribeContactInput
+import com.dashx.graphql.generated.type.SystemContextInput
+import com.dashx.graphql.generated.type.TrackEventInput
+import com.dashx.graphql.generated.type.TrackMessageInput
+import com.dashx.graphql.generated.type.AddItemToCartInput
+import com.dashx.graphql.generated.type.TrackMessageStatus
+import com.dashx.graphql.generated.type.UnsubscribeContactInput
 import com.dashx.android.data.LibraryInfo
 import com.dashx.android.data.PrepareAssetResponse
 import com.dashx.android.utils.*
-import com.expediagroup.graphql.client.serialization.GraphQLClientKotlinxSerializer
-import com.expediagroup.graphql.client.types.GraphQLClientRequest
-import com.expediagroup.graphql.client.types.GraphQLClientResponse
 import com.google.android.gms.tasks.OnCompleteListener
 import com.google.firebase.messaging.FirebaseMessaging
-import io.ktor.client.*
-import io.ktor.client.plugins.*
-import io.ktor.client.plugins.logging.*
-import io.ktor.client.request.*
 import kotlinx.coroutines.*
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
@@ -36,10 +56,10 @@ import java.io.File
 import java.io.FileInputStream
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.concurrent.TimeUnit
 import java.time.Instant
 import java.time.format.DateTimeFormatter
 import java.util.UUID
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
 class DashX {
@@ -117,29 +137,36 @@ class DashX {
             }.apply()
         }
 
-        @Volatile private var graphqlClient = getGraphqlClient()
+        @Volatile private var apolloClient = createApolloClient()
 
         private fun createGraphqlClient() {
-            graphqlClient = getGraphqlClient()
+            apolloClient = createApolloClient()
         }
 
-        private fun <D : Any> executeQuery(
-            query: GraphQLClientRequest<D>,
-            onError: ((DashXError) -> Unit)? = null,
-            onSuccess: (GraphQLClientResponse<D>) -> Unit
-        ) {
-            coroutineScope.launch {
-                val result = graphqlClient.execute(query)
-                if (result.hasErrors(onError)) return@launch
-                onSuccess(result)
-            }
+        private fun createApolloClient(): ApolloClient {
+            return ApolloClient.Builder()
+                .serverUrl(baseURI ?: "https://api.dashx.com/graphql")
+                .apply {
+                    publicKey?.let { addHttpHeader("X-Public-Key", it) }
+                    targetEnvironment?.let { addHttpHeader("X-Target-Environment", it) }
+                    identityToken?.let { addHttpHeader("X-Identity-Token", it) }
+                }
+                .build()
         }
 
-        private fun <D> GraphQLClientResponse<D>.hasErrors(
+        private fun hasApolloErrors(
+            errors: List<*>?,
+            exception: Throwable?,
             onError: ((DashXError) -> Unit)? = null
         ): Boolean {
+            exception?.let {
+                val error = DashXError.GraphQLError(it.message ?: "")
+                DashXLog.e(tag, it.message ?: "")
+                onError?.invoke(error)
+                return true
+            }
             if (!errors.isNullOrEmpty()) {
-                val errorsString = errors?.toString() ?: ""
+                val errorsString = errors.toString()
                 if (errorsString.isNotEmpty()) {
                     val error = DashXError.GraphQLError(errorsString)
                     DashXLog.e(tag, errorsString)
@@ -155,40 +182,28 @@ class DashX {
             createGraphqlClient()
         }
 
-        private fun getGraphqlClient(): DashXGraphQLKtorClient {
-            val httpClient = HttpClient(engineFactory = io.ktor.client.engine.okhttp.OkHttp) {
-                engine {
-                    config {
-                        connectTimeout(10, TimeUnit.SECONDS)
-                        readTimeout(60, TimeUnit.SECONDS)
-                        writeTimeout(60, TimeUnit.SECONDS)
-                    }
-                }
-                install(Logging) {
-                    logger = Logger.DEFAULT
-                    level = LogLevel.NONE
-                }
-
-                defaultRequest {
-                    publicKey?.let {
-                        header("X-Public-Key", it)
-                    }
-
-                    targetEnvironment?.let {
-                        header("X-Target-Environment", it)
-                    }
-
-                    identityToken?.let {
-                        header("X-Identity-Token", it)
-                    }
-                }
+        private fun <D : Mutation.Data> executeMutation(
+            mutation: Mutation<D>,
+            onError: ((DashXError) -> Unit)? = null,
+            onSuccess: (ApolloResponse<D>) -> Unit
+        ) {
+            coroutineScope.launch {
+                val response = apolloClient.mutation(mutation).execute()
+                if (hasApolloErrors(response.errors, response.exception, onError)) return@launch
+                onSuccess(response)
             }
+        }
 
-            return DashXGraphQLKtorClient(
-                url = URL(baseURI ?: "https://api.dashx.com/graphql"),
-                httpClient = httpClient,
-                serializer = GraphQLClientKotlinxSerializer()
-            )
+        private fun <D : Query.Data> executeQuery(
+            query: Query<D>,
+            onError: ((DashXError) -> Unit)? = null,
+            onSuccess: (ApolloResponse<D>) -> Unit
+        ) {
+            coroutineScope.launch {
+                val response = apolloClient.query(query).execute()
+                if (hasApolloErrors(response.errors, response.exception, onError)) return@launch
+                onSuccess(response)
+            }
         }
 
         private fun generateAccountAnonymousUid(): String {
@@ -213,21 +228,19 @@ class DashX {
                 this.accountAnonymousUid
             }
 
-            val query = IdentifyAccount(
-                variables = IdentifyAccount.Variables(
-                    IdentifyAccountInput(
-                        uid = uid,
-                        anonymousUid = anonymousUid,
-                        email = options[UserAttributes.EMAIL],
-                        phone = options[UserAttributes.PHONE],
-                        name = options[UserAttributes.NAME],
-                        firstName = options[UserAttributes.FIRST_NAME],
-                        lastName = options[UserAttributes.LAST_NAME]
-                    )
+            val mutation = IdentifyAccountMutation(
+                input = IdentifyAccountInput(
+                    uid = Optional.Present(uid),
+                    anonymousUid = Optional.Present(anonymousUid),
+                    email = options[UserAttributes.EMAIL]?.let { Optional.Present(it) } ?: Optional.Absent,
+                    phone = options[UserAttributes.PHONE]?.let { Optional.Present(it) } ?: Optional.Absent,
+                    name = options[UserAttributes.NAME]?.let { Optional.Present(it) } ?: Optional.Absent,
+                    firstName = options[UserAttributes.FIRST_NAME]?.let { Optional.Present(it) } ?: Optional.Absent,
+                    lastName = options[UserAttributes.LAST_NAME]?.let { Optional.Present(it) } ?: Optional.Absent
                 )
             )
 
-            executeQuery(query) { result ->
+            executeMutation(mutation) { result ->
                 DashXLog.d(tag, result.data?.identifyAccount?.toString())
             }
         }
@@ -269,17 +282,15 @@ class DashX {
             val resource = urnArray[0]
             val recordId = urnArray[1]
 
-            val query = FetchRecord(
-                variables = FetchRecord.Variables(
-                    FetchRecordInput(
-                        resource = resource,
-                        recordId = recordId,
-                        preview = preview,
-                        language = language,
-                        fields = fields,
-                        include = include,
-                        exclude = exclude
-                    )
+            val query = FetchRecordQuery(
+                input = FetchRecordInput(
+                    recordId = recordId,
+                    resource = Optional.Present(resource),
+                    preview = preview?.let { Optional.Present(it) } ?: Optional.Absent,
+                    language = language?.let { Optional.Present(it) } ?: Optional.Absent,
+                    fields = fields?.let { Optional.Present(it) } ?: Optional.Absent,
+                    include = include?.let { Optional.Present(it) } ?: Optional.Absent,
+                    exclude = exclude?.let { Optional.Present(it) } ?: Optional.Absent
                 )
             )
 
@@ -301,19 +312,17 @@ class DashX {
             onSuccess: (result: List<JsonObject>) -> Unit,
             onError: (error: DashXError) -> Unit
         ) {
-            val query = SearchRecords(
-                variables = SearchRecords.Variables(
-                    SearchRecordsInput(
-                        resource = resource,
-                        filter = filter,
-                        order = order,
-                        limit = limit,
-                        preview = preview,
-                        language = language,
-                        fields = fields,
-                        include = include,
-                        exclude = exclude
-                    )
+            val query = SearchRecordsQuery(
+                input = SearchRecordsInput(
+                    resource = resource,
+                    filter = filter?.let { Optional.Present(it) } ?: Optional.Absent,
+                    order = order?.let { Optional.Present(it) } ?: Optional.Absent,
+                    limit = limit?.let { Optional.Present(it) } ?: Optional.Absent,
+                    preview = preview?.let { Optional.Present(it) } ?: Optional.Absent,
+                    language = language?.let { Optional.Present(it) } ?: Optional.Absent,
+                    fields = fields?.let { Optional.Present(it) } ?: Optional.Absent,
+                    include = include?.let { Optional.Present(it) } ?: Optional.Absent,
+                    exclude = exclude?.let { Optional.Present(it) } ?: Optional.Absent
                 )
             )
 
@@ -324,7 +333,7 @@ class DashX {
         }
 
         fun fetchCart(
-            onSuccess: (result: com.dashx.graphql.generated.fetchcart.Order) -> Unit,
+            onSuccess: (result: FetchCartQuery.FetchCart) -> Unit,
             onError: (error: DashXError) -> Unit
         ) {
             val uid = accountUid ?: run {
@@ -332,7 +341,7 @@ class DashX {
                 return
             }
 
-            val query = FetchCart(variables = FetchCart.Variables(FetchCartInput(uid)))
+            val query = FetchCartQuery(input = FetchCartInput(accountUid = Optional.Present(uid)))
 
             executeQuery(query, onError) { result ->
                 result.data?.fetchCart?.let(onSuccess)
@@ -345,41 +354,37 @@ class DashX {
             quantity: String,
             reset: Boolean,
             custom: JsonObject? = null,
-            onSuccess: (result: com.dashx.graphql.generated.additemtocart.Order) -> Unit,
+            onSuccess: (result: AddItemToCartMutation.AddItemToCart) -> Unit,
             onError: (error: DashXError) -> Unit
         ) {
             val uid = accountUid ?: run {
                 onError(DashXError.NotIdentified())
                 return
             }
-            val query = AddItemToCart(
-                variables = AddItemToCart.Variables(
-                    AddItemToCartInput(
-                        accountUid = uid,
-                        itemId = itemId,
-                        pricingId = pricingId,
-                        quantity = quantity,
-                        reset = reset
-                    )
+            val mutation = AddItemToCartMutation(
+                input = AddItemToCartInput(
+                    accountUid = Optional.Present(uid),
+                    itemId = itemId,
+                    pricingId = pricingId,
+                    quantity = quantity,
+                    reset = reset
                 )
             )
 
-            executeQuery(query, onError) { result ->
-                result.data?.let { onSuccess(it.addItemToCart) }
+            executeMutation(mutation, onError) { result ->
+                result.data?.addItemToCart?.let(onSuccess)
             }
         }
 
         fun fetchStoredPreferences(
-            onSuccess: (result: FetchStoredPreferencesResponse) -> Unit,
+            onSuccess: (result: FetchStoredPreferencesQuery.FetchStoredPreferences) -> Unit,
             onError: (error: DashXError) -> Unit
         ) {
             val uid = accountUid ?: run {
                 onError(DashXError.NotIdentified())
                 return
             }
-            val query = FetchStoredPreferences(
-                variables = FetchStoredPreferences.Variables(FetchStoredPreferencesInput(uid))
-            )
+            val query = FetchStoredPreferencesQuery(input = FetchStoredPreferencesInput(uid))
 
             executeQuery(query, onError) { result ->
                 result.data?.fetchStoredPreferences?.let(onSuccess)
@@ -388,22 +393,21 @@ class DashX {
 
         fun saveStoredPreferences(
             preferenceData: JsonObject,
-            onSuccess: (result: SaveStoredPreferencesResponse) -> Unit,
+            onSuccess: (result: SaveStoredPreferencesMutation.SaveStoredPreferences) -> Unit,
             onError: (error: DashXError) -> Unit
         ) {
             val uid = accountUid ?: run {
                 onError(DashXError.NotIdentified())
                 return
             }
-            val query = SaveStoredPreferences(
-                variables = SaveStoredPreferences.Variables(
-                    SaveStoredPreferencesInput(
-                        uid, Json.parseToJsonElement(preferenceData.toString()).jsonObject
-                    )
+            val mutation = SaveStoredPreferencesMutation(
+                input = SaveStoredPreferencesInput(
+                    accountUid = uid,
+                    preferenceData = Json.parseToJsonElement(preferenceData.toString()).jsonObject
                 )
             )
 
-            executeQuery(query, onError) { result ->
+            executeMutation(mutation, onError) { result ->
                 result.data?.saveStoredPreferences?.let(onSuccess)
             }
         }
@@ -427,23 +431,21 @@ class DashX {
                 return
             }
 
-            val query = PrepareAsset(
-                variables = PrepareAsset.Variables(
-                    PrepareAssetInput(
-                        attribute = attribute,
-                        name = name,
-                        resource = resource,
-                        mimeType = mimeType,
-                        size = size,
-                    )
+            val mutation = PrepareAssetMutation(
+                input = PrepareAssetInput(
+                    resource = Optional.Present(resource),
+                    attribute = Optional.Present(attribute),
+                    name = name,
+                    size = size,
+                    mimeType = mimeType
                 )
             )
 
             coroutineScope.launch {
-                val result = graphqlClient.execute(query)
-                if (result.hasErrors(onError)) return@launch
+                val response = apolloClient.mutation(mutation).execute()
+                if (hasApolloErrors(response.errors, response.exception, onError)) return@launch
 
-                val prepareAssetResponse = result.data?.prepareAsset?.data?.let {
+                val prepareAssetResponse = response.data?.prepareAsset?.`data`?.let {
                     json.decodeFromJsonElement<PrepareAssetResponse>(it)
                 }
 
@@ -451,7 +453,7 @@ class DashX {
                     writeFileToUrl(
                         file,
                         prepareAssetResponse.upload.url,
-                        result.data?.prepareAsset?.id ?: "",
+                        response.data?.prepareAsset?.id?.toString() ?: "",
                         onSuccess,
                         onError
                     )
@@ -501,21 +503,25 @@ class DashX {
             onSuccess: (result: com.dashx.android.data.Asset) -> Unit,
             onError: (error: DashXError) -> Unit
         ) {
-            val query = Asset(variables = Asset.Variables(id))
-            val result = graphqlClient.execute(query)
+            val query = AssetQuery(id = id)
+            val response = apolloClient.query(query).execute()
 
-            if (result.hasErrors(onError)) return
+            if (hasApolloErrors(response.errors, response.exception, onError)) return
 
-            if (result.data?.asset?.uploadStatus != AssetUploadStatus.UPLOADED && pollCounter.get() <= UploadConstants.POLL_TIME_OUT) {
+            val responseAsset = response.data?.asset
+            if (responseAsset?.uploadStatus != AssetUploadStatus.UPLOADED && pollCounter.get() <= UploadConstants.POLL_TIME_OUT) {
                 delay(UploadConstants.POLL_INTERVAL)
                 pollCounter.incrementAndGet()
                 asset(id, onSuccess, onError)
             } else {
                 pollCounter.set(1)
-                val responseObject = result.data?.asset
-                val externalDataJsonObject = responseObject?.data?.let { JSONObject(it) }
-                val responseJsonObject = JSONObject(responseObject.toString())
-                responseJsonObject.put(DATA, externalDataJsonObject)
+                val responseJsonObject = JSONObject().apply {
+                    put("id", responseAsset?.id?.toString())
+                    put("resourceId", responseAsset?.resourceId?.toString())
+                    put("attributeId", responseAsset?.attributeId?.toString())
+                    put("uploadStatus", responseAsset?.uploadStatus?.rawValue)
+                    put(DATA, responseAsset?.`data`?.let { JSONObject(it.toString()) })
+                }
 
                 val asset = json.decodeFromString<com.dashx.android.data.Asset>(
                     responseJsonObject.toString()
@@ -538,19 +544,17 @@ class DashX {
                 SystemContext.getInstance().fetchSystemContext().toString()
             )
 
-            val query = TrackEvent(
-                variables = TrackEvent.Variables(
-                    TrackEventInput(
-                        accountAnonymousUid = accountAnonymousUid,
-                        accountUid = accountUid,
-                        data = jsonData,
-                        event = event,
-                        systemContext = systemContext
-                    )
+            val mutation = TrackEventMutation(
+                input = TrackEventInput(
+                    event = event,
+                    accountUid = accountUid?.let { Optional.Present(it) } ?: Optional.Absent,
+                    accountAnonymousUid = accountAnonymousUid?.let { Optional.Present(it) } ?: Optional.Absent,
+                    data = jsonData?.let { Optional.Present(it) } ?: Optional.Absent,
+                    systemContext = Optional.Present(systemContext)
                 )
             )
 
-            executeQuery(query) { result ->
+            executeMutation(mutation) { result ->
                 DashXLog.d(tag, result.data?.trackEvent?.toString())
             }
         }
@@ -563,22 +567,20 @@ class DashX {
                 SystemContext.getInstance().fetchSystemContext().toString()
             )
 
-            val query = TrackEvent(
-                variables = TrackEvent.Variables(
-                    TrackEventInput(
-                        accountAnonymousUid = accountAnonymousUid,
-                        accountUid = accountUid,
-                        data = jsonData,
-                        event = event,
-                        systemContext = systemContext
-                    )
+            val mutation = TrackEventMutation(
+                input = TrackEventInput(
+                    event = event,
+                    accountUid = accountUid?.let { Optional.Present(it) } ?: Optional.Absent,
+                    accountAnonymousUid = accountAnonymousUid?.let { Optional.Present(it) } ?: Optional.Absent,
+                    data = jsonData?.let { Optional.Present(it) } ?: Optional.Absent,
+                    systemContext = Optional.Present(systemContext)
                 )
             )
 
             try {
                 runBlocking {
                     withTimeout(timeoutMs) {
-                        graphqlClient.execute(query)
+                        apolloClient.mutation(mutation).execute()
                     }
                 }
             } catch (e: Exception) {
@@ -644,15 +646,15 @@ class DashX {
         fun trackMessage(id: String, status: TrackMessageStatus) {
             val currentTime = DateTimeFormatter.ISO_INSTANT.format(Instant.now())
 
-            val query = TrackMessage(
-                variables = TrackMessage.Variables(
-                    TrackMessageInput(
-                        id = id, status = status, timestamp = currentTime
-                    )
+            val mutation = TrackMessageMutation(
+                input = TrackMessageInput(
+                    id = id,
+                    status = status,
+                    timestamp = currentTime
                 )
             )
 
-            executeQuery(query) { result ->
+            executeMutation(mutation) { result ->
                 DashXLog.d(tag, result.data?.trackMessage?.toString())
             }
         }
@@ -693,23 +695,21 @@ class DashX {
                     ctx.contentResolver, Settings.Global.DEVICE_NAME
                 ) ?: Settings.Secure.getString(ctx.contentResolver, "bluetooth_name")
 
-                val query = SubscribeContact(
-                    variables = SubscribeContact.Variables(
-                        SubscribeContactInput(
-                            accountUid = accountUid,
-                            accountAnonymousUid = accountAnonymousUid,
-                            name = name,
-                            kind = ContactKind.ANDROID,
-                            value = newToken,
-                            osName = "Android",
-                            osVersion = Build.VERSION.RELEASE,
-                            deviceManufacturer = Build.MANUFACTURER,
-                            deviceModel = Build.MODEL
-                        )
+                val mutation = SubscribeContactMutation(
+                    input = SubscribeContactInput(
+                        accountUid = accountUid?.let { Optional.Present(it) } ?: Optional.Absent,
+                        accountAnonymousUid = accountAnonymousUid?.let { Optional.Present(it) } ?: Optional.Absent,
+                        name = name?.let { Optional.Present(it) } ?: Optional.Absent,
+                        kind = ContactKind.ANDROID,
+                        value = newToken,
+                        osName = Optional.Present("Android"),
+                        osVersion = Build.VERSION.RELEASE.let { Optional.Present(it) },
+                        deviceManufacturer = Optional.Present(Build.MANUFACTURER),
+                        deviceModel = Optional.Present(Build.MODEL)
                     )
                 )
 
-                executeQuery(query, onError = { error ->
+                executeMutation(mutation, onError = { error ->
                     DashXLog.e(tag, "Failed to subscribe: ${error.message}")
                 }) { result ->
                     context?.let { c ->
@@ -755,17 +755,15 @@ class DashX {
                         }.apply()
                     }
 
-                    val query = UnsubscribeContact(
-                        variables = UnsubscribeContact.Variables(
-                            UnsubscribeContactInput(
-                                accountUid = uid,
-                                accountAnonymousUid = anonymousUid,
-                                value = savedToken
-                            )
+                    val mutation = UnsubscribeContactMutation(
+                        input = UnsubscribeContactInput(
+                            accountUid = uid?.let { Optional.Present(it) } ?: Optional.Absent,
+                            accountAnonymousUid = anonymousUid?.let { Optional.Present(it) } ?: Optional.Absent,
+                            value = savedToken
                         )
                     )
 
-                    executeQuery(query, onError = { error ->
+                    executeMutation(mutation, onError = { error ->
                         DashXLog.e(tag, "Failed to unsubscribe: ${error.message}")
                     }) { result ->
                         DashXLog.d(tag, "Unsubscribed $savedToken successfully.")

@@ -13,7 +13,7 @@ import android.os.Build
 import android.webkit.URLUtil
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
-import com.dashx.graphql.generated.enums.TrackMessageStatus
+import com.dashx.graphql.generated.type.TrackMessageStatus
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import kotlinx.serialization.SerialName

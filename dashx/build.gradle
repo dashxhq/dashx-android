@@ -1,11 +1,7 @@
-import com.expediagroup.graphql.plugin.gradle.config.GraphQLSerializer
-import com.expediagroup.graphql.plugin.gradle.config.GraphQLScalar
-
 plugins {
     id 'com.android.library'
-    id 'com.expediagroup.graphql'
-    id 'org.jetbrains.kotlin.android'
     id 'org.jetbrains.kotlin.plugin.serialization'
+    id 'com.apollographql.apollo'
     id 'signing'
     id 'com.vanniktech.maven.publish'
 }
@@ -45,20 +41,16 @@ android {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
+}
 
-    kotlinOptions {
-        jvmTarget = "17"
-    }
+kotlin {
+    jvmToolchain(17)
 }
 
 dependencies {
     implementation 'com.squareup.okhttp3:okhttp:5.0.0-alpha.11'
 
-    // Kotlin Graphql
-    implementation 'org.slf4j:slf4j-simple:2.0.7'
-    implementation "com.expediagroup:graphql-kotlin-ktor-client:$latestGraphQLKotlinVersion"
-    implementation "io.ktor:ktor-client-okhttp:$ktorVersion"
-    implementation "io.ktor:ktor-client-logging-jvm:$ktorVersion"
+    implementation 'com.apollographql.apollo:apollo-runtime:4.4.1'
     implementation 'androidx.work:work-runtime-ktx:2.7.1'
     implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.5.0'
 
@@ -77,18 +69,29 @@ dependencies {
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
 }
 
-graphql {
-    client {
-        endpoint = 'https://api.dashx-staging.com/graphql'
-        packageName = 'com.dashx.graphql.generated'
+apollo {
+    service("service") {
+        packageName = "com.dashx.graphql.generated"
 
-        customScalars = [new GraphQLScalar('JSON', 'kotlinx.serialization.json.JsonObject', 'com.dashx.graphql.scalars.converters.JsonScalarConverter')]
-        serializer = GraphQLSerializer.KOTLINX
+        srcDir("src/main/graphql")
+
+        includes.add("**/*.graphql")
+
+        outputDir = file("$buildDir/generated/apollo")
+
+        mapScalar("JSON", "kotlinx.serialization.json.JsonObject")
+
+        schemaFiles.from("$buildDir/graphql/schema.graphqls")
+
+        introspection {
+            endpointUrl = "https://api.dashx-staging.com/graphql"
+            schemaFile = file("$buildDir/graphql/schema.graphqls")
+        }
     }
 }
 
-android.sourceSets {
-    main.kotlin.srcDirs 'build/generated/source/graphql/main'
+tasks.named("preBuild") {
+    dependsOn("downloadServiceApolloSchemaFromIntrospection")
 }
 
 mavenPublishing {
