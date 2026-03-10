@@ -1,0 +1,5 @@
+mutation TrackMessage($input: TrackMessageInput!) {
+    trackMessage(input: $input) {
+        success
+    }
+}

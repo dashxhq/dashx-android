@@ -1,4 +1,4 @@
-package com.dashx.sdk.utils
+package com.dashx.android.utils
 
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothManager
@@ -14,8 +14,8 @@ import android.os.Build
 import android.provider.Settings
 import android.telephony.TelephonyManager
 import androidx.core.content.ContextCompat
-import com.dashx.sdk.utils.SystemContextConstants.ADVERTISING_ID
-import com.dashx.sdk.utils.SystemContextConstants.AD_TRACKING_ENABLED
+import com.dashx.android.utils.SystemContextConstants.ADVERTISING_ID
+import com.dashx.android.utils.SystemContextConstants.AD_TRACKING_ENABLED
 import com.google.android.gms.ads.identifier.AdvertisingIdClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -50,7 +50,12 @@ fun getIpHostAddresses(): HashMap<String, String> {
 }
 
 fun getAppLocale(context: Context): Locale? {
-    return context.resources?.configuration?.locale
+    val configuration = context.resources.configuration
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+        configuration.locales[0]
+    } else {
+        configuration.locale
+    }
 }
 
 fun getAppTimeZone(): String {

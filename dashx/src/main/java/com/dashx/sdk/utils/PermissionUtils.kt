@@ -1,4 +1,4 @@
-package com.dashx.sdk.utils
+package com.dashx.android.utils
 
 import android.app.Activity
 import android.app.AlertDialog
@@ -10,7 +10,7 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import androidx.core.app.ActivityCompat
-import com.dashx.sdk.DashXLog
+import com.dashx.android.DashXLog
 
 object PermissionUtils {
     private val tag = PermissionUtils::class.java.simpleName

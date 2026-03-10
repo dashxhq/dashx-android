@@ -1,27 +1,46 @@
-package com.dashx.sdk
+package com.dashx.android
 
 import android.content.Context
 import android.content.SharedPreferences
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
-import com.dashx.graphql.generated.*
-import com.dashx.graphql.generated.enums.AssetUploadStatus
-import com.dashx.graphql.generated.enums.ContactKind
-import com.dashx.graphql.generated.enums.TrackNotificationStatus
-import com.dashx.graphql.generated.fetchstoredpreferences.FetchStoredPreferencesResponse
-import com.dashx.graphql.generated.inputs.*
-import com.dashx.graphql.generated.savestoredpreferences.SaveStoredPreferencesResponse
-import com.dashx.sdk.data.LibraryInfo
-import com.dashx.sdk.data.PrepareAssetResponse
-import com.dashx.sdk.utils.*
-import com.expediagroup.graphql.client.serialization.GraphQLClientKotlinxSerializer
+import androidx.core.content.pm.PackageInfoCompat
+import com.apollographql.apollo.ApolloClient
+import com.apollographql.apollo.api.ApolloResponse
+import com.apollographql.apollo.api.Optional
+import com.apollographql.apollo.api.Query
+import com.apollographql.apollo.api.Mutation
+import com.dashx.graphql.generated.AssetQuery
+import com.dashx.graphql.generated.FetchRecordQuery
+import com.dashx.graphql.generated.FetchStoredPreferencesQuery
+import com.dashx.graphql.generated.IdentifyAccountMutation
+import com.dashx.graphql.generated.PrepareAssetMutation
+import com.dashx.graphql.generated.SaveStoredPreferencesMutation
+import com.dashx.graphql.generated.SearchRecordsQuery
+import com.dashx.graphql.generated.SubscribeContactMutation
+import com.dashx.graphql.generated.TrackEventMutation
+import com.dashx.graphql.generated.TrackMessageMutation
+import com.dashx.graphql.generated.UnsubscribeContactMutation
+import com.dashx.graphql.generated.type.AssetUploadStatus
+import com.dashx.graphql.generated.type.ContactKind
+import com.dashx.graphql.generated.type.FetchRecordInput
+import com.dashx.graphql.generated.type.FetchStoredPreferencesInput
+import com.dashx.graphql.generated.type.IdentifyAccountInput
+import com.dashx.graphql.generated.type.PrepareAssetInput
+import com.dashx.graphql.generated.type.SaveStoredPreferencesInput
+import com.dashx.graphql.generated.type.SearchRecordsInput
+import com.dashx.graphql.generated.type.SubscribeContactInput
+import com.dashx.android.utils.SystemContextMapper
+import com.dashx.graphql.generated.type.TrackEventInput
+import com.dashx.graphql.generated.type.TrackMessageInput
+import com.dashx.graphql.generated.type.TrackMessageStatus
+import com.dashx.graphql.generated.type.JSON
+import com.dashx.graphql.generated.type.UnsubscribeContactInput
+import com.dashx.android.data.PrepareAssetResponse
+import com.dashx.android.utils.*
 import com.google.android.gms.tasks.OnCompleteListener
 import com.google.firebase.messaging.FirebaseMessaging
-import io.ktor.client.*
-import io.ktor.client.plugins.*
-import io.ktor.client.plugins.logging.*
-import io.ktor.client.request.*
 import kotlinx.coroutines.*
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
@@ -33,37 +52,52 @@ import java.io.File
 import java.io.FileInputStream
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.concurrent.TimeUnit
 import java.time.Instant
 import java.time.format.DateTimeFormatter
 import java.util.UUID
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 
 class DashX {
     companion object {
-        // Setup variables
         private var baseURI: String? = null
         private var publicKey: String? = null
         private var targetEnvironment: String? = null
 
-        // Account variables
-        private var accountAnonymousUid: String? = null
-        private var accountUid: String? = null
-        private var identityToken: String? = null
+        @Volatile private var accountAnonymousUid: String? = null
+        @Volatile private var accountUid: String? = null
+        @Volatile private var identityToken: String? = null
 
-        private var context: Context? = null
+        @Volatile private var context: Context? = null
 
-        private var pollCounter = 1
+        /**
+         * [CoroutineDispatcher] on which [onSuccess] and [onError] callbacks are invoked.
+         * Defaults to [Dispatchers.Main.immediate] so UI updates are safe from callbacks.
+         * Set via [configure] or [setCallbackDispatcher].
+         */
+        @Volatile private var callbackDispatcher: CoroutineDispatcher = Dispatchers.Main.immediate
+
+        private val pollCounter = AtomicInteger(1)
         private val coroutineScope = CoroutineScope(Dispatchers.IO)
         private val tag = DashX::class.java.simpleName
+        private val json = Json { ignoreUnknownKeys = true }
 
         fun configure(
             context: Context,
             publicKey: String,
             baseURI: String? = null,
             targetEnvironment: String? = null,
-            libraryInfo: LibraryInfo? = null
+            callbackDispatcher: CoroutineDispatcher? = null
         ) {
-            init(context, publicKey, baseURI, targetEnvironment, libraryInfo)
+            init(context, publicKey, baseURI, targetEnvironment, callbackDispatcher)
+        }
+
+        /**
+         * Sets the dispatcher used for success/error callbacks. Useful for tests or when
+         * you prefer callbacks on a specific thread (e.g. a single-thread executor).
+         */
+        fun setCallbackDispatcher(dispatcher: CoroutineDispatcher) {
+            callbackDispatcher = dispatcher
         }
 
         private fun init(
@@ -71,21 +105,25 @@ class DashX {
             publicKey: String,
             baseURI: String? = null,
             targetEnvironment: String? = null,
-            libraryInfo: LibraryInfo? = null
+            callbackDispatcher: CoroutineDispatcher? = null
         ) {
             this.baseURI = baseURI
             this.publicKey = publicKey
             this.targetEnvironment = targetEnvironment
             this.context = context
+            callbackDispatcher?.let { this.callbackDispatcher = it }
 
             SystemContext.configure(context)
-            SystemContext.setLibraryInfo(libraryInfo)
             loadFromStorage()
             createGraphqlClient()
         }
 
         private fun loadFromStorage() {
-            val dashXSharedPreferences = getDashXSharedPreferences(context!!)
+            val ctx = context ?: run {
+                DashXLog.e(tag, "loadFromStorage: context is null, configure() must be called first")
+                return
+            }
+            val dashXSharedPreferences = getDashXSharedPreferences(ctx)
             accountUid = dashXSharedPreferences.getString(SHARED_PREFERENCES_KEY_ACCOUNT_UID, null)
             accountAnonymousUid =
                 dashXSharedPreferences.getString(SHARED_PREFERENCES_KEY_ACCOUNT_ANONYMOUS_UID, null)
@@ -99,17 +137,57 @@ class DashX {
         }
 
         private fun saveToStorage() {
-            getDashXSharedPreferences(context!!).edit().apply {
+            val ctx = context ?: run {
+                DashXLog.e(tag, "saveToStorage: context is null, configure() must be called first")
+                return
+            }
+            getDashXSharedPreferences(ctx).edit().apply {
                 putString(SHARED_PREFERENCES_KEY_ACCOUNT_UID, accountUid)
                 putString(SHARED_PREFERENCES_KEY_ACCOUNT_ANONYMOUS_UID, accountAnonymousUid)
                 putString(SHARED_PREFERENCES_KEY_IDENTITY_TOKEN, identityToken)
             }.apply()
         }
 
-        private var graphqlClient = getGraphqlClient()
+        /** Recreated when identity/token changes (setIdentityToken, setIdentity, init). */
+        @Volatile private var apolloClient = createApolloClient()
 
         private fun createGraphqlClient() {
-            graphqlClient = getGraphqlClient()
+            apolloClient = createApolloClient()
+        }
+
+        private fun createApolloClient(): ApolloClient {
+            return ApolloClient.Builder()
+                .serverUrl(baseURI ?: "https://api.dashx.com/graphql")
+                .addCustomScalarAdapter(JSON.type, JsonObjectScalarAdapter)
+                .apply {
+                    publicKey?.let { addHttpHeader("X-Public-Key", it) }
+                    targetEnvironment?.let { addHttpHeader("X-Target-Environment", it) }
+                    identityToken?.let { addHttpHeader("X-Identity-Token", it) }
+                }
+                .build()
+        }
+
+        private fun hasApolloErrors(
+            errors: List<*>?,
+            exception: Throwable?,
+            onError: ((DashXError) -> Unit)? = null
+        ): Boolean {
+            exception?.let {
+                val error = DashXError.GraphQLError(it.message ?: "")
+                DashXLog.e(tag, it.message ?: "")
+                onError?.invoke(error)
+                return true
+            }
+            if (!errors.isNullOrEmpty()) {
+                val errorsString = errors.toString()
+                if (errorsString.isNotEmpty()) {
+                    val error = DashXError.GraphQLError(errorsString)
+                    DashXLog.e(tag, errorsString)
+                    onError?.invoke(error)
+                }
+                return true
+            }
+            return false
         }
 
         fun setIdentityToken(identityToken: String) {
@@ -117,40 +195,34 @@ class DashX {
             createGraphqlClient()
         }
 
-        private fun getGraphqlClient(): DashXGraphQLKtorClient {
-            val httpClient = HttpClient(engineFactory = io.ktor.client.engine.okhttp.OkHttp) {
-                engine {
-                    config {
-                        connectTimeout(10, TimeUnit.SECONDS)
-                        readTimeout(60, TimeUnit.SECONDS)
-                        writeTimeout(60, TimeUnit.SECONDS)
-                    }
-                }
-                install(Logging) {
-                    logger = Logger.DEFAULT
-                    level = LogLevel.NONE
-                }
-
-                defaultRequest {
-                    publicKey?.let {
-                        header("X-Public-Key", it)
-                    }
-
-                    targetEnvironment?.let {
-                        header("X-Target-Environment", it)
-                    }
-
-                    identityToken?.let {
-                        header("X-Identity-Token", it)
+        private fun <D : Mutation.Data> executeMutation(
+            mutation: Mutation<D>,
+            onError: ((DashXError) -> Unit)? = null,
+            onSuccess: (ApolloResponse<D>) -> Unit
+        ) {
+            coroutineScope.launch {
+                val response = apolloClient.mutation(mutation).execute()
+                withContext(callbackDispatcher) {
+                    if (!hasApolloErrors(response.errors, response.exception, onError)) {
+                        onSuccess(response)
                     }
                 }
             }
+        }
 
-            return DashXGraphQLKtorClient(
-                url = URL(baseURI ?: "https://api.dashx.com/graphql"),
-                httpClient = httpClient,
-                serializer = GraphQLClientKotlinxSerializer()
-            )
+        private fun <D : Query.Data> executeQuery(
+            query: Query<D>,
+            onError: ((DashXError) -> Unit)? = null,
+            onSuccess: (ApolloResponse<D>) -> Unit
+        ) {
+            coroutineScope.launch {
+                val response = apolloClient.query(query).execute()
+                withContext(callbackDispatcher) {
+                    if (!hasApolloErrors(response.errors, response.exception, onError)) {
+                        onSuccess(response)
+                    }
+                }
+            }
         }
 
         private fun generateAccountAnonymousUid(): String {
@@ -175,32 +247,21 @@ class DashX {
                 this.accountAnonymousUid
             }
 
-            val query = IdentifyAccount(
-                variables = IdentifyAccount.Variables(
-                    IdentifyAccountInput(
-                        uid = uid,
-                        anonymousUid = anonymousUid,
-                        email = options[UserAttributes.EMAIL],
-                        phone = options[UserAttributes.PHONE],
-                        name = options[UserAttributes.NAME],
-                        firstName = options[UserAttributes.FIRST_NAME],
-                        lastName = options[UserAttributes.LAST_NAME]
-                    )
+            val mutation = IdentifyAccountMutation(
+                input = IdentifyAccountInput(
+                    uid = Optional.Present(uid),
+                    anonymousUid = Optional.Present(anonymousUid),
+                    email = options[UserAttributes.EMAIL]?.let { Optional.Present(it) } ?: Optional.Absent,
+                    phone = options[UserAttributes.PHONE]?.let { Optional.Present(it) } ?: Optional.Absent,
+                    name = options[UserAttributes.NAME]?.let { Optional.Present(it) } ?: Optional.Absent,
+                    firstName = options[UserAttributes.FIRST_NAME]?.let { Optional.Present(it) } ?: Optional.Absent,
+                    lastName = options[UserAttributes.LAST_NAME]?.let { Optional.Present(it) } ?: Optional.Absent
                 )
             )
 
-            coroutineScope.launch {
-                val result = graphqlClient.execute(query)
-
-                if (!result.errors.isNullOrEmpty()) {
-                    val errors = result.errors?.toString() ?: ""
-                    DashXLog.e(tag, errors)
-                    return@launch
-                }
-
+            executeMutation(mutation) { result ->
                 DashXLog.d(tag, result.data?.identifyAccount?.toString())
             }
-
         }
 
         fun setIdentity(uid: String?, token: String?) {
@@ -221,129 +282,110 @@ class DashX {
             saveToStorage()
         }
 
-        fun fetchContent(
+        fun fetchRecord(
             urn: String,
             preview: Boolean? = true,
             language: String? = null,
-            fields: List<String>? = null,
-            include: List<String>? = null,
-            exclude: List<String>? = null,
+            fields: List<JsonObject>? = null,
+            include: List<JsonObject>? = null,
+            exclude: List<JsonObject>? = null,
             onSuccess: (result: JsonObject) -> Unit,
-            onError: (error: String) -> Unit
+            onError: (error: DashXError) -> Unit
         ) {
             if (!urn.contains('/')) {
-                throw Exception("URN must be of form: {contentType}/{content}")
+                coroutineScope.launch(callbackDispatcher) {
+                    onError(DashXError.NetworkError("URN must be of form: {resource}/{recordId}"))
+                }
+                return
             }
 
             val urnArray = urn.split('/')
-            val content = urnArray[1]
-            val contentType = urnArray[0]
+            val resource = urnArray[0]
+            val recordId = urnArray[1]
 
-            val query = FetchContent(
-                variables = FetchContent.Variables(
-                    FetchContentInput(
-                        contentType = contentType,
-                        content = content,
-                        preview = preview,
-                        language = language,
-                        fields = fields,
-                        include = include,
-                        exclude = exclude
-                    )
+            val query = FetchRecordQuery(
+                input = FetchRecordInput(
+                    recordId = recordId,
+                    resource = Optional.Present(resource),
+                    preview = preview?.let { Optional.Present(it) } ?: Optional.Absent,
+                    language = language?.let { Optional.Present(it) } ?: Optional.Absent,
+                    fields = fields?.let { Optional.Present(it) } ?: Optional.Absent,
+                    include = include?.let { Optional.Present(it) } ?: Optional.Absent,
+                    exclude = exclude?.let { Optional.Present(it) } ?: Optional.Absent
                 )
             )
 
-            coroutineScope.launch {
-                val result = graphqlClient.execute(query)
-
-                if (!result.errors.isNullOrEmpty()) {
-                    val errors = result.errors?.toString() ?: ""
-                    DashXLog.e(tag, errors)
-                    onError(errors)
-                    return@launch
-                }
-
-                result.data?.fetchContent?.let { onSuccess(it) }
+            executeQuery(query, onError) { result ->
+                result.data?.fetchRecord?.let(onSuccess)
             }
         }
 
-        fun searchContent(
-            contentType: String,
-            returnType: String = "all",
+        fun searchRecords(
+            resource: String,
             filter: JsonObject? = null,
-            order: JsonObject? = null,
+            order: List<JsonObject>? = null,
             limit: Int? = null,
             preview: Boolean? = true,
             language: String? = null,
-            fields: List<String>? = null,
-            include: List<String>? = null,
-            exclude: List<String>? = null,
+            fields: List<JsonObject>? = null,
+            include: List<JsonObject>? = null,
+            exclude: List<JsonObject>? = null,
             onSuccess: (result: List<JsonObject>) -> Unit,
-            onError: (error: String) -> Unit
+            onError: (error: DashXError) -> Unit
         ) {
-            val query = SearchContent(
-                variables = SearchContent.Variables(
-                    SearchContentInput(
-                        contentType = contentType, returnType = returnType
-                    )
+            val query = SearchRecordsQuery(
+                input = SearchRecordsInput(
+                    resource = resource,
+                    filter = filter?.let { Optional.Present(it) } ?: Optional.Absent,
+                    order = order?.let { Optional.Present(it) } ?: Optional.Absent,
+                    limit = limit?.let { Optional.Present(it) } ?: Optional.Absent,
+                    preview = preview?.let { Optional.Present(it) } ?: Optional.Absent,
+                    language = language?.let { Optional.Present(it) } ?: Optional.Absent,
+                    fields = fields?.let { Optional.Present(it) } ?: Optional.Absent,
+                    include = include?.let { Optional.Present(it) } ?: Optional.Absent,
+                    exclude = exclude?.let { Optional.Present(it) } ?: Optional.Absent
                 )
             )
 
-            coroutineScope.launch {
-                val result = graphqlClient.execute(query)
-
-                if (!result.errors.isNullOrEmpty()) {
-                    val errors = result.errors?.toString() ?: ""
-                    DashXLog.e(tag, errors)
-                    onError(errors)
-                    return@launch
-                }
-
-                val content = result.data?.searchContent ?: listOf()
-                onSuccess(content)
-            }
-        }
-
-        fun fetchCart(
-            onSuccess: (result: com.dashx.graphql.generated.fetchcart.Order) -> Unit,
-            onError: (error: String) -> Unit
-        ) {
-
-            val query = FetchCart(variables = FetchCart.Variables(FetchCartInput(accountUid!!)))
-
-            coroutineScope.launch {
-                val result = graphqlClient.execute(query)
-
-                if (!result.errors.isNullOrEmpty()) {
-                    val errors = result.errors?.toString() ?: ""
-                    DashXLog.e(tag, errors)
-                    onError(errors)
-                    return@launch
-                }
-
-                result.data?.fetchCart?.let { onSuccess(it) }
+            executeQuery(query, onError) { result ->
+                val records = result.data?.searchRecords ?: listOf()
+                onSuccess(records)
             }
         }
 
         fun fetchStoredPreferences(
-            onSuccess: (result: FetchStoredPreferencesResponse) -> Unit,
-            onError: (error: String) -> Unit
+            onSuccess: (result: FetchStoredPreferencesQuery.FetchStoredPreferences) -> Unit,
+            onError: (error: DashXError) -> Unit
         ) {
-            val query = FetchStoredPreferences(
-                variables = FetchStoredPreferences.Variables(FetchStoredPreferencesInput(accountUid!!))
+            val uid = accountUid ?: run {
+                coroutineScope.launch(callbackDispatcher) { onError(DashXError.NotIdentified()) }
+                return
+            }
+            val query = FetchStoredPreferencesQuery(input = FetchStoredPreferencesInput(uid))
+
+            executeQuery(query, onError) { result ->
+                result.data?.fetchStoredPreferences?.let(onSuccess)
+            }
+        }
+
+        fun saveStoredPreferences(
+            preferenceData: JsonObject,
+            onSuccess: (result: SaveStoredPreferencesMutation.SaveStoredPreferences) -> Unit,
+            onError: (error: DashXError) -> Unit
+        ) {
+            val uid = accountUid ?: run {
+                coroutineScope.launch(callbackDispatcher) { onError(DashXError.NotIdentified()) }
+                return
+            }
+            val mutation = SaveStoredPreferencesMutation(
+                input = SaveStoredPreferencesInput(
+                    accountUid = uid,
+                    preferenceData = Json.parseToJsonElement(preferenceData.toString()).jsonObject
+                )
             )
 
-            coroutineScope.launch {
-                val result = graphqlClient.execute(query)
-
-                if (!result.errors.isNullOrEmpty()) {
-                    val errors = result.errors?.toString() ?: ""
-                    DashXLog.e(tag, errors)
-                    onError(errors)
-                    return@launch
-                }
-
-                result.data?.fetchStoredPreferences?.let { onSuccess(it) }
+            executeMutation(mutation, onError) { result ->
+                result.data?.saveStoredPreferences?.let(onSuccess)
             }
         }
 
@@ -351,43 +393,47 @@ class DashX {
             file: File,
             resource: String,
             attribute: String,
-            onSuccess: (result: com.dashx.sdk.data.Asset) -> Unit,
-            onError: (error: String) -> Unit
+            onSuccess: (result: com.dashx.android.data.Asset) -> Unit,
+            onError: (error: DashXError) -> Unit
         ) {
+            val ctx = context ?: run {
+                coroutineScope.launch(callbackDispatcher) { onError(DashXError.NotConfigured()) }
+                return
+            }
             val name = file.name
             val size = file.length().toInt()
             val uri = Uri.fromFile(file)
-            val mimeType = context!!.contentResolver.getType(uri)
+            val mimeType = ctx.contentResolver.getType(uri) ?: run {
+                coroutineScope.launch(callbackDispatcher) {
+                    onError(DashXError.AssetError("Could not determine MIME type for file"))
+                }
+                return
+            }
 
-            val query = PrepareAsset(
-                variables = PrepareAsset.Variables(
-                    PrepareAssetInput(
-                        resource, attribute, name, mimeType, size
-                    )
+            val mutation = PrepareAssetMutation(
+                input = PrepareAssetInput(
+                    resource = Optional.Present(resource),
+                    attribute = Optional.Present(attribute),
+                    name = name,
+                    size = size,
+                    mimeType = mimeType
                 )
             )
 
             coroutineScope.launch {
-                val result = graphqlClient.execute(query)
-
-                if (!result.errors.isNullOrEmpty()) {
-                    val errors = result.errors?.toString() ?: ""
-                    DashXLog.e(tag, errors)
-                    onError(errors)
-                    return@launch
+                val response = apolloClient.mutation(mutation).execute()
+                val hasErrors = withContext(callbackDispatcher) {
+                    hasApolloErrors(response.errors, response.exception, onError)
                 }
-
-                val prepareAssetResponse = result.data?.prepareAsset?.data?.let {
-                    Json { ignoreUnknownKeys = true }.decodeFromJsonElement<PrepareAssetResponse>(
-                        it
-                    )
+                if (hasErrors) return@launch
+                val prepareAssetResponse = response.data?.prepareAsset?.`data`?.let {
+                    json.decodeFromJsonElement<PrepareAssetResponse>(it)
                 }
-
                 if (prepareAssetResponse?.upload != null) {
                     writeFileToUrl(
                         file,
                         prepareAssetResponse.upload.url,
-                        result.data?.prepareAsset?.id ?: "",
+                        response.data?.prepareAsset?.id?.toString() ?: "",
                         onSuccess,
                         onError
                     )
@@ -399,136 +445,82 @@ class DashX {
             file: File,
             url: String,
             id: String,
-            onSuccess: (result: com.dashx.sdk.data.Asset) -> Unit,
-            onError: (error: String) -> Unit
+            onSuccess: (result: com.dashx.android.data.Asset) -> Unit,
+            onError: (error: DashXError) -> Unit
         ) {
             withContext(Dispatchers.IO) {
                 val connection = URL(url).openConnection() as HttpURLConnection
+                try {
+                    connection.apply {
+                        doOutput = true
+                        requestMethod = RequestType.PUT
+                        setRequestProperty(
+                            FileConstants.CONTENT_TYPE,
+                            getFileContentType(context, file)
+                        )
+                        setRequestProperty("x-goog-meta-origin-id", id)
+                    }
 
-                connection.apply {
-                    doOutput = true
-                    requestMethod = RequestType.PUT
-                    setRequestProperty(
-                        FileConstants.CONTENT_TYPE,
-                        getFileContentType(context, file)
-                    )
-                    setRequestProperty("x-goog-meta-origin-id", id)
-                }
+                    FileInputStream(file).use { fileInputStream ->
+                        connection.outputStream.use { outputStream ->
+                            fileInputStream.copyTo(outputStream)
+                        }
+                    }
 
-                val outputStream = connection.outputStream
-                val fileInputStream = FileInputStream(file)
-                val boundaryBytes = getBytes(fileInputStream)
-
-                outputStream.write(boundaryBytes)
-                outputStream.close()
-
-                if (connection.responseCode == HttpURLConnection.HTTP_OK) {
-                    asset(id, onSuccess, onError)
-                } else {
-                    onError(connection.errorStream.toString())
+                    if (connection.responseCode == HttpURLConnection.HTTP_OK) {
+                        asset(
+                            id,
+                            onSuccess = { r -> coroutineScope.launch(callbackDispatcher) { onSuccess(r) } },
+                            onError = { e -> coroutineScope.launch(callbackDispatcher) { onError(e) } }
+                        )
+                    } else {
+                        withContext(callbackDispatcher) {
+                            onError(DashXError.AssetError("Upload failed with HTTP ${connection.responseCode}"))
+                        }
+                    }
+                } finally {
+                    connection.disconnect()
                 }
             }
         }
 
         private suspend fun asset(
             id: String,
-            onSuccess: (result: com.dashx.sdk.data.Asset) -> Unit,
-            onError: (error: String) -> Unit
+            onSuccess: (result: com.dashx.android.data.Asset) -> Unit,
+            onError: (error: DashXError) -> Unit
         ) {
-            val query = Asset(variables = Asset.Variables(id))
-            val result = graphqlClient.execute(query)
-
-            if (!result.errors.isNullOrEmpty()) {
-                val errors = result.errors?.toString() ?: ""
-                DashXLog.e(tag, errors)
-                onError(errors)
-                return
+            val query = AssetQuery(id = id)
+            val response = apolloClient.query(query).execute()
+            val dispatchedOnError: (DashXError) -> Unit = { e ->
+                coroutineScope.launch(callbackDispatcher) { onError(e) }
             }
+            if (hasApolloErrors(response.errors, response.exception, dispatchedOnError)) return
 
-            if (result.data?.asset?.uploadStatus != AssetUploadStatus.UPLOADED && pollCounter <= UploadConstants.POLL_TIME_OUT) {
+            val responseAsset = response.data?.asset
+            if (responseAsset?.uploadStatus != AssetUploadStatus.UPLOADED && pollCounter.get() <= UploadConstants.POLL_TIME_OUT) {
                 delay(UploadConstants.POLL_INTERVAL)
-                asset(id, onSuccess, onError)
-                pollCounter += 1
+                pollCounter.incrementAndGet()
+                asset(id, onSuccess, dispatchedOnError)
             } else {
-                pollCounter = 1
-                val responseObject = result.data?.asset
-                val externalDataJsonObject = responseObject?.data?.let { JSONObject(it) }
-                val responseJsonObject = JSONObject(responseObject.toString())
-                responseJsonObject.put(DATA, externalDataJsonObject)
-
-                val asset =
-                    Json { ignoreUnknownKeys = true }.decodeFromString<com.dashx.sdk.data.Asset>(
-                        responseJsonObject.toString()
-                    )
-
-                if (asset.data.asset?.url == null && !asset.data.asset?.playbackIds.isNullOrEmpty()) {
-                    asset.data.asset?.url =
-                        generateMuxVideoUrl(asset.data.asset?.playbackIds?.get(0)?.id)
+                pollCounter.set(1)
+                val responseJsonObject = JSONObject().apply {
+                    put("id", responseAsset?.id?.toString())
+                    put("resourceId", responseAsset?.resourceId?.toString())
+                    put("attributeId", responseAsset?.attributeId?.toString())
+                    put("uploadStatus", responseAsset?.uploadStatus?.rawValue)
+                    put(DATA, responseAsset?.`data`?.let { JSONObject(it.toString()) })
                 }
 
-                onSuccess(asset)
-            }
-        }
-
-        fun saveStoredPreferences(
-            preferenceData: JsonObject,
-            onSuccess: (result: SaveStoredPreferencesResponse) -> Unit,
-            onError: (error: String) -> Unit
-        ) {
-            val query = SaveStoredPreferences(
-                variables = SaveStoredPreferences.Variables(
-                    SaveStoredPreferencesInput(
-                        accountUid!!, Json.parseToJsonElement(preferenceData.toString()).jsonObject
-                    )
+                val decodedAsset = json.decodeFromString<com.dashx.android.data.Asset>(
+                    responseJsonObject.toString()
                 )
-            )
 
-            coroutineScope.launch {
-                val result = graphqlClient.execute(query)
-
-                if (!result.errors.isNullOrEmpty()) {
-                    val errors = result.errors?.toString() ?: ""
-                    DashXLog.e(tag, errors)
-                    onError(errors)
-                    return@launch
+                val uploadAsset = decodedAsset.data.asset
+                if (uploadAsset != null && uploadAsset.url.isEmpty() && uploadAsset.playbackIds.isNotEmpty()) {
+                    uploadAsset.url = generateMuxVideoUrl(uploadAsset.playbackIds[0].id)
                 }
 
-                result.data?.saveStoredPreferences?.let { onSuccess(it) }
-            }
-        }
-
-        fun addItemToCart(
-            itemId: String,
-            pricingId: String,
-            quantity: String,
-            reset: Boolean,
-            custom: JsonObject? = null,
-            onSuccess: (result: com.dashx.graphql.generated.additemtocart.Order) -> Unit,
-            onError: (error: String) -> Unit
-        ) {
-            val query = AddItemToCart(
-                variables = AddItemToCart.Variables(
-                    AddItemToCartInput(
-                        accountUid = accountUid!!,
-                        itemId = itemId,
-                        pricingId = pricingId,
-                        quantity = quantity,
-                        reset = reset
-                    )
-                )
-            )
-
-            coroutineScope.launch {
-                val result = graphqlClient.execute(query)
-
-                if (!result.errors.isNullOrEmpty()) {
-                    val errors = result.errors?.toString() ?: ""
-                    DashXLog.e(tag, errors)
-                    onError(errors)
-                    return@launch
-                }
-
-                result.data?.let { onSuccess(it.addItemToCart) }
+                withContext(callbackDispatcher) { onSuccess(decodedAsset) }
             }
         }
 
@@ -536,34 +528,51 @@ class DashX {
             val jsonData =
                 data?.toMap()?.let { Json.parseToJsonElement(JSONObject(it).toString()).jsonObject }
 
-            val systemContext = Json {
-                ignoreUnknownKeys = true
-            }.decodeFromString<SystemContextInput>(
-                SystemContext.getInstance().fetchSystemContext().toString()
+            val systemContext = SystemContextMapper.toSystemContextInput(
+                SystemContext.getInstance().fetchSystemContext()
             )
 
-            val query = TrackEvent(
-                variables = TrackEvent.Variables(
-                    TrackEventInput(
-                        accountAnonymousUid = accountAnonymousUid,
-                        accountUid = accountUid,
-                        data = jsonData,
-                        event = event,
-                        systemContext = systemContext
-                    )
+            val mutation = TrackEventMutation(
+                input = TrackEventInput(
+                    event = event,
+                    accountUid = accountUid?.let { Optional.Present(it) } ?: Optional.Absent,
+                    accountAnonymousUid = accountAnonymousUid?.let { Optional.Present(it) } ?: Optional.Absent,
+                    data = jsonData?.let { Optional.Present(it) } ?: Optional.Absent,
+                    systemContext = Optional.Present(systemContext)
                 )
             )
 
-            coroutineScope.launch {
-                val result = graphqlClient.execute(query)
-
-                if (!result.errors.isNullOrEmpty()) {
-                    val errors = result.errors?.toString()
-                    DashXLog.e(tag, errors)
-                    return@launch
-                }
-
+            executeMutation(mutation) { result ->
                 DashXLog.d(tag, result.data?.trackEvent?.toString())
+            }
+        }
+
+        internal fun trackEventBlocking(event: String, data: HashMap<String, String>?, timeoutMs: Long = 3000) {
+            val jsonData =
+                data?.toMap()?.let { Json.parseToJsonElement(JSONObject(it).toString()).jsonObject }
+
+            val systemContext = SystemContextMapper.toSystemContextInput(
+                SystemContext.getInstance().fetchSystemContext()
+            )
+
+            val mutation = TrackEventMutation(
+                input = TrackEventInput(
+                    event = event,
+                    accountUid = accountUid?.let { Optional.Present(it) } ?: Optional.Absent,
+                    accountAnonymousUid = accountAnonymousUid?.let { Optional.Present(it) } ?: Optional.Absent,
+                    data = jsonData?.let { Optional.Present(it) } ?: Optional.Absent,
+                    systemContext = Optional.Present(systemContext)
+                )
+            )
+
+            try {
+                runBlocking {
+                    withTimeout(timeoutMs) {
+                        apolloClient.mutation(mutation).execute()
+                    }
+                }
+            } catch (e: Exception) {
+                DashXLog.e(tag, "Failed to track event synchronously: ${e.message}")
             }
         }
 
@@ -572,11 +581,7 @@ class DashX {
 
             val packageInfo = getPackageInfo(context)
 
-            val currentBuild = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                packageInfo.longVersionCode
-            } else {
-                packageInfo.versionCode.toLong()
-            }
+            val currentBuild = PackageInfoCompat.getLongVersionCode(packageInfo)
 
             fun saveBuildInPreferences() {
                 val editor: SharedPreferences.Editor = getDashXSharedPreferences(context).edit()
@@ -618,12 +623,28 @@ class DashX {
         fun trackAppCrashed(exception: Throwable?) {
             val message = exception?.message
             val eventProperties = hashMapOf("exception" to (message ?: ""))
-            track(INTERNAL_EVENT_APP_CRASHED, eventProperties)
+            trackEventBlocking(INTERNAL_EVENT_APP_CRASHED, eventProperties)
         }
 
         fun screen(screenName: String, properties: HashMap<String, String>?) {
             properties?.set("name", screenName)
             track(INTERNAL_EVENT_APP_SCREEN_VIEWED, properties)
+        }
+
+        fun trackMessage(id: String, status: TrackMessageStatus) {
+            val currentTime = DateTimeFormatter.ISO_INSTANT.format(Instant.now())
+
+            val mutation = TrackMessageMutation(
+                input = TrackMessageInput(
+                    id = id,
+                    status = status,
+                    timestamp = currentTime
+                )
+            )
+
+            executeMutation(mutation) { result ->
+                DashXLog.d(tag, result.data?.trackMessage?.toString())
+            }
         }
 
         fun subscribe() {
@@ -642,57 +663,67 @@ class DashX {
                     return@OnCompleteListener
                 }
 
-                DashXLog.d(tag, "New token generated: $newToken")
-
-                val savedToken = getDashXSharedPreferences(context!!).getString(
-                    SHARED_PREFERENCES_KEY_DEVICE_TOKEN, null
-                )
-
-                if (savedToken == newToken) {
-                    DashXLog.d(tag, "Already subscribed: $savedToken")
-                    return@OnCompleteListener
-                }
-
-                val name = Settings.Global.getString(
-                    context?.contentResolver, Settings.Global.DEVICE_NAME
-                ) ?: Settings.Secure.getString(context?.contentResolver, "bluetooth_name")
-
-                val query = SubscribeContact(
-                    variables = SubscribeContact.Variables(
-                        SubscribeContactInput(
-                            accountUid = accountUid,
-                            accountAnonymousUid = accountAnonymousUid,
-                            name = name,
-                            kind = ContactKind.ANDROID,
-                            value = newToken,
-                            osName = "Android",
-                            osVersion = Build.VERSION.RELEASE,
-                            deviceManufacturer = Build.MANUFACTURER,
-                            deviceModel = Build.MODEL
-                        )
-                    )
-                )
-
-                coroutineScope.launch {
-                    val result = graphqlClient.execute(query)
-
-                    if (!result.errors.isNullOrEmpty()) {
-                        val errors = result.errors?.toString() ?: ""
-                        DashXLog.e(tag, "Failed to subscribe: $errors")
-                        return@launch
-                    } else {
-                        getDashXSharedPreferences(context!!).edit().apply {
-                            putString(SHARED_PREFERENCES_KEY_DEVICE_TOKEN, newToken)
-                        }.apply()
-                    }
-
-                    DashXLog.d(tag, result.data?.subscribeContact?.toString())
-                }
+                subscribe(newToken)
             })
         }
 
+        /**
+         * Subscribe this device for push notifications using an already-known FCM token.
+         * Useful when integrating with an app's own [FirebaseMessagingService.onNewToken].
+         */
+        fun subscribe(token: String) {
+            DashXLog.d(tag, "Subscribing with token.")
+
+                val ctx = context ?: run {
+                    DashXLog.e(tag, "subscribe: context is null, configure() must be called first")
+                    return
+                }
+
+                val savedToken = getDashXSharedPreferences(ctx).getString(
+                    SHARED_PREFERENCES_KEY_DEVICE_TOKEN, null
+                )
+
+                if (savedToken == token) {
+                    DashXLog.d(tag, "Already subscribed: $savedToken")
+                    return
+                }
+
+                val name = Settings.Global.getString(
+                    ctx.contentResolver, Settings.Global.DEVICE_NAME
+                ) ?: Settings.Secure.getString(ctx.contentResolver, "bluetooth_name")
+
+                val mutation = SubscribeContactMutation(
+                    input = SubscribeContactInput(
+                        accountUid = accountUid?.let { Optional.Present(it) } ?: Optional.Absent,
+                        accountAnonymousUid = accountAnonymousUid?.let { Optional.Present(it) } ?: Optional.Absent,
+                        name = name?.let { Optional.Present(it) } ?: Optional.Absent,
+                        kind = ContactKind.ANDROID,
+                        value = token,
+                        osName = Optional.Present("Android"),
+                        osVersion = Build.VERSION.RELEASE.let { Optional.Present(it) },
+                        deviceManufacturer = Optional.Present(Build.MANUFACTURER),
+                        deviceModel = Optional.Present(Build.MODEL)
+                    )
+                )
+
+                executeMutation(mutation, onError = { error ->
+                    DashXLog.e(tag, "Failed to subscribe: ${error.message}")
+                }) { result ->
+                    context?.let { c ->
+                        getDashXSharedPreferences(c).edit().apply {
+                            putString(SHARED_PREFERENCES_KEY_DEVICE_TOKEN, token)
+                        }.apply()
+                    }
+                    DashXLog.d(tag, result.data?.subscribeContact?.toString())
+                }
+        }
+
         fun unsubscribe() {
-            val savedToken = getDashXSharedPreferences(context!!).getString(
+            val ctx = context ?: run {
+                DashXLog.e(tag, "unsubscribe: context is null, configure() must be called first")
+                return
+            }
+            val savedToken = getDashXSharedPreferences(ctx).getString(
                 SHARED_PREFERENCES_KEY_DEVICE_TOKEN, null
             )
 
@@ -714,58 +745,27 @@ class DashX {
                         return@OnCompleteListener
                     }
 
-                    getDashXSharedPreferences(context!!).edit().apply {
-                        remove(SHARED_PREFERENCES_KEY_DEVICE_TOKEN)
-                    }.apply()
+                    context?.let { c ->
+                        getDashXSharedPreferences(c).edit().apply {
+                            remove(SHARED_PREFERENCES_KEY_DEVICE_TOKEN)
+                        }.apply()
+                    }
 
-                    val query = UnsubscribeContact(
-                        variables = UnsubscribeContact.Variables(
-                            UnsubscribeContactInput(
-                                accountUid = uid,
-                                accountAnonymousUid = anonymousUid,
-                                value = savedToken
-                            )
+                    val mutation = UnsubscribeContactMutation(
+                        input = UnsubscribeContactInput(
+                            accountUid = uid?.let { Optional.Present(it) } ?: Optional.Absent,
+                            accountAnonymousUid = anonymousUid?.let { Optional.Present(it) } ?: Optional.Absent,
+                            value = savedToken
                         )
                     )
 
-                    coroutineScope.launch {
-                        val result = graphqlClient.execute(query)
-
-                        if (!result.errors.isNullOrEmpty()) {
-                            val errors = result.errors?.toString() ?: ""
-                            DashXLog.e(tag, "Failed to unsubscribe: $errors")
-                            return@launch
-                        } else {
-                            DashXLog.d(tag, "Unsubscribed $savedToken successfully.")
-                        }
-
+                    executeMutation(mutation, onError = { error ->
+                        DashXLog.e(tag, "Failed to unsubscribe: ${error.message}")
+                    }) { result ->
+                        DashXLog.d(tag, "Unsubscribed $savedToken successfully.")
                         DashXLog.d(tag, result.data?.unsubscribeContact?.toString())
                     }
                 })
-        }
-
-        fun trackNotification(id: String, status: TrackNotificationStatus) {
-            val currentTime = DateTimeFormatter.ISO_INSTANT.format(Instant.now())
-
-            val query = TrackNotification(
-                variables = TrackNotification.Variables(
-                    TrackNotificationInput(
-                        id = id, status = status, timestamp = currentTime
-                    )
-                )
-            )
-
-            coroutineScope.launch {
-                val result = graphqlClient.execute(query)
-
-                if (!result.errors.isNullOrEmpty()) {
-                    val errors = result.errors?.toString() ?: ""
-                    DashXLog.e(tag, errors)
-                    return@launch
-                }
-
-                DashXLog.d(tag, result.data?.trackNotification?.toString())
-            }
         }
 
         fun getBaseUri(): String? {

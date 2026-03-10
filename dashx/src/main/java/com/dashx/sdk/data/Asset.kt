@@ -1,6 +1,6 @@
-package com.dashx.sdk.data
+package com.dashx.android.data
 
-import com.dashx.graphql.generated.enums.AssetUploadStatus
+import com.dashx.graphql.generated.type.AssetUploadStatus
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 

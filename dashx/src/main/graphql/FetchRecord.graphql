@@ -1,0 +1,3 @@
+query FetchRecord($input: FetchRecordInput!) {
+  fetchRecord(input: $input)
+}

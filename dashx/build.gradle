@@ -1,22 +1,28 @@
-import com.expediagroup.graphql.plugin.gradle.config.GraphQLSerializer
-import com.expediagroup.graphql.plugin.gradle.config.GraphQLScalar
+plugins {
+    id 'com.android.library'
+    id 'org.jetbrains.kotlin.plugin.serialization'
+    id 'com.apollographql.apollo'
+    id 'signing'
+    id 'com.vanniktech.maven.publish'
+}
 
-apply plugin: 'com.android.library'
-apply plugin: 'kotlin-android'
-apply plugin: 'maven-publish'
-apply plugin: 'com.expediagroup.graphql'
-apply plugin: 'org.jetbrains.kotlin.plugin.serialization'
-
-group = 'com.dashx'
-version = '1.0.14'
+def version = libs.versions.dashxAndroid.get()
+def group = libs.versions.group.get()
+def artifactId = libs.versions.dashxAndroidArtifactId.get()
 
 android {
-    compileSdk 33
+    namespace 'com.dashx.android'
+
+    compileSdk 34
+
+    buildFeatures {
+        buildConfig = true
+    }
 
     defaultConfig {
-        minSdk 21
-        targetSdk 33
-        versionCode 6
+        minSdk 26
+        targetSdk 34
+        versionCode 100100000 // 1.1.0 -> 100100000, 1.2.4 -> 100200400 and so on...
         versionName version
 
         buildConfigField 'String', 'VERSION_NAME', "\"$version\""
@@ -31,23 +37,20 @@ android {
         }
     }
 
-    kotlinOptions {
-        jvmTarget = '1.8'
-    }
-
     compileOptions {
-        coreLibraryDesugaringEnabled true
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
     }
+}
+
+kotlin {
+    jvmToolchain(17)
 }
 
 dependencies {
     implementation 'com.squareup.okhttp3:okhttp:5.0.0-alpha.11'
 
-    // Kotlin Graphql
-    implementation 'org.slf4j:slf4j-simple:2.0.7'
-    implementation "com.expediagroup:graphql-kotlin-ktor-client:$latestGraphQLKotlinVersion"
-    implementation "io.ktor:ktor-client-okhttp:$ktorVersion"
-    implementation "io.ktor:ktor-client-logging-jvm:$ktorVersion"
+    implementation 'com.apollographql.apollo:apollo-runtime:4.4.1'
     implementation 'androidx.work:work-runtime-ktx:2.7.1'
     implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.5.0'
 
@@ -59,23 +62,71 @@ dependencies {
 
     implementation 'com.google.android.gms:play-services-ads-identifier:18.0.1'
 
+    implementation 'androidx.security:security-crypto:1.0.0'
+
     testImplementation 'junit:junit:4.13.2'
     androidTestImplementation 'androidx.test.ext:junit:1.1.5'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
 }
 
-graphql {
-    client {
-        endpoint = 'https://api.dashx-staging.com/graphql'
-        packageName = 'com.dashx.graphql.generated'
+apollo {
+    service("service") {
+        packageName = "com.dashx.graphql.generated"
 
-        customScalars = [new GraphQLScalar('JSON', 'kotlinx.serialization.json.JsonObject', 'com.dashx.graphql.scalars.converters.JsonScalarConverter')]
-        serializer = GraphQLSerializer.KOTLINX
+        srcDir("src/main/graphql")
+
+        includes.add("**/*.graphql")
+
+        outputDir = file("$buildDir/generated/apollo")
+
+        mapScalar("JSON", "kotlinx.serialization.json.JsonObject")
+
+        schemaFiles.from("$buildDir/graphql/schema.graphqls")
+
+        introspection {
+            endpointUrl = "https://api.dashx-staging.com/graphql"
+            schemaFile = file("$buildDir/graphql/schema.graphqls")
+        }
     }
 }
 
-android.sourceSets {
-    main.kotlin.srcDirs 'build/generated/source/graphql/main'
+tasks.named("preBuild") {
+    dependsOn("downloadServiceApolloSchemaFromIntrospection")
 }
 
-apply from: "${rootProject.projectDir}/scripts/publish-module.gradle"
+mavenPublishing {
+    coordinates(group, artifactId, version)
+
+    publishToMavenCentral(true)
+
+    pom {
+        name = 'DashX Android'
+        description = 'DashX Android SDK'
+        url = 'https://github.com/dashxhq/dashx-android'
+
+        licenses {
+            license {
+                name = 'MIT License'
+                url = 'https://github.com/dashxhq/dashx-android/blob/main/LICENSE'
+            }
+        }
+
+        developers {
+            developer {
+                id = 'gulshan.dashx'
+                name = 'Gulshan Dhingra'
+            }
+        }
+
+        scm {
+            connection = 'scm:git:github.com/dashxhq/dashx-android.git'
+            developerConnection = 'scm:git:ssh://github.com/dashxhq/dashx-android.git'
+            url = 'https://github.com/dashxhq/dashx-android'
+        }
+    }
+}
+
+signing {
+    useGpgCmd()
+    sign publishing.publications
+}
