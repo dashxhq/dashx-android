@@ -2,7 +2,6 @@ plugins {
     id 'com.android.library'
     id 'org.jetbrains.kotlin.plugin.serialization'
     id 'com.apollographql.apollo'
-    id 'signing'
     id 'com.vanniktech.maven.publish'
 }
 
@@ -124,9 +123,4 @@ mavenPublishing {
             url = 'https://github.com/dashxhq/dashx-android'
         }
     }
-}
-
-signing {
-    useGpgCmd()
-    sign publishing.publications
 }
