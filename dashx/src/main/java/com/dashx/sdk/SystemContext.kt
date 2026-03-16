@@ -46,6 +46,7 @@ import com.dashx.android.utils.SystemContextConstants.VERSION_NUMBER
 import com.dashx.android.utils.SystemContextConstants.WIDTH
 import com.dashx.android.utils.SystemContextConstants.WIFI
 import org.json.JSONObject
+import java.util.ServiceLoader
 import java.util.concurrent.ConcurrentHashMap
 
 class SystemContext {
@@ -61,9 +62,23 @@ class SystemContext {
         private var libraryVersion = BuildConfig.VERSION_NAME
 
         fun configure(context: Context): SystemContext {
+            detectLibraryInfoProvider()
             INSTANCE.init(context)
             getAdvertisingInfo(context)
             return INSTANCE
+        }
+
+        private fun detectLibraryInfoProvider() {
+            try {
+                ServiceLoader.load(DashXLibraryInfoProvider::class.java)
+                    .firstOrNull()
+                    ?.let {
+                        libraryName = it.name
+                        libraryVersion = it.version
+                    }
+            } catch (e: Exception) {
+                DashXLog.d("SystemContext", "No DashXLibraryInfoProvider found: ${e.message}")
+            }
         }
 
         @JvmName("getSystemContextInstance")
