@@ -50,7 +50,7 @@ data class LightSettings(
     @SerialName("light_off_duration") val off: Int,
 )
 
-class DashXFirebaseMessagingService : FirebaseMessagingService() {
+open class DashXFirebaseMessagingService : FirebaseMessagingService() {
     private val dashXClient = DashX
     private val tag = DashXFirebaseMessagingService::class.java.simpleName
     private val json = Json { ignoreUnknownKeys = true }
