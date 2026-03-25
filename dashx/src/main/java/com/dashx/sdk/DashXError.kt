@@ -23,3 +23,6 @@ sealed class DashXError(val message: String) {
 
     override fun toString(): String = "${this::class.simpleName}: $message"
 }
+
+/** Thrown by suspend wrapper functions (e.g. [DashX.identifyAsync]) when the operation fails. */
+class DashXException(val error: DashXError) : Exception(error.message)

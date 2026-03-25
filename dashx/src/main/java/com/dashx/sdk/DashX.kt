@@ -229,9 +229,14 @@ class DashX {
             return UUID.randomUUID().toString()
         }
 
-        fun identify(options: HashMap<String, String>? = null) {
+        fun identify(
+            options: HashMap<String, String>? = null,
+            onSuccess: (() -> Unit)? = null,
+            onError: ((DashXError) -> Unit)? = null
+        ) {
             if (options == null) {
                 DashXLog.e(tag, "Cannot be called with null, pass options: object")
+                onError?.let { coroutineScope.launch(callbackDispatcher) { it(DashXError.NetworkError("identify() requires a non-null options map")) } }
                 return
             }
 
@@ -259,8 +264,9 @@ class DashX {
                 )
             )
 
-            executeMutation(mutation) { result ->
+            executeMutation(mutation, onError) { result ->
                 DashXLog.d(tag, result.data?.identifyAccount?.toString())
+                onSuccess?.invoke()
             }
         }
 
@@ -284,7 +290,7 @@ class DashX {
 
         fun fetchRecord(
             urn: String,
-            preview: Boolean? = true,
+            preview: Boolean? = null,
             language: String? = null,
             fields: List<JsonObject>? = null,
             include: List<JsonObject>? = null,
@@ -292,14 +298,13 @@ class DashX {
             onSuccess: (result: JsonObject) -> Unit,
             onError: (error: DashXError) -> Unit
         ) {
-            if (!urn.contains('/')) {
+            val urnArray = urn.split('/')
+            if (urnArray.size < 2 || urnArray[0].isEmpty() || urnArray[1].isEmpty()) {
                 coroutineScope.launch(callbackDispatcher) {
                     onError(DashXError.NetworkError("URN must be of form: {resource}/{recordId}"))
                 }
                 return
             }
-
-            val urnArray = urn.split('/')
             val resource = urnArray[0]
             val recordId = urnArray[1]
 
@@ -325,7 +330,7 @@ class DashX {
             filter: JsonObject? = null,
             order: List<JsonObject>? = null,
             limit: Int? = null,
-            preview: Boolean? = true,
+            preview: Boolean? = null,
             language: String? = null,
             fields: List<JsonObject>? = null,
             include: List<JsonObject>? = null,
@@ -524,7 +529,12 @@ class DashX {
             }
         }
 
-        fun track(event: String, data: HashMap<String, String>? = hashMapOf()) {
+        fun track(
+            event: String,
+            data: HashMap<String, String>? = hashMapOf(),
+            onSuccess: (() -> Unit)? = null,
+            onError: ((DashXError) -> Unit)? = null
+        ) {
             val jsonData =
                 data?.toMap()?.let { Json.parseToJsonElement(JSONObject(it).toString()).jsonObject }
 
@@ -542,8 +552,9 @@ class DashX {
                 )
             )
 
-            executeMutation(mutation) { result ->
+            executeMutation(mutation, onError) { result ->
                 DashXLog.d(tag, result.data?.trackEvent?.toString())
+                onSuccess?.invoke()
             }
         }
 
@@ -631,7 +642,12 @@ class DashX {
             track(INTERNAL_EVENT_APP_SCREEN_VIEWED, properties)
         }
 
-        fun trackMessage(id: String, status: TrackMessageStatus) {
+        fun trackMessage(
+            id: String,
+            status: TrackMessageStatus,
+            onSuccess: (() -> Unit)? = null,
+            onError: ((DashXError) -> Unit)? = null
+        ) {
             val currentTime = DateTimeFormatter.ISO_INSTANT.format(Instant.now())
 
             val mutation = TrackMessageMutation(
@@ -642,8 +658,9 @@ class DashX {
                 )
             )
 
-            executeMutation(mutation) { result ->
+            executeMutation(mutation, onError) { result ->
                 DashXLog.d(tag, result.data?.trackMessage?.toString())
+                onSuccess?.invoke()
             }
         }
 
@@ -782,6 +799,63 @@ class DashX {
 
         fun getIdentityToken(): String? {
             return identityToken
+        }
+
+        // ---- Suspend wrappers ----
+
+        suspend fun identifyAsync(options: HashMap<String, String>? = null) =
+            suspendCancellableCoroutine<Unit> { cont ->
+                identify(options,
+                    onSuccess = { cont.resumeWith(Result.success(Unit)) },
+                    onError = { cont.resumeWith(Result.failure(DashXException(it))) }
+                )
+            }
+
+        suspend fun trackAsync(event: String, data: HashMap<String, String>? = hashMapOf()) =
+            suspendCancellableCoroutine<Unit> { cont ->
+                track(event, data,
+                    onSuccess = { cont.resumeWith(Result.success(Unit)) },
+                    onError = { cont.resumeWith(Result.failure(DashXException(it))) }
+                )
+            }
+
+        suspend fun trackMessageAsync(id: String, status: TrackMessageStatus) =
+            suspendCancellableCoroutine<Unit> { cont ->
+                trackMessage(id, status,
+                    onSuccess = { cont.resumeWith(Result.success(Unit)) },
+                    onError = { cont.resumeWith(Result.failure(DashXException(it))) }
+                )
+            }
+
+        suspend fun fetchRecordAsync(
+            urn: String,
+            preview: Boolean? = null,
+            language: String? = null,
+            fields: List<JsonObject>? = null,
+            include: List<JsonObject>? = null,
+            exclude: List<JsonObject>? = null
+        ) = suspendCancellableCoroutine<JsonObject> { cont ->
+            fetchRecord(urn, preview, language, fields, include, exclude,
+                onSuccess = { cont.resumeWith(Result.success(it)) },
+                onError = { cont.resumeWith(Result.failure(DashXException(it))) }
+            )
+        }
+
+        suspend fun searchRecordsAsync(
+            resource: String,
+            filter: JsonObject? = null,
+            order: List<JsonObject>? = null,
+            limit: Int? = null,
+            preview: Boolean? = null,
+            language: String? = null,
+            fields: List<JsonObject>? = null,
+            include: List<JsonObject>? = null,
+            exclude: List<JsonObject>? = null
+        ) = suspendCancellableCoroutine<List<JsonObject>> { cont ->
+            searchRecords(resource, filter, order, limit, preview, language, fields, include, exclude,
+                onSuccess = { cont.resumeWith(Result.success(it)) },
+                onError = { cont.resumeWith(Result.failure(DashXException(it))) }
+            )
         }
     }
 }

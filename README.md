@@ -79,15 +79,29 @@ DashX.setIdentityToken("jwt-or-session-token")
 
 Sends an identify call to DashX. `options` should include any user attributes you have (uid/email/phone/name/etc).
 
+Optional `onSuccess` and `onError` callbacks let you know when the call completes.
+
 ```kotlin
 DashX.identify(
-    hashMapOf(
+    options = hashMapOf(
         "uid" to "user_123",
         "email" to "user@example.com",
         "first_name" to "Ava",
         "last_name" to "Singh"
-    )
+    ),
+    onSuccess = { /* called on main thread when done */ },
+    onError = { err -> Log.e("DashX", err.message) }
 )
+```
+
+Or use the suspend variant in a coroutine:
+
+```kotlin
+try {
+    DashX.identifyAsync(hashMapOf("uid" to "user_123"))
+} catch (e: DashXException) {
+    Log.e("DashX", e.message)
+}
 ```
 
 #### `DashX.reset()`
@@ -115,6 +129,16 @@ DashX.fetchRecord(
 )
 ```
 
+Or use the suspend variant:
+
+```kotlin
+try {
+    val record = DashX.fetchRecordAsync("blog/abc123", preview = true)
+} catch (e: DashXException) {
+    Log.e("DashX", e.message)
+}
+```
+
 #### `DashX.searchRecords(...)`
 
 Search records in a resource with optional filter/order/limit and field projection options.
@@ -125,7 +149,7 @@ DashX.searchRecords(
     filter = null,
     order = null,
     limit = 20,
-    preview = true,
+    preview = null,
     language = null,
     fields = null,
     include = null,
@@ -133,6 +157,16 @@ DashX.searchRecords(
     onSuccess = { records -> /* List<JsonObject> */ },
     onError = { err -> /* ... */ }
 )
+```
+
+Or use the suspend variant:
+
+```kotlin
+try {
+    val records = DashX.searchRecordsAsync("blog", limit = 20)
+} catch (e: DashXException) {
+    Log.e("DashX", e.message)
+}
 ```
 
 #### `DashX.fetchStoredPreferences(...)`
@@ -185,8 +219,25 @@ DashX.uploadAsset(
 
 Tracks a custom event. `data` is optional and is sent as JSON.
 
+Optional `onSuccess` and `onError` callbacks let you know when the call completes.
+
 ```kotlin
-DashX.track("checkout_started", hashMapOf("cart_value" to "42.00"))
+DashX.track(
+    event = "checkout_started",
+    data = hashMapOf("cart_value" to "42.00"),
+    onSuccess = { /* called on main thread when done */ },
+    onError = { err -> Log.e("DashX", err.message) }
+)
+```
+
+Or use the suspend variant:
+
+```kotlin
+try {
+    DashX.trackAsync("checkout_started", hashMapOf("cart_value" to "42.00"))
+} catch (e: DashXException) {
+    Log.e("DashX", e.message)
+}
 ```
 
 #### `DashX.trackAppStarted(fromBackground)`
@@ -226,8 +277,25 @@ DashX.screen("Home", hashMapOf())
 
 Tracks message delivery/open/dismiss status for DashX pushes.
 
+Optional `onSuccess` and `onError` callbacks let you know when the call completes.
+
 ```kotlin
-DashX.trackMessage("message-id", com.dashx.android.graphql.generated.type.TrackMessageStatus.OPENED)
+DashX.trackMessage(
+    id = "message-id",
+    status = TrackMessageStatus.OPENED,
+    onSuccess = { /* called on main thread when done */ },
+    onError = { err -> Log.e("DashX", err.message) }
+)
+```
+
+Or use the suspend variant:
+
+```kotlin
+try {
+    DashX.trackMessageAsync("message-id", TrackMessageStatus.OPENED)
+} catch (e: DashXException) {
+    Log.e("DashX", e.message)
+}
 ```
 
 #### `DashX.subscribe()` / `DashX.subscribe(token)` / `DashX.unsubscribe()`
