@@ -159,8 +159,8 @@ open class DashXFirebaseMessagingService : FirebaseMessagingService() {
                     val connection = url.openConnection() as HttpURLConnection
                     try {
                         connection.doInput = true
-                        connection.connectTimeout = 5000
-                        connection.readTimeout = 5000
+                        connection.connectTimeout = DashX.imageDownloadTimeoutMs
+                        connection.readTimeout = DashX.imageDownloadTimeoutMs
                         connection.connect()
                         connection.inputStream.use { input ->
                             val imageBitmap = BitmapFactory.decodeStream(input)
@@ -212,8 +212,8 @@ open class DashXFirebaseMessagingService : FirebaseMessagingService() {
                     val connection = url.openConnection() as HttpURLConnection
                     try {
                         connection.doInput = true
-                        connection.connectTimeout = 5000
-                        connection.readTimeout = 5000
+                        connection.connectTimeout = DashX.imageDownloadTimeoutMs
+                        connection.readTimeout = DashX.imageDownloadTimeoutMs
                         connection.connect()
                         connection.inputStream.use { input ->
                             val largeIconBitmap = BitmapFactory.decodeStream(input)

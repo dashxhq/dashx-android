@@ -78,9 +78,19 @@ class DashX {
         @Volatile private var callbackDispatcher: CoroutineDispatcher = Dispatchers.Main.immediate
 
         private val pollCounter = AtomicInteger(1)
-        private val coroutineScope = CoroutineScope(Dispatchers.IO)
+        private var coroutineJob = SupervisorJob()
+        private var coroutineScope = CoroutineScope(Dispatchers.IO + coroutineJob)
         private val tag = DashX::class.java.simpleName
         private val json = Json { ignoreUnknownKeys = true }
+
+        /** Configurable timeout for image downloads in notifications (ms). */
+        var imageDownloadTimeoutMs: Int = 5000
+
+        /** Configurable interval between asset upload status polls (ms). */
+        var pollIntervalMs: Long = 3000
+
+        /** Maximum number of asset upload polls before giving up. */
+        var maxPollRetries: Int = 10
 
         fun configure(
             context: Context,
@@ -116,6 +126,36 @@ class DashX {
             SystemContext.configure(context)
             loadFromStorage()
             createGraphqlClient()
+            configureEventQueue(context)
+        }
+
+        private fun configureEventQueue(context: Context) {
+            val eventQueue = EventQueue.shared()
+            eventQueue.configure(context)
+            eventQueue.trackFunction = { event, dataJson, queuedUid, queuedAnonymousUid ->
+                try {
+                    val jsonData = dataJson?.let {
+                        Json.parseToJsonElement(it).jsonObject
+                    }
+                    val systemContext = SystemContextMapper.toSystemContextInput(
+                        SystemContext.getInstance().fetchSystemContext()
+                    )
+                    val mutation = TrackEventMutation(
+                        input = TrackEventInput(
+                            event = event,
+                            accountUid = (queuedUid ?: accountUid)?.let { Optional.Present(it) } ?: Optional.Absent,
+                            accountAnonymousUid = (queuedAnonymousUid ?: accountAnonymousUid)?.let { Optional.Present(it) } ?: Optional.Absent,
+                            data = jsonData?.let { Optional.Present(it) } ?: Optional.Absent,
+                            systemContext = Optional.Present(systemContext)
+                        )
+                    )
+                    val response = apolloClient.mutation(mutation).execute()
+                    response.errors.isNullOrEmpty() && response.exception == null
+                } catch (_: Throwable) {
+                    false
+                }
+            }
+            eventQueue.flush()
         }
 
         private fun loadFromStorage() {
@@ -286,6 +326,17 @@ class DashX {
             accountAnonymousUid = generateAccountAnonymousUid()
 
             saveToStorage()
+        }
+
+        /**
+         * Cancels all in-flight SDK operations and releases resources.
+         * After calling this, [configure] must be called again before using the SDK.
+         */
+        fun shutdown() {
+            coroutineJob.cancel()
+            EventQueue.shared().stop()
+            coroutineJob = SupervisorJob()
+            coroutineScope = CoroutineScope(Dispatchers.IO + coroutineJob)
         }
 
         fun fetchRecord(
@@ -502,8 +553,8 @@ class DashX {
             if (hasApolloErrors(response.errors, response.exception, dispatchedOnError)) return
 
             val responseAsset = response.data?.asset
-            if (responseAsset?.uploadStatus != AssetUploadStatus.UPLOADED && pollCounter.get() <= UploadConstants.POLL_TIME_OUT) {
-                delay(UploadConstants.POLL_INTERVAL)
+            if (responseAsset?.uploadStatus != AssetUploadStatus.UPLOADED && pollCounter.get() <= maxPollRetries) {
+                delay(pollIntervalMs)
                 pollCounter.incrementAndGet()
                 asset(id, onSuccess, dispatchedOnError)
             } else {
@@ -552,7 +603,11 @@ class DashX {
                 )
             )
 
-            executeMutation(mutation, onError) { result ->
+            executeMutation(mutation, onError = { error ->
+                val dataJsonStr = jsonData?.toString()
+                EventQueue.shared().enqueue(event, dataJsonStr, accountUid, accountAnonymousUid)
+                onError?.invoke(error)
+            }) { result ->
                 DashXLog.d(tag, result.data?.trackEvent?.toString())
                 onSuccess?.invoke()
             }
@@ -783,6 +838,11 @@ class DashX {
                         DashXLog.d(tag, result.data?.unsubscribeContact?.toString())
                     }
                 })
+        }
+
+        /** Manually flush the offline event queue. */
+        fun flushEventQueue() {
+            EventQueue.shared().flush()
         }
 
         fun getBaseUri(): String? {

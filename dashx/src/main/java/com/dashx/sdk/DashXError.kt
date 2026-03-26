@@ -21,6 +21,16 @@ sealed class DashXError(val message: String) {
         message: String
     ) : DashXError(message)
 
+    /** Whether this error is transient and the operation can be retried. */
+    val isRetryable: Boolean
+        get() = when (this) {
+            is NetworkError -> true
+            is GraphQLError -> false
+            is NotConfigured -> false
+            is NotIdentified -> false
+            is AssetError -> false
+        }
+
     override fun toString(): String = "${this::class.simpleName}: $message"
 }
 

@@ -375,6 +375,70 @@ override fun onNewToken(token: String) {
 }
 ```
 
+### ProGuard / R8
+
+The SDK ships consumer ProGuard rules (`consumer-rules.pro`) that are automatically applied when your app enables minification. No manual ProGuard configuration is required.
+
+### Offline Event Queue
+
+When a `track()` call fails (e.g. due to a network error), the event is automatically persisted to an offline queue. Queued events are retried with exponential backoff (2 s base, capped at 5 minutes, max 10 retries) and survive app restarts. The queue holds up to 1,000 events (oldest are dropped when full).
+
+The queue flushes automatically after `configure()` and can be flushed manually:
+
+```kotlin
+DashX.flushEventQueue()
+```
+
+### Error Handling
+
+All SDK errors are represented by the `DashXError` sealed class:
+
+| Error | Description | `isRetryable` |
+|-------|-------------|---------------|
+| `NotConfigured` | `configure()` has not been called | No |
+| `NotIdentified` | `setIdentity()` has not been called | No |
+| `GraphQLError` | Server returned GraphQL errors | No |
+| `NetworkError` | Network-level failure (timeout, DNS, etc.) | Yes |
+| `AssetError` | Asset upload/fetch failure | No |
+
+Use `error.isRetryable` to decide whether to retry an operation:
+
+```kotlin
+DashX.track("event", onError = { error ->
+    if (error.isRetryable) {
+        // retry later
+    }
+})
+```
+
+The suspend wrappers throw `DashXException` which wraps the underlying `DashXError`:
+
+```kotlin
+try {
+    DashX.trackAsync("event")
+} catch (e: DashXException) {
+    Log.e("DashX", "${e.error}: ${e.message}")
+}
+```
+
+### Configurable Timeouts
+
+The SDK exposes configurable timeout properties:
+
+```kotlin
+DashX.imageDownloadTimeoutMs = 5000  // notification image download timeout (ms)
+DashX.pollIntervalMs = 3000          // asset upload poll interval (ms)
+DashX.maxPollRetries = 10            // max asset upload poll attempts
+```
+
+### Lifecycle Management
+
+Call `shutdown()` to cancel all in-flight SDK operations and release resources. After calling this, `configure()` must be called again:
+
+```kotlin
+DashX.shutdown()
+```
+
 ### Callback dispatcher
 
 All `onSuccess` and `onError` callbacks from the SDK (e.g. `fetchRecord`, `fetchCart`, `uploadAsset`) are invoked on the **main thread** by default (`Dispatchers.Main.immediate`). You can update your UI directly from these callbacks without switching threads.
