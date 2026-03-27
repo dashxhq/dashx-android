@@ -2,20 +2,20 @@
 # These rules are bundled with the SDK and automatically applied to consumer apps.
 
 # Keep all public SDK classes and their public/protected members
--keep class com.dashx.sdk.** { public protected *; }
+-keep class com.dashx.android.** { public protected *; }
 
 # Keep data classes used for serialization
--keepclassmembers class com.dashx.sdk.data.** {
+-keepclassmembers class com.dashx.android.data.** {
     <fields>;
     <init>(...);
 }
 
 # Keep DashXFirebaseMessagingService (referenced in consumer's AndroidManifest.xml)
--keep class com.dashx.sdk.DashXFirebaseMessagingService { *; }
+-keep class com.dashx.android.DashXFirebaseMessagingService { *; }
 
 # Keep NotificationReceiver and NotificationDismissedReceiver (BroadcastReceivers)
--keep class com.dashx.sdk.NotificationReceiver { *; }
--keep class com.dashx.sdk.NotificationDismissedReceiver { *; }
+-keep class com.dashx.android.NotificationReceiver { *; }
+-keep class com.dashx.android.NotificationDismissedReceiver { *; }
 
 # kotlinx-serialization
 -keepattributes *Annotation*, InnerClasses
@@ -27,7 +27,7 @@
 -keepclasseswithmembers class kotlinx.serialization.json.** {
     kotlinx.serialization.KSerializer serializer(...);
 }
--keepclassmembers @kotlinx.serialization.Serializable class com.dashx.sdk.** {
+-keepclassmembers @kotlinx.serialization.Serializable class com.dashx.android.** {
     *** Companion;
     *** INSTANCE;
     kotlinx.serialization.KSerializer serializer(...);
