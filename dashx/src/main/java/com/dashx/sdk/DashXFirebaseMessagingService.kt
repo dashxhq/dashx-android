@@ -66,11 +66,6 @@ open class DashXFirebaseMessagingService : FirebaseMessagingService() {
 
         DashXLog.d(tag, "Notification received.")
 
-        if (appInForeground()) {
-            DashXLog.d(tag, "App in foreground. Skipping...")
-            return
-        }
-
         val dashxDataMap = remoteMessage.data["dashx"]
 
         if (dashxDataMap != null) {
