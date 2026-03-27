@@ -20,7 +20,7 @@ dependencyResolutionManagement {
 
 ```groovy
 dependencies {
-    implementation 'com.dashx:dashx-android:1.1.4'
+    implementation 'com.dashx:dashx-android:1.1.5'
 }
 ```
 
@@ -79,15 +79,29 @@ DashX.setIdentityToken("jwt-or-session-token")
 
 Sends an identify call to DashX. `options` should include any user attributes you have (uid/email/phone/name/etc).
 
+Optional `onSuccess` and `onError` callbacks let you know when the call completes.
+
 ```kotlin
 DashX.identify(
-    hashMapOf(
+    options = hashMapOf(
         "uid" to "user_123",
         "email" to "user@example.com",
         "first_name" to "Ava",
         "last_name" to "Singh"
-    )
+    ),
+    onSuccess = { /* called on main thread when done */ },
+    onError = { err -> Log.e("DashX", err.message) }
 )
+```
+
+Or use the suspend variant in a coroutine:
+
+```kotlin
+try {
+    DashX.identifyAsync(hashMapOf("uid" to "user_123"))
+} catch (e: DashXException) {
+    Log.e("DashX", e.message)
+}
 ```
 
 #### `DashX.reset()`
@@ -115,6 +129,16 @@ DashX.fetchRecord(
 )
 ```
 
+Or use the suspend variant:
+
+```kotlin
+try {
+    val record = DashX.fetchRecordAsync("blog/abc123", preview = true)
+} catch (e: DashXException) {
+    Log.e("DashX", e.message)
+}
+```
+
 #### `DashX.searchRecords(...)`
 
 Search records in a resource with optional filter/order/limit and field projection options.
@@ -125,7 +149,7 @@ DashX.searchRecords(
     filter = null,
     order = null,
     limit = 20,
-    preview = true,
+    preview = null,
     language = null,
     fields = null,
     include = null,
@@ -133,6 +157,16 @@ DashX.searchRecords(
     onSuccess = { records -> /* List<JsonObject> */ },
     onError = { err -> /* ... */ }
 )
+```
+
+Or use the suspend variant:
+
+```kotlin
+try {
+    val records = DashX.searchRecordsAsync("blog", limit = 20)
+} catch (e: DashXException) {
+    Log.e("DashX", e.message)
+}
 ```
 
 #### `DashX.fetchStoredPreferences(...)`
@@ -185,8 +219,25 @@ DashX.uploadAsset(
 
 Tracks a custom event. `data` is optional and is sent as JSON.
 
+Optional `onSuccess` and `onError` callbacks let you know when the call completes.
+
 ```kotlin
-DashX.track("checkout_started", hashMapOf("cart_value" to "42.00"))
+DashX.track(
+    event = "checkout_started",
+    data = hashMapOf("cart_value" to "42.00"),
+    onSuccess = { /* called on main thread when done */ },
+    onError = { err -> Log.e("DashX", err.message) }
+)
+```
+
+Or use the suspend variant:
+
+```kotlin
+try {
+    DashX.trackAsync("checkout_started", hashMapOf("cart_value" to "42.00"))
+} catch (e: DashXException) {
+    Log.e("DashX", e.message)
+}
 ```
 
 #### `DashX.trackAppStarted(fromBackground)`
@@ -226,8 +277,25 @@ DashX.screen("Home", hashMapOf())
 
 Tracks message delivery/open/dismiss status for DashX pushes.
 
+Optional `onSuccess` and `onError` callbacks let you know when the call completes.
+
 ```kotlin
-DashX.trackMessage("message-id", com.dashx.android.graphql.generated.type.TrackMessageStatus.OPENED)
+DashX.trackMessage(
+    id = "message-id",
+    status = TrackMessageStatus.OPENED,
+    onSuccess = { /* called on main thread when done */ },
+    onError = { err -> Log.e("DashX", err.message) }
+)
+```
+
+Or use the suspend variant:
+
+```kotlin
+try {
+    DashX.trackMessageAsync("message-id", TrackMessageStatus.OPENED)
+} catch (e: DashXException) {
+    Log.e("DashX", e.message)
+}
 ```
 
 #### `DashX.subscribe()` / `DashX.subscribe(token)` / `DashX.unsubscribe()`
@@ -305,6 +373,70 @@ override fun onNewToken(token: String) {
     super.onNewToken(token)
     DashX.subscribe(token)
 }
+```
+
+### ProGuard / R8
+
+The SDK ships consumer ProGuard rules (`consumer-rules.pro`) that are automatically applied when your app enables minification. No manual ProGuard configuration is required.
+
+### Offline Event Queue
+
+When a `track()` call fails (e.g. due to a network error), the event is automatically persisted to an offline queue. Queued events are retried with exponential backoff (2 s base, capped at 5 minutes, max 10 retries) and survive app restarts. The queue holds up to 1,000 events (oldest are dropped when full).
+
+The queue flushes automatically after `configure()` and can be flushed manually:
+
+```kotlin
+DashX.flushEventQueue()
+```
+
+### Error Handling
+
+All SDK errors are represented by the `DashXError` sealed class:
+
+| Error | Description | `isRetryable` |
+|-------|-------------|---------------|
+| `NotConfigured` | `configure()` has not been called | No |
+| `NotIdentified` | `setIdentity()` has not been called | No |
+| `GraphQLError` | Server returned GraphQL errors | No |
+| `NetworkError` | Network-level failure (timeout, DNS, etc.) | Yes |
+| `AssetError` | Asset upload/fetch failure | No |
+
+Use `error.isRetryable` to decide whether to retry an operation:
+
+```kotlin
+DashX.track("event", onError = { error ->
+    if (error.isRetryable) {
+        // retry later
+    }
+})
+```
+
+The suspend wrappers throw `DashXException` which wraps the underlying `DashXError`:
+
+```kotlin
+try {
+    DashX.trackAsync("event")
+} catch (e: DashXException) {
+    Log.e("DashX", "${e.error}: ${e.message}")
+}
+```
+
+### Configurable Timeouts
+
+The SDK exposes configurable timeout properties:
+
+```kotlin
+DashX.imageDownloadTimeoutMs = 5000  // notification image download timeout (ms)
+DashX.pollIntervalMs = 3000          // asset upload poll interval (ms)
+DashX.maxPollRetries = 10            // max asset upload poll attempts
+```
+
+### Lifecycle Management
+
+Call `shutdown()` to cancel all in-flight SDK operations and release resources. After calling this, `configure()` must be called again:
+
+```kotlin
+DashX.shutdown()
 ```
 
 ### Callback dispatcher
