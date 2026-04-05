@@ -84,7 +84,7 @@ open class DashXFirebaseMessagingService : FirebaseMessagingService() {
             val body = dashXData.body
 
             if ((title != null) || (body != null)) {
-                createNotificationChannel(dashXData)
+                ensureDefaultNotificationChannelIfNeeded(dashXData)
 
                 val notificationTag = dashXData.tag ?: dashXData.id
 
@@ -110,39 +110,51 @@ open class DashXFirebaseMessagingService : FirebaseMessagingService() {
         }
     }
 
-    private fun createNotificationChannel(dashXData: DashXPayload) {
-        val channelId = dashXData.channelId ?: CHANNEL_ID
+    /**
+     * Creates the default DashX channel only when the payload does not specify [DashXPayload.channelId].
+     * If `channel_id` is present, the host app is responsible for registering that channel (importance,
+     * sound, etc.).
+     *
+     * For the default channel, we create it only once; if it already exists (e.g. app created it with
+     * higher importance), we leave it unchanged.
+     */
+    private fun ensureDefaultNotificationChannelIfNeeded(dashXData: DashXPayload) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+
+        // Custom channel from payload — post to it without creating or overwriting.
+        if (dashXData.channelId != null) return
+
         val notificationManager =
             getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                channelId,
-                CHANNEL_NAME,
-                NotificationManager.IMPORTANCE_DEFAULT
-            )
+        if (notificationManager.getNotificationChannel(CHANNEL_ID) != null) return
 
-            dashXData.sound?.let { sound ->
-                buildSoundUri(sound)?.let { uri ->
-                    val audioAttributesBuilder = AudioAttributes.Builder()
-                    audioAttributesBuilder.setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                    audioAttributesBuilder.setUsage(AudioAttributes.USAGE_NOTIFICATION)
+        val channel = NotificationChannel(
+            CHANNEL_ID,
+            CHANNEL_NAME,
+            NotificationManager.IMPORTANCE_DEFAULT
+        )
 
-                    channel.setSound(uri, audioAttributesBuilder.build())
-                }
+        dashXData.sound?.let { sound ->
+            buildSoundUri(sound)?.let { uri ->
+                val audioAttributesBuilder = AudioAttributes.Builder()
+                audioAttributesBuilder.setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                audioAttributesBuilder.setUsage(AudioAttributes.USAGE_NOTIFICATION)
+
+                channel.setSound(uri, audioAttributesBuilder.build())
             }
-
-            dashXData.lightSettings?.let { lightSettings ->
-                val ls = json.decodeFromString<LightSettings>(lightSettings)
-
-                channel.enableLights(true)
-                channel.lightColor = Color.parseColor(ls.color)
-            }
-
-            channel.description = CHANNEL_DESCRIPTION
-
-            notificationManager.createNotificationChannel(channel)
         }
+
+        dashXData.lightSettings?.let { lightSettings ->
+            val ls = json.decodeFromString<LightSettings>(lightSettings)
+
+            channel.enableLights(true)
+            channel.lightColor = Color.parseColor(ls.color)
+        }
+
+        channel.description = CHANNEL_DESCRIPTION
+
+        notificationManager.createNotificationChannel(channel)
     }
 
     private fun createNotification(
@@ -390,6 +402,6 @@ open class DashXFirebaseMessagingService : FirebaseMessagingService() {
     companion object {
         private const val CHANNEL_NAME = "Default Channel"
         private const val CHANNEL_DESCRIPTION = "Default notification channel"
-        private const val CHANNEL_ID = "DASHX_NOTIFICATION_CHANNEL"
+        private const val CHANNEL_ID = "default_dashx_notification_channel"
     }
 }

@@ -38,7 +38,7 @@ dependencyResolutionManagement {
 
 ```groovy
 dependencies {
-    implementation 'com.dashx:dashx-android:1.1.6'
+    implementation 'com.dashx:dashx-android:1.1.7'
 }
 ```
 
