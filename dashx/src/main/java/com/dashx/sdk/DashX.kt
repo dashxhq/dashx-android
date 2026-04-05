@@ -719,7 +719,19 @@ class DashX {
             }
         }
 
+        private fun isFirebaseAvailable(): Boolean = try {
+            Class.forName("com.google.firebase.messaging.FirebaseMessaging")
+            true
+        } catch (_: ClassNotFoundException) {
+            false
+        }
+
         fun subscribe() {
+            if (!isFirebaseAvailable()) {
+                DashXLog.e(tag, "Firebase is not available. Add firebase-messaging to your dependencies.")
+                return
+            }
+
             FirebaseMessaging.getInstance().token.addOnCompleteListener(OnCompleteListener { task ->
                 if (!task.isSuccessful) {
                     DashXLog.e(
@@ -791,6 +803,11 @@ class DashX {
         }
 
         fun unsubscribe() {
+            if (!isFirebaseAvailable()) {
+                DashXLog.e(tag, "Firebase is not available. Add firebase-messaging to your dependencies.")
+                return
+            }
+
             val ctx = context ?: run {
                 DashXLog.e(tag, "unsubscribe: context is null, configure() must be called first")
                 return
