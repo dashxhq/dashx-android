@@ -188,7 +188,7 @@ class DashX {
             }.apply()
         }
 
-        /** Recreated when identity/token changes (setIdentityToken, setIdentity, init). */
+        /** Recreated when identity/token changes (setIdentity, init). */
         @Volatile private var apolloClient = createApolloClient()
 
         private fun createGraphqlClient() {
@@ -228,11 +228,6 @@ class DashX {
                 return true
             }
             return false
-        }
-
-        fun setIdentityToken(identityToken: String) {
-            this.identityToken = identityToken
-            createGraphqlClient()
         }
 
         private fun <D : Mutation.Data> executeMutation(
