@@ -1,5 +1,6 @@
 package com.dashx.android
 
+import android.Manifest
 import android.app.*
 import android.content.ContentResolver
 import android.content.Context
@@ -13,6 +14,7 @@ import android.os.Build
 import android.webkit.URLUtil
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import com.dashx.android.graphql.generated.type.TrackMessageStatus
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
@@ -84,10 +86,24 @@ open class DashXFirebaseMessagingService : FirebaseMessagingService() {
             if ((title != null) || (body != null)) {
                 createNotificationChannel(dashXData)
 
-                val tag = dashXData.tag ?: dashXData.id
+                val notificationTag = dashXData.tag ?: dashXData.id
 
-                NotificationManagerCompat.from(applicationContext)
-                    .notify(tag, id.hashCode(), createNotification(dashXData))
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+                    ContextCompat.checkSelfPermission(
+                        this,
+                        Manifest.permission.POST_NOTIFICATIONS
+                    ) == PackageManager.PERMISSION_GRANTED
+                ) {
+                    try {
+                        NotificationManagerCompat.from(applicationContext)
+                            .notify(notificationTag, id.hashCode(), createNotification(dashXData))
+                    } catch (e: SecurityException) {
+                        DashXLog.e(
+                            this@DashXFirebaseMessagingService.tag,
+                            "Cannot post notification: ${e.message}"
+                        )
+                    }
+                }
 
                 dashXClient.trackMessage(id, TrackMessageStatus.DELIVERED)
             }

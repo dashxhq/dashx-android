@@ -20,7 +20,7 @@ import org.json.JSONObject
  * [kotlinx.serialization.json.JsonObject]. Required at runtime so that
  * Apollo can deserialize/serialize JSON fields in responses and variables.
  */
-object JsonObjectScalarAdapter : Adapter<JsonObject> {
+internal object JsonObjectScalarAdapter : Adapter<JsonObject> {
 
     private val json = Json { ignoreUnknownKeys = true }
 

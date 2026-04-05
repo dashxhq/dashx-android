@@ -1,13 +1,14 @@
 plugins {
     id 'com.android.library'
+    id 'org.jetbrains.kotlin.android'
     id 'org.jetbrains.kotlin.plugin.serialization'
     id 'com.apollographql.apollo'
     id 'com.vanniktech.maven.publish'
 }
 
-def version = libs.versions.dashxAndroid.get()
-def group = libs.versions.group.get()
-def artifactId = libs.versions.dashxAndroidArtifactId.get()
+def sdkVersion = libs.versions.dashxAndroid.get()
+def sdkGroup = libs.versions.group.get()
+def sdkArtifactId = libs.versions.dashxAndroidArtifactId.get()
 
 android {
     namespace 'com.dashx.android'
@@ -21,10 +22,10 @@ android {
     defaultConfig {
         minSdk 26
         targetSdk 34
-        versionCode 100100500 // 1.1.5 -> 100100500, 1.5.4 -> 100500400 and so on...
-        versionName version
+        versionCode 100100600 // 1.1.6 -> 100100600, 1.5.4 -> 100500400 and so on...
+        versionName sdkVersion
 
-        buildConfigField 'String', 'VERSION_NAME', "\"$version\""
+        buildConfigField 'String', 'VERSION_NAME', "\"$sdkVersion\""
         buildConfigField 'String', 'LIBRARY_NAME', "\"dashx-android\""
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
@@ -38,31 +39,40 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_17
-        targetCompatibility JavaVersion.VERSION_17
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+
+    kotlinOptions {
+        jvmTarget = '11'
+        apiVersion = '1.9'
+        languageVersion = '1.9'
     }
 }
 
-kotlin {
-    jvmToolchain(17)
-}
-
 dependencies {
-    implementation 'com.squareup.okhttp3:okhttp:5.0.0-alpha.11'
-
     implementation 'com.apollographql.apollo:apollo-runtime:4.4.1'
-    implementation 'androidx.work:work-runtime-ktx:2.7.1'
-    implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0'
+    implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3'
 
     // Coroutines
-    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1'
 
-    implementation platform('com.google.firebase:firebase-bom:31.5.0')
-    implementation 'com.google.firebase:firebase-messaging-ktx:23.1.2'
+    compileOnly platform('com.google.firebase:firebase-bom:31.5.0')
+    compileOnly 'com.google.firebase:firebase-messaging-ktx:23.1.2'
 
-    implementation 'com.google.android.gms:play-services-ads-identifier:18.0.1'
+    implementation('com.google.android.gms:play-services-ads-identifier') {
+        version {
+            require '[17.0.0, 18.99.99]'
+            prefer '18.0.1'
+        }
+    }
 
-    implementation 'androidx.security:security-crypto:1.0.0'
+    implementation('androidx.security:security-crypto') {
+        version {
+            require '[1.0.0, 1.1.99]'
+            prefer '1.0.0'
+        }
+    }
 
     testImplementation 'junit:junit:4.13.2'
     androidTestImplementation 'androidx.test.ext:junit:1.1.5'
@@ -76,8 +86,6 @@ apollo {
         srcDir("src/main/graphql")
 
         includes.add("**/*.graphql")
-
-        outputDir = file("$buildDir/generated/apollo")
 
         mapScalar("JSON", "kotlinx.serialization.json.JsonObject")
 
@@ -95,11 +103,13 @@ tasks.named("preBuild") {
 }
 
 mavenPublishing {
-    coordinates(group, artifactId, version)
+    coordinates(sdkGroup, sdkArtifactId, sdkVersion)
 
     publishToMavenCentral(true)
 
-    signAllPublications()
+    if (!project.hasProperty('skipSigning')) {
+        signAllPublications()
+    }
 
     pom {
         name = 'DashX Android'
@@ -124,6 +134,16 @@ mavenPublishing {
             connection = 'scm:git:github.com/dashxhq/dashx-android.git'
             developerConnection = 'scm:git:ssh://github.com/dashxhq/dashx-android.git'
             url = 'https://github.com/dashxhq/dashx-android'
+        }
+
+        withXml {
+            def deps = asNode().dependencies.dependency
+            deps.each { dep ->
+                def groupId = dep.groupId.text()
+                if (groupId.startsWith('org.jetbrains.kotlin') || groupId.startsWith('org.jetbrains.kotlinx')) {
+                    dep.scope*.value = 'runtime'
+                }
+            }
         }
     }
 }

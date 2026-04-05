@@ -1,45 +1,16 @@
-# DashX SDK ProGuard/R8 Rules
-# These rules are bundled with the SDK and automatically applied to consumer apps.
-
-# Keep all public SDK classes and their public/protected members
--keep class com.dashx.android.** { public protected *; }
-
-# Keep data classes used for serialization
--keepclassmembers class com.dashx.android.data.** {
-    <fields>;
-    <init>(...);
-}
-
-# Keep DashXFirebaseMessagingService (referenced in consumer's AndroidManifest.xml)
--keep class com.dashx.android.DashXFirebaseMessagingService { *; }
-
-# Keep NotificationReceiver and NotificationDismissedReceiver (BroadcastReceivers)
--keep class com.dashx.android.NotificationReceiver { *; }
--keep class com.dashx.android.NotificationDismissedReceiver { *; }
-
-# kotlinx-serialization
--keepattributes *Annotation*, InnerClasses
--dontnote kotlinx.serialization.AnnotationsKt
-
--keepclassmembers class kotlinx.serialization.json.** {
+-keep class com.dashx.android.** { *; }
+-keepattributes *Annotation*
+-keep class kotlinx.serialization.** { *; }
+-keepclassmembers class com.dashx.android.** {
     *** Companion;
 }
--keepclasseswithmembers class kotlinx.serialization.json.** {
-    kotlinx.serialization.KSerializer serializer(...);
-}
--keepclassmembers @kotlinx.serialization.Serializable class com.dashx.android.** {
-    *** Companion;
-    *** INSTANCE;
+-keepclasseswithmembers class com.dashx.android.** {
     kotlinx.serialization.KSerializer serializer(...);
 }
 
-# Apollo GraphQL generated types
--keep class com.dashx.android.graphql.generated.** { *; }
--keepclassmembers class com.apollographql.apollo.** { *; }
--keep class com.apollographql.apollo.api.** { *; }
-
-# OkHttp
--dontwarn okhttp3.**
--dontwarn okio.**
--keep class okhttp3.** { *; }
--keep interface okhttp3.** { *; }
+# Firebase is an optional (compileOnly) dependency
+-dontwarn com.google.firebase.messaging.FirebaseMessaging
+-dontwarn com.google.firebase.messaging.FirebaseMessagingService
+-dontwarn com.google.firebase.messaging.RemoteMessage
+-dontwarn com.google.android.gms.tasks.OnCompleteListener
+-dontwarn com.google.android.gms.tasks.Task
