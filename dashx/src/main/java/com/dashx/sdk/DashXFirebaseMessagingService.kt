@@ -60,7 +60,9 @@ open class DashXFirebaseMessagingService : FirebaseMessagingService() {
     override fun onNewToken(token: String) {
         super.onNewToken(token)
         DashXLog.d(tag, "FCM token updated.")
-        dashXClient.subscribe(token)
+        if (dashXClient.isIdentified) {
+            dashXClient.subscribe(token)
+        }
     }
 
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
