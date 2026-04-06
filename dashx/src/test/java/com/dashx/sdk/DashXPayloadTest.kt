@@ -32,7 +32,7 @@ class DashXPayloadTest {
                 "screen_name": "ProductDetail",
                 "screen_data": {"product_id": "abc"},
                 "action_buttons": [
-                    {"identifier": "buy", "label": "Buy", "url": "https://example.com/buy", "click_action": "com.example.BUY"}
+                    {"identifier": "buy", "label": "Buy", "url": "https://example.com/buy", "clickAction": "com.example.BUY"}
                 ]
             }
         """.trimIndent()

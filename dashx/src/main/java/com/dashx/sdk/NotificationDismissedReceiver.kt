@@ -25,7 +25,8 @@ class NotificationDismissedReceiver : BroadcastReceiver() {
             val payload: DashXPayload? = when {
                 payloadJson != null -> try {
                     json.decodeFromString<DashXPayload>(payloadJson)
-                } catch (_: Throwable) {
+                } catch (e: Throwable) {
+                    DashXLog.e(tag, "Failed to deserialize DashX payload: ${e.message}")
                     null
                 }
                 else -> null

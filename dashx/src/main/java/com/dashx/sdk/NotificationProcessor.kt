@@ -45,7 +45,11 @@ class NotificationProcessor {
             when (navigationAction) {
                 is NavigationAction.DeepLink -> {
                     DashX.processDeepLink(Uri.parse(navigationAction.url), "notification")
-                    context.startActivity(urlOpenIntent(navigationAction.url))
+                    try {
+                        context.startActivity(urlOpenIntent(navigationAction.url))
+                    } catch (e: Throwable) {
+                        DashXLog.e(tag, "No Activity found for URL: ${navigationAction.url} – ${e.message}")
+                    }
                     return
                 }
                 is NavigationAction.RichLanding -> {
@@ -64,7 +68,11 @@ class NotificationProcessor {
                     val clickUrl = resolveClickUrl(payload, extras, actionButtonId)
                     if (clickUrl != null) {
                         DashX.processDeepLink(Uri.parse(clickUrl), "notification")
-                        context.startActivity(urlOpenIntent(clickUrl))
+                        try {
+                            context.startActivity(urlOpenIntent(clickUrl))
+                        } catch (e: Throwable) {
+                            DashXLog.e(tag, "No Activity found for URL: $clickUrl – ${e.message}")
+                        }
                         return
                     }
                     val clickAction = resolveClickAction(payload, extras, actionButtonId)
@@ -105,7 +113,8 @@ class NotificationProcessor {
             if (jsonStr != null) {
                 return try {
                     json.decodeFromString<DashXPayload>(jsonStr)
-                } catch (_: Throwable) {
+                } catch (e: Throwable) {
+                    DashXLog.e(tag, "Failed to deserialize DashX payload: ${e.message}")
                     null
                 }
             }

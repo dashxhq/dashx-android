@@ -25,9 +25,13 @@ object DashXBrowser {
                 .also { it.intent.setPackage(packageName) }
                 .launchUrl(context, uri)
         } else {
-            val fallback = Intent(Intent.ACTION_VIEW, uri)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            context.startActivity(fallback)
+            try {
+                val fallback = Intent(Intent.ACTION_VIEW, uri)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(fallback)
+            } catch (e: Throwable) {
+                DashXLog.e("DashXBrowser", "No Activity found for URL: $url – ${e.message}")
+            }
         }
     }
 }
