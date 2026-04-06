@@ -45,3 +45,7 @@ dependencies {
 ## Documentation
 
 For detailed documentation, visit [Android SDK documentation](https://docs.dashx.com/sdks/client-side/android-sdk).
+
+## Deep linking and push navigation
+
+See the [Deep Linking & Push Navigation](https://docs.dashx.com/apps/messaging/deep-linking) guide for setup instructions, payload fields, and code examples.

@@ -21,10 +21,23 @@ import com.google.firebase.messaging.RemoteMessage
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.net.HttpURLConnection
 import java.net.URL
 
+
+@Serializable
+data class ActionButton(
+    @SerialName("identifier") val identifier: String,
+    @SerialName("label") val label: String,
+    @SerialName("icon") val icon: String? = null,
+    @SerialName("url") val url: String? = null,
+    @SerialName("clickAction") val clickAction: String? = null,
+    @SerialName("screenName") val screenName: String? = null,
+    @SerialName("screenData") val screenData: Map<String, String>? = null,
+    @SerialName("richLanding") val richLanding: Boolean? = null,
+)
 
 @Serializable
 data class DashXPayload(
@@ -43,6 +56,10 @@ data class DashXPayload(
     @SerialName("color") val color: String? = null,
     @SerialName("tag") val tag: String? = null,
     @SerialName("click_action") val clickAction: String? = null,
+    @SerialName("screen_name") val screenName: String? = null,
+    @SerialName("screen_data") val screenData: Map<String, String>? = null,
+    @SerialName("action_buttons") val actionButtons: List<ActionButton>? = null,
+    @SerialName("rich_landing") val richLanding: Boolean? = null,
 )
 
 @Serializable
@@ -80,6 +97,8 @@ open class DashXFirebaseMessagingService : FirebaseMessagingService() {
                 DashXLog.e(tag, "Failed to parse DashX payload: ${t.message}")
                 return
             }
+
+            DashX.dispatchNotificationReceived(dashXData)
 
             val id = dashXData.id
             val title = dashXData.title
@@ -304,8 +323,22 @@ open class DashXFirebaseMessagingService : FirebaseMessagingService() {
         val defaultPendingIntent = getDefaultPendingIntent(id, dashXData)
         notificationBuilder.setContentIntent(defaultPendingIntent)
 
-        val dismissedPendingIntent = getDismissedPendingIntent(id)
+        val dismissedPendingIntent = getDismissedPendingIntent(dashXData)
         notificationBuilder.setDeleteIntent(dismissedPendingIntent)
+
+        dashXData.actionButtons?.forEach { button ->
+            val actionPendingIntent = getActionButtonPendingIntent(dashXData, button)
+            val iconResId = button.icon?.let {
+                resources.getIdentifier(it, "drawable", packageName)
+            } ?: 0
+            notificationBuilder.addAction(
+                NotificationCompat.Action(
+                    iconResId,
+                    button.label,
+                    actionPendingIntent
+                )
+            )
+        }
 
         return notificationBuilder.build()
     }
@@ -317,6 +350,10 @@ open class DashXFirebaseMessagingService : FirebaseMessagingService() {
         val intent = getNewBaseIntent()
 
         intent.putExtra(NotificationReceiver.DASHX_NOTIFICATION_ID, id)
+        intent.putExtra(
+            NotificationReceiver.DASHX_PAYLOAD_JSON,
+            json.encodeToString(DashXPayload.serializer(), payload)
+        )
 
         if (payload.clickAction != null) {
             intent.putExtra(NotificationReceiver.NOTIFICATION_CLICK_ACTION, payload.clickAction)
@@ -325,6 +362,34 @@ open class DashXFirebaseMessagingService : FirebaseMessagingService() {
         if (payload.url != null) {
             intent.putExtra(NotificationReceiver.NOTIFICATION_URL, payload.url)
         }
+
+        val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
+            ?: return PendingIntent.getActivity(context, requestCode, intent, pendingIntentFlags)
+
+        launchIntent.setPackage(null)
+        launchIntent.flags =
+            Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
+
+        return PendingIntent.getActivities(
+            context,
+            requestCode,
+            arrayOf(launchIntent, intent),
+            pendingIntentFlags
+        )
+    }
+
+    private fun getActionButtonPendingIntent(payload: DashXPayload, button: ActionButton): PendingIntent {
+        val context = applicationContext
+        val pendingIntentFlags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        val requestCode = payload.id.hashCode() xor button.identifier.hashCode()
+        val intent = getNewBaseIntent()
+
+        intent.putExtra(NotificationReceiver.DASHX_NOTIFICATION_ID, payload.id)
+        intent.putExtra(
+            NotificationReceiver.DASHX_PAYLOAD_JSON,
+            json.encodeToString(DashXPayload.serializer(), payload)
+        )
+        intent.putExtra(NotificationReceiver.NOTIFICATION_ACTION_BUTTON_ID, button.identifier)
 
         val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
             ?: return PendingIntent.getActivity(context, requestCode, intent, pendingIntentFlags)
@@ -351,16 +416,20 @@ open class DashXFirebaseMessagingService : FirebaseMessagingService() {
         )
     }
 
-    private fun getDismissedPendingIntent(notificationId: String): PendingIntent {
+    private fun getDismissedPendingIntent(payload: DashXPayload): PendingIntent {
         val dismissIntent =
             Intent(applicationContext, NotificationDismissedReceiver::class.java).apply {
                 action = NotificationDismissedReceiver.ACTION_DISMISS_NOTIFICATION
-                putExtra(NotificationDismissedReceiver.EXTRA_NOTIFICATION_ID, notificationId)
+                putExtra(NotificationDismissedReceiver.EXTRA_NOTIFICATION_ID, payload.id)
+                putExtra(
+                    NotificationDismissedReceiver.EXTRA_DASHX_PAYLOAD_JSON,
+                    json.encodeToString(DashXPayload.serializer(), payload)
+                )
             }
 
         return PendingIntent.getBroadcast(
             applicationContext,
-            notificationId.hashCode(),
+            payload.id.hashCode(),
             dismissIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )

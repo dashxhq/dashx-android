@@ -22,7 +22,7 @@ android {
     defaultConfig {
         minSdk 26
         targetSdk 34
-        versionCode 100100800 // 1.1.8 -> 100100800, 1.5.4 -> 100500400 and so on...
+        versionCode 100100900 // 1.1.9 -> 100100900, 1.5.4 -> 100500400 and so on...
         versionName sdkVersion
 
         buildConfigField 'String', 'VERSION_NAME', "\"$sdkVersion\""
@@ -73,6 +73,8 @@ dependencies {
             prefer '1.0.0'
         }
     }
+
+    implementation 'androidx.browser:browser:1.8.0'
 
     testImplementation 'junit:junit:4.13.2'
     androidTestImplementation 'androidx.test.ext:junit:1.1.5'
