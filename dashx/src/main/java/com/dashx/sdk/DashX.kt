@@ -67,6 +67,7 @@ class DashX {
 
         @Volatile private var accountAnonymousUid: String? = null
         @Volatile private var accountUid: String? = null
+        internal val isIdentified get() = accountUid != null
         @Volatile private var identityToken: String? = null
 
         @Volatile private var context: Context? = null
