@@ -10,7 +10,7 @@
   <h4>
     <a href="https://dashx.com">Website</a>
     <span> | </span>
-    <a href="https://docs.dashx.com/developer">Documentation</a>
+    <a href="https://docs.dashx.com">Documentation</a>
   </h4>
 </div>
 
