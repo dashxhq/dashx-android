@@ -48,34 +48,4 @@ For detailed documentation, visit [Android SDK documentation](https://docs.dashx
 
 ## Deep linking and push navigation
 
-### `DashXNotificationListener`
-
-Register optional hooks with **`DashX.registerNotificationListener`** / **`unregisterNotificationListener`**:
-
-- **`onNotificationReceived`** — incoming FCM message with a parsed **`DashXPayload`** (foreground delivery path).
-- **`onNotificationClicked`** — called when the user opens a notification (or an action). Return **`true`** to handle navigation yourself and skip the SDK default behavior (opening URLs, `click_action`, Custom Tabs for rich landing). Return **`false`** to let the SDK proceed.
-- **`onNotificationDismissed`** — notification cleared from the shade.
-
-### `DashX.processDeepLink(uri, source)`
-
-Call this when you open a deep link outside the SDK (for example from your own App Link activity) to record the same `dx_deep_link_opened` analytics event the SDK uses for notification taps. Notification clicks that use the default URL flow already invoke this with `source = "notification"`.
-
-### Payload fields (`DashXPayload`)
-
-The SDK resolves a sealed **`NavigationAction`**: **`DeepLink`**, **`RichLanding`**, **`Screen`**, or **`ClickAction`**. Relevant FCM / data keys include:
-
-| Key | Role |
-|-----|------|
-| `url` | Opens externally (or rich landing when `rich_landing` is true) |
-| `screen_name` / `screen_data` | Structured in-app navigation |
-| `rich_landing` | When true with a URL, opens in-app via Custom Tabs |
-| `action_buttons` | Per-button `identifier`, `url`, `screen_name`, `screen_data`, `click_action`, `rich_landing` |
-| `click_action` | Activity class name or intent action string (legacy / fallback) |
-
-### `DashX.openRichLanding(context, url)`
-
-Opens a URL in an in-app Custom Tabs browser. Use this when you want to present a URL inside the app outside the notification flow (e.g. from an in-app message or your own UI). Falls back to `ACTION_VIEW` when no Custom Tabs provider is installed.
-
-### App Links
-
-For `https` links, configure [Android App Links](https://developer.android.com/training/app-links) (intent filters and Digital Asset Links) so taps open your app; use **`onNotificationClicked`** to map **`NavigationAction.Screen`** or custom URLs to your activities or `NavController`.
+See the [Deep Linking & Push Navigation](https://docs.dashx.com/apps/messaging/deep-linking) guide for setup instructions, payload fields, and code examples.
