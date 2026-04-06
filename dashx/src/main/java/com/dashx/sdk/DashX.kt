@@ -56,6 +56,7 @@ import java.util.concurrent.TimeUnit
 import java.time.Instant
 import java.time.format.DateTimeFormatter
 import java.util.UUID
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicInteger
 
 class DashX {
@@ -82,6 +83,40 @@ class DashX {
         private var coroutineScope = CoroutineScope(Dispatchers.IO + coroutineJob)
         private val tag = DashX::class.java.simpleName
         private val json = Json { ignoreUnknownKeys = true }
+
+        private val notificationListeners = CopyOnWriteArrayList<DashXNotificationListener>()
+
+        fun registerNotificationListener(listener: DashXNotificationListener) {
+            if (!notificationListeners.contains(listener)) {
+                notificationListeners.add(listener)
+            }
+        }
+
+        fun unregisterNotificationListener(listener: DashXNotificationListener) {
+            notificationListeners.remove(listener)
+        }
+
+        internal fun dispatchNotificationReceived(payload: DashXPayload) {
+            for (listener in notificationListeners) {
+                listener.onNotificationReceived(payload)
+            }
+        }
+
+        internal fun dispatchNotificationClicked(payload: DashXPayload, action: NavigationAction?): Boolean {
+            var suppressDefault = false
+            for (listener in notificationListeners) {
+                if (listener.onNotificationClicked(payload, action)) {
+                    suppressDefault = true
+                }
+            }
+            return suppressDefault
+        }
+
+        internal fun dispatchNotificationDismissed(payload: DashXPayload) {
+            for (listener in notificationListeners) {
+                listener.onNotificationDismissed(payload)
+            }
+        }
 
         /** Configurable timeout for image downloads in notifications (ms). */
         var imageDownloadTimeoutMs: Int = 5000
@@ -712,6 +747,22 @@ class DashX {
                 DashXLog.d(tag, result.data?.trackMessage?.toString())
                 onSuccess?.invoke()
             }
+        }
+
+        /**
+         * Records a `dx_deep_link_opened` analytics event. Call when a deep link is opened (for example from a
+         * push notification tap or an App Link); notification taps are tracked automatically by the SDK when
+         * the default handling opens a URL.
+         */
+        fun processDeepLink(uri: Uri, source: String? = null) {
+            val data = hashMapOf(
+                "url" to uri.toString(),
+                "timestamp" to DateTimeFormatter.ISO_INSTANT.format(Instant.now())
+            )
+            if (source != null) {
+                data["source"] = source
+            }
+            track(EVENT_DEEP_LINK_OPENED, data)
         }
 
         private fun isFirebaseAvailable(): Boolean = try {

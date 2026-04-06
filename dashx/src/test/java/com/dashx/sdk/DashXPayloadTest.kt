@@ -28,7 +28,12 @@ class DashXPayloadTest {
                 "light_settings": "{\"color\":\"#FF0000\",\"light_on_duration\":300,\"light_off_duration\":1000}",
                 "color": "#00FF00",
                 "tag": "promo",
-                "click_action": "com.example.OPEN_DETAIL"
+                "click_action": "com.example.OPEN_DETAIL",
+                "screen_name": "ProductDetail",
+                "screen_data": {"product_id": "abc"},
+                "action_buttons": [
+                    {"identifier": "buy", "label": "Buy", "url": "https://example.com/buy", "click_action": "com.example.BUY"}
+                ]
             }
         """.trimIndent()
 
@@ -49,6 +54,13 @@ class DashXPayloadTest {
         assertEquals("#00FF00", payload.color)
         assertEquals("promo", payload.tag)
         assertEquals("com.example.OPEN_DETAIL", payload.clickAction)
+        assertEquals("ProductDetail", payload.screenName)
+        assertEquals(mapOf("product_id" to "abc"), payload.screenData)
+        assertEquals(1, payload.actionButtons?.size)
+        assertEquals("buy", payload.actionButtons?.first()?.identifier)
+        assertEquals("Buy", payload.actionButtons?.first()?.label)
+        assertEquals("https://example.com/buy", payload.actionButtons?.first()?.url)
+        assertEquals("com.example.BUY", payload.actionButtons?.first()?.clickAction)
     }
 
     @Test
@@ -71,6 +83,9 @@ class DashXPayloadTest {
         assertNull(payload.color)
         assertNull(payload.tag)
         assertNull(payload.clickAction)
+        assertNull(payload.screenName)
+        assertNull(payload.screenData)
+        assertNull(payload.actionButtons)
     }
 
     @Test
@@ -129,5 +144,116 @@ class DashXPayloadTest {
         val serialized = json.encodeToString(original)
         val deserialized = json.decodeFromString<LightSettings>(serialized)
         assertEquals(original, deserialized)
+    }
+
+    @Test
+    fun resolveNavigationAction_prefersScreenOverUrl() {
+        val payload = DashXPayload(
+            id = "p1",
+            url = "https://example.com",
+            screenName = "Detail",
+            screenData = mapOf("k" to "v"),
+        )
+        val action = payload.resolveNavigationAction()
+        assertTrue(action is NavigationAction.Screen)
+        val screen = action as NavigationAction.Screen
+        assertEquals("Detail", screen.name)
+        assertEquals(mapOf("k" to "v"), screen.data)
+    }
+
+    @Test
+    fun resolveNavigationAction_deepLinkWhenNoScreen() {
+        val payload = DashXPayload(
+            id = "p2",
+            url = "https://open.example",
+        )
+        val action = payload.resolveNavigationAction()
+        assertTrue(action is NavigationAction.DeepLink)
+        assertEquals("https://open.example", (action as NavigationAction.DeepLink).url)
+    }
+
+    @Test
+    fun resolveNavigationAction_richLandingWhenFlagTrue() {
+        val payload = DashXPayload(
+            id = "p2rl",
+            url = "https://landing.example",
+            richLanding = true,
+        )
+        val action = payload.resolveNavigationAction()
+        assertTrue(action is NavigationAction.RichLanding)
+        assertEquals("https://landing.example", (action as NavigationAction.RichLanding).url)
+    }
+
+    @Test
+    fun resolveNavigationAction_actionButton_richLanding() {
+        val payload = DashXPayload(
+            id = "p4rl",
+            url = "https://main.example",
+            actionButtons = listOf(
+                ActionButton(
+                    identifier = "open",
+                    label = "Open",
+                    url = "https://promo.example",
+                    richLanding = true,
+                ),
+            ),
+        )
+        val action = payload.resolveNavigationAction("open")
+        assertTrue(action is NavigationAction.RichLanding)
+        assertEquals("https://promo.example", (action as NavigationAction.RichLanding).url)
+    }
+
+    @Test
+    fun resolveNavigationAction_actionButton_prefersScreenOverUrl() {
+        val payload = DashXPayload(
+            id = "p3",
+            url = "https://main.example",
+            actionButtons = listOf(
+                ActionButton(
+                    identifier = "go",
+                    label = "Go",
+                    url = "https://btn.example",
+                    screenName = "Cart",
+                    screenData = mapOf("item" to "1"),
+                ),
+            ),
+        )
+        val action = payload.resolveNavigationAction("go")
+        assertTrue(action is NavigationAction.Screen)
+        val screen = action as NavigationAction.Screen
+        assertEquals("Cart", screen.name)
+        assertEquals(mapOf("item" to "1"), screen.data)
+    }
+
+    @Test
+    fun resolveNavigationAction_actionButton_deepLink() {
+        val payload = DashXPayload(
+            id = "p4",
+            url = "https://main.example",
+            actionButtons = listOf(
+                ActionButton(
+                    identifier = "buy",
+                    label = "Buy",
+                    url = "https://buy.example",
+                ),
+            ),
+        )
+        val action = payload.resolveNavigationAction("buy")
+        assertTrue(action is NavigationAction.DeepLink)
+        assertEquals("https://buy.example", (action as NavigationAction.DeepLink).url)
+    }
+
+    @Test
+    fun resolveNavigationAction_actionButton_unknownIdFallsBackToMain() {
+        val payload = DashXPayload(
+            id = "p5",
+            url = "https://main.example",
+            actionButtons = listOf(
+                ActionButton(identifier = "a", label = "A", url = "https://a"),
+            ),
+        )
+        val action = payload.resolveNavigationAction("missing")
+        assertTrue(action is NavigationAction.DeepLink)
+        assertEquals("https://main.example", (action as NavigationAction.DeepLink).url)
     }
 }

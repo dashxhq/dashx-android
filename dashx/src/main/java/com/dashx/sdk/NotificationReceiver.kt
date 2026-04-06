@@ -9,6 +9,9 @@ class NotificationReceiver : Activity() {
         const val DASHX_NOTIFICATION_ID = "com.dashx.android.DASHX_NOTIFICATION_ID"
         const val NOTIFICATION_CLICK_ACTION = "com.dashx.android.NOTIFICATION_CLICK_ACTION"
         const val NOTIFICATION_URL = "com.dashx.android.NOTIFICATION_URL"
+        const val DASHX_PAYLOAD_JSON = "com.dashx.android.DASHX_PAYLOAD_JSON"
+        /** Set for [NotificationCompat.Action] taps; matches [ActionButton.identifier]. */
+        const val NOTIFICATION_ACTION_BUTTON_ID = "com.dashx.android.NOTIFICATION_ACTION_BUTTON_ID"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

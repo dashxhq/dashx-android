@@ -24,6 +24,7 @@ class ConstantsTest {
         assertTrue(INTERNAL_EVENT_APP_BACKGROUNDED.isNotEmpty())
         assertTrue(INTERNAL_EVENT_APP_CRASHED.isNotEmpty())
         assertTrue(INTERNAL_EVENT_APP_SCREEN_VIEWED.isNotEmpty())
+        assertTrue(EVENT_DEEP_LINK_OPENED.isNotEmpty())
     }
 
     @Test

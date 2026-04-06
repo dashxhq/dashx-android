@@ -21,6 +21,8 @@ const val INTERNAL_EVENT_APP_OPENED = "Application Opened"
 const val INTERNAL_EVENT_APP_BACKGROUNDED = "Application Backgrounded"
 const val INTERNAL_EVENT_APP_CRASHED = "Application Crashed"
 const val INTERNAL_EVENT_APP_SCREEN_VIEWED = "Screen Viewed"
+/** Emitted when a deep link URI is processed (push, app links, etc.). */
+const val EVENT_DEEP_LINK_OPENED = "dx_deep_link_opened"
 
 const val DATA = "data"
 

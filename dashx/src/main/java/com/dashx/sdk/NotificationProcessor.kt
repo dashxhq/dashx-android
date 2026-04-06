@@ -4,33 +4,63 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Bundle
 import com.dashx.android.graphql.generated.type.TrackMessageStatus
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.json.Json
 
 class NotificationProcessor {
     companion object {
         private val tag = NotificationProcessor::class.java.simpleName
         private val dashXClient = DashX
+        private val json = Json { ignoreUnknownKeys = true }
 
         fun handleClick(context: Context, intent: Intent) {
             val extras = intent.extras
-            val notificationId = extras?.getString(NotificationReceiver.DASHX_NOTIFICATION_ID)
-
-            notificationId?.let { id ->
-                dashXClient.trackMessage(
-                    id,
-                    TrackMessageStatus.OPENED
-                )
+            val payload = resolvePayload(extras)
+            if (payload == null) {
+                DashXLog.e(tag, "Missing DashX notification payload")
+                return
             }
+
+            dashXClient.trackMessage(
+                payload.id,
+                TrackMessageStatus.OPENED
+            )
 
             if (context !is Activity) {
                 DashXLog.e(tag, "'context' must be an instance of Activity class")
                 return
             }
 
-            val clickAction = extras?.getString(NotificationReceiver.NOTIFICATION_CLICK_ACTION)
-            val clickUrl = extras?.getString(NotificationReceiver.NOTIFICATION_URL)
+            val actionButtonId = extras?.getString(NotificationReceiver.NOTIFICATION_ACTION_BUTTON_ID)
+            val navigationAction = payload.resolveNavigationAction(actionButtonId)
+            if (DashX.dispatchNotificationClicked(payload, navigationAction)) {
+                return
+            }
+
+            when (navigationAction) {
+                is NavigationAction.DeepLink -> {
+                    DashX.processDeepLink(Uri.parse(navigationAction.url), "notification")
+                    context.startActivity(urlOpenIntent(navigationAction.url))
+                    return
+                }
+                is NavigationAction.RichLanding -> {
+                    DashX.processDeepLink(Uri.parse(navigationAction.url), "notification")
+                    DashXBrowser.openRichLanding(context, navigationAction.url)
+                    return
+                }
+                is NavigationAction.Screen -> {
+                    return
+                }
+                null -> { }
+            }
+
+            val clickAction = resolveClickAction(payload, extras, actionButtonId)
+            val clickUrl = resolveClickUrl(payload, extras, actionButtonId)
 
             if (clickUrl != null) {
+                DashX.processDeepLink(Uri.parse(clickUrl), "notification")
                 val urlIntent = urlOpenIntent(clickUrl)
                 context.startActivity(urlIntent)
                 return
@@ -54,6 +84,48 @@ class NotificationProcessor {
                     DashXLog.e(tag, "No Activity found for click_action: $clickAction")
                 }
             }
+        }
+
+        private fun resolveClickAction(
+            payload: DashXPayload,
+            extras: Bundle?,
+            actionButtonId: String?
+        ): String? {
+            if (!actionButtonId.isNullOrEmpty()) {
+                val fromButton = payload.actionButtons
+                    ?.firstOrNull { it.identifier == actionButtonId }
+                    ?.clickAction
+                if (fromButton != null) return fromButton
+            }
+            return payload.clickAction ?: extras?.getString(NotificationReceiver.NOTIFICATION_CLICK_ACTION)
+        }
+
+        private fun resolveClickUrl(
+            payload: DashXPayload,
+            extras: Bundle?,
+            actionButtonId: String?
+        ): String? {
+            if (!actionButtonId.isNullOrEmpty()) {
+                return null
+            }
+            return payload.url ?: extras?.getString(NotificationReceiver.NOTIFICATION_URL)
+        }
+
+        private fun resolvePayload(extras: Bundle?): DashXPayload? {
+            val jsonStr = extras?.getString(NotificationReceiver.DASHX_PAYLOAD_JSON)
+            if (jsonStr != null) {
+                return try {
+                    json.decodeFromString<DashXPayload>(jsonStr)
+                } catch (_: Throwable) {
+                    null
+                }
+            }
+            val id = extras?.getString(NotificationReceiver.DASHX_NOTIFICATION_ID) ?: return null
+            return DashXPayload(
+                id = id,
+                url = extras.getString(NotificationReceiver.NOTIFICATION_URL),
+                clickAction = extras.getString(NotificationReceiver.NOTIFICATION_CLICK_ACTION),
+            )
         }
 
         private fun urlOpenIntent(clickUrl: String): Intent {
