@@ -33,10 +33,10 @@ data class ActionButton(
     @SerialName("label") val label: String,
     @SerialName("icon") val icon: String? = null,
     @SerialName("url") val url: String? = null,
-    @SerialName("click_action") val clickAction: String? = null,
-    @SerialName("screen_name") val screenName: String? = null,
-    @SerialName("screen_data") val screenData: Map<String, String>? = null,
-    @SerialName("rich_landing") val richLanding: Boolean? = null,
+    @SerialName("clickAction") val clickAction: String? = null,
+    @SerialName("screenName") val screenName: String? = null,
+    @SerialName("screenData") val screenData: Map<String, String>? = null,
+    @SerialName("richLanding") val richLanding: Boolean? = null,
 )
 
 @Serializable
