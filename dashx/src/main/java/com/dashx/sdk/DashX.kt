@@ -750,6 +750,51 @@ class DashX {
         }
 
         /**
+         * Records a `dx_notification_navigated` event for every notification tap, regardless of
+         * navigation type (deep link, screen, click action, rich landing, etc.).
+         */
+        internal fun trackNotificationNavigation(action: NavigationAction?, notificationId: String?) {
+            val data = hashMapOf(
+                "timestamp" to DateTimeFormatter.ISO_INSTANT.format(Instant.now())
+            )
+            if (notificationId != null) {
+                data["notification_id"] = notificationId
+            }
+            when (action) {
+                is NavigationAction.DeepLink -> {
+                    data["type"] = "deep_link"
+                    data["url"] = action.url
+                }
+                is NavigationAction.Screen -> {
+                    data["type"] = "screen"
+                    data["screen_name"] = action.name
+                    action.data?.let { data["screen_data"] = JSONObject(it).toString() }
+                }
+                is NavigationAction.RichLanding -> {
+                    data["type"] = "rich_landing"
+                    data["url"] = action.url
+                }
+                is NavigationAction.ClickAction -> {
+                    data["type"] = "click_action"
+                    data["click_action"] = action.action
+                }
+                null -> {
+                    data["type"] = "default"
+                }
+            }
+            track(EVENT_NOTIFICATION_NAVIGATED, data)
+        }
+
+        /**
+         * Opens [url] in an in-app Custom Tabs browser (rich landing). Convenience wrapper around
+         * [DashXBrowser.openRichLanding] for host apps that want to present a URL in-app outside
+         * the notification flow.
+         */
+        fun openRichLanding(context: Context, url: String) {
+            DashXBrowser.openRichLanding(context, url)
+        }
+
+        /**
          * Records a `dx_deep_link_opened` analytics event. Call when a deep link is opened (for example from a
          * push notification tap or an App Link); notification taps are tracked automatically by the SDK when
          * the default handling opens a URL.

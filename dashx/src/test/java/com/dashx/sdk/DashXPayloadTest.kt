@@ -244,6 +244,46 @@ class DashXPayloadTest {
     }
 
     @Test
+    fun resolveNavigationAction_clickActionFallback() {
+        val payload = DashXPayload(
+            id = "pca",
+            clickAction = "com.example.OPEN_DETAIL",
+        )
+        val action = payload.resolveNavigationAction()
+        assertTrue(action is NavigationAction.ClickAction)
+        assertEquals("com.example.OPEN_DETAIL", (action as NavigationAction.ClickAction).action)
+    }
+
+    @Test
+    fun resolveNavigationAction_actionButton_clickActionFallback() {
+        val payload = DashXPayload(
+            id = "pcab",
+            actionButtons = listOf(
+                ActionButton(
+                    identifier = "act",
+                    label = "Act",
+                    clickAction = "com.example.ACT",
+                ),
+            ),
+        )
+        val action = payload.resolveNavigationAction("act")
+        assertTrue(action is NavigationAction.ClickAction)
+        assertEquals("com.example.ACT", (action as NavigationAction.ClickAction).action)
+    }
+
+    @Test
+    fun resolveNavigationAction_prefersScreenOverClickAction() {
+        val payload = DashXPayload(
+            id = "psca",
+            screenName = "Home",
+            clickAction = "com.example.OPEN",
+        )
+        val action = payload.resolveNavigationAction()
+        assertTrue(action is NavigationAction.Screen)
+        assertEquals("Home", (action as NavigationAction.Screen).name)
+    }
+
+    @Test
     fun resolveNavigationAction_actionButton_unknownIdFallsBackToMain() {
         val payload = DashXPayload(
             id = "p5",

@@ -35,6 +35,9 @@ class NotificationProcessor {
 
             val actionButtonId = extras?.getString(NotificationReceiver.NOTIFICATION_ACTION_BUTTON_ID)
             val navigationAction = payload.resolveNavigationAction(actionButtonId)
+
+            DashX.trackNotificationNavigation(navigationAction, payload.id)
+
             if (DashX.dispatchNotificationClicked(payload, navigationAction)) {
                 return
             }
@@ -50,38 +53,24 @@ class NotificationProcessor {
                     DashXBrowser.openRichLanding(context, navigationAction.url)
                     return
                 }
+                is NavigationAction.ClickAction -> {
+                    launchClickAction(context, navigationAction.action)
+                    return
+                }
                 is NavigationAction.Screen -> {
                     return
                 }
-                null -> { }
-            }
-
-            val clickAction = resolveClickAction(payload, extras, actionButtonId)
-            val clickUrl = resolveClickUrl(payload, extras, actionButtonId)
-
-            if (clickUrl != null) {
-                DashX.processDeepLink(Uri.parse(clickUrl), "notification")
-                val urlIntent = urlOpenIntent(clickUrl)
-                context.startActivity(urlIntent)
-                return
-            }
-
-            if (clickAction != null) {
-                // Support both fully-qualified Activity class names and Intent action strings.
-                try {
-                    val clickActionActivity = Intent(context, Class.forName(clickAction))
-                    context.startActivity(clickActionActivity)
-                    return
-                } catch (_: Throwable) {
-                    // Fall through to action-based intent
-                }
-
-                val actionIntent = Intent(clickAction).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                val resolved = actionIntent.resolveActivity(context.packageManager)
-                if (resolved != null) {
-                    context.startActivity(actionIntent)
-                } else {
-                    DashXLog.e(tag, "No Activity found for click_action: $clickAction")
+                null -> {
+                    val clickUrl = resolveClickUrl(payload, extras, actionButtonId)
+                    if (clickUrl != null) {
+                        DashX.processDeepLink(Uri.parse(clickUrl), "notification")
+                        context.startActivity(urlOpenIntent(clickUrl))
+                        return
+                    }
+                    val clickAction = resolveClickAction(payload, extras, actionButtonId)
+                    if (clickAction != null) {
+                        launchClickAction(context, clickAction)
+                    }
                 }
             }
         }
@@ -126,6 +115,24 @@ class NotificationProcessor {
                 url = extras.getString(NotificationReceiver.NOTIFICATION_URL),
                 clickAction = extras.getString(NotificationReceiver.NOTIFICATION_CLICK_ACTION),
             )
+        }
+
+        private fun launchClickAction(context: Activity, clickAction: String) {
+            try {
+                val clickActionActivity = Intent(context, Class.forName(clickAction))
+                context.startActivity(clickActionActivity)
+                return
+            } catch (_: Throwable) {
+                // Fall through to action-based intent
+            }
+
+            val actionIntent = Intent(clickAction).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            val resolved = actionIntent.resolveActivity(context.packageManager)
+            if (resolved != null) {
+                context.startActivity(actionIntent)
+            } else {
+                DashXLog.e(tag, "No Activity found for click_action: $clickAction")
+            }
         }
 
         private fun urlOpenIntent(clickUrl: String): Intent {

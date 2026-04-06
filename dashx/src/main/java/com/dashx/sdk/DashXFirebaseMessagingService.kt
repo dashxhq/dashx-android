@@ -326,9 +326,12 @@ open class DashXFirebaseMessagingService : FirebaseMessagingService() {
 
         dashXData.actionButtons?.forEach { button ->
             val actionPendingIntent = getActionButtonPendingIntent(dashXData, button)
+            val iconResId = button.icon?.let {
+                resources.getIdentifier(it, "drawable", packageName)
+            } ?: 0
             notificationBuilder.addAction(
                 NotificationCompat.Action(
-                    0,
+                    iconResId,
                     button.label,
                     actionPendingIntent
                 )

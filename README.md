@@ -62,7 +62,7 @@ Call this when you open a deep link outside the SDK (for example from your own A
 
 ### Payload fields (`DashXPayload`)
 
-The SDK resolves a sealed **`NavigationAction`**: **`DeepLink`**, **`RichLanding`**, or **`Screen`**. Relevant FCM / data keys include:
+The SDK resolves a sealed **`NavigationAction`**: **`DeepLink`**, **`RichLanding`**, **`Screen`**, or **`ClickAction`**. Relevant FCM / data keys include:
 
 | Key | Role |
 |-----|------|
@@ -71,6 +71,10 @@ The SDK resolves a sealed **`NavigationAction`**: **`DeepLink`**, **`RichLanding
 | `rich_landing` | When true with a URL, opens in-app via Custom Tabs |
 | `action_buttons` | Per-button `identifier`, `url`, `screen_name`, `screen_data`, `click_action`, `rich_landing` |
 | `click_action` | Activity class name or intent action string (legacy / fallback) |
+
+### `DashX.openRichLanding(context, url)`
+
+Opens a URL in an in-app Custom Tabs browser. Use this when you want to present a URL inside the app outside the notification flow (e.g. from an in-app message or your own UI). Falls back to `ACTION_VIEW` when no Custom Tabs provider is installed.
 
 ### App Links
 

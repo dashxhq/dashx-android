@@ -10,6 +10,9 @@ sealed class NavigationAction {
     data class Screen(val name: String, val data: Map<String, String>?) : NavigationAction()
 
     data class RichLanding(val url: String) : NavigationAction()
+
+    /** Intent-based navigation via a fully-qualified Activity class name or action string. */
+    data class ClickAction(val action: String) : NavigationAction()
 }
 
 /**
@@ -32,6 +35,10 @@ fun DashXPayload.resolveNavigationAction(actionButtonIdentifier: String? = null)
                 }
                 return NavigationAction.DeepLink(bu)
             }
+            val bca = button.clickAction?.trim()
+            if (!bca.isNullOrEmpty()) {
+                return NavigationAction.ClickAction(bca)
+            }
             return null
         }
     }
@@ -46,6 +53,10 @@ fun DashXPayload.resolveNavigationAction(actionButtonIdentifier: String? = null)
             return NavigationAction.RichLanding(u)
         }
         return NavigationAction.DeepLink(u)
+    }
+    val ca = clickAction?.trim()
+    if (!ca.isNullOrEmpty()) {
+        return NavigationAction.ClickAction(ca)
     }
     return null
 }
