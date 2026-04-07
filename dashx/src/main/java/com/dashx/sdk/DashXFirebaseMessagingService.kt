@@ -51,8 +51,10 @@ data class DashXPayload(
     @SerialName("large_icon") val largeIcon: String? = null,
     @SerialName("channel_id") val channelId: String? = null,
     @SerialName("sound") val sound: String? = null,
-    @SerialName("visibility") val visibility: String? = null,
-    @SerialName("notification_count") val notificationCount: String? = null,
+    @Serializable(with = FlexibleIntSerializer::class)
+    @SerialName("visibility") val visibility: Int? = null,
+    @Serializable(with = FlexibleIntSerializer::class)
+    @SerialName("notification_count") val notificationCount: Int? = null,
     @SerialName("light_settings") val lightSettings: String? = null,
     @SerialName("color") val color: String? = null,
     @SerialName("tag") val tag: String? = null,
@@ -294,13 +296,9 @@ open class DashXFirebaseMessagingService : FirebaseMessagingService() {
             }
         }
 
-        dashXData.visibility?.let { visibility ->
-            visibility.toIntOrNull()?.let { notificationBuilder.setVisibility(it) }
-        }
+        dashXData.visibility?.let { notificationBuilder.setVisibility(it) }
 
-        dashXData.notificationCount?.let { count ->
-            count.toIntOrNull()?.let { notificationBuilder.setNumber(it) }
-        }
+        dashXData.notificationCount?.let { notificationBuilder.setNumber(it) }
 
         dashXData.lightSettings?.let { lightSettings ->
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
