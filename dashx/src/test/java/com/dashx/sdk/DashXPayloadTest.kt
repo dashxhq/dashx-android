@@ -23,8 +23,8 @@ class DashXPayloadTest {
                 "large_icon": "https://example.com/icon.png",
                 "channel_id": "my_channel",
                 "sound": "notification_sound",
-                "visibility": "1",
-                "notification_count": "5",
+                "visibility": 1,
+                "notification_count": 5,
                 "light_settings": "{\"color\":\"#FF0000\",\"light_on_duration\":300,\"light_off_duration\":1000}",
                 "color": "#00FF00",
                 "tag": "promo",
@@ -48,8 +48,8 @@ class DashXPayloadTest {
         assertEquals("https://example.com/icon.png", payload.largeIcon)
         assertEquals("my_channel", payload.channelId)
         assertEquals("notification_sound", payload.sound)
-        assertEquals("1", payload.visibility)
-        assertEquals("5", payload.notificationCount)
+        assertEquals(1, payload.visibility)
+        assertEquals(5, payload.notificationCount)
         assertNotNull(payload.lightSettings)
         assertEquals("#00FF00", payload.color)
         assertEquals("promo", payload.tag)
