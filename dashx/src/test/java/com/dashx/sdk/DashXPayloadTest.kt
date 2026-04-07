@@ -296,4 +296,70 @@ class DashXPayloadTest {
         assertTrue(action is NavigationAction.DeepLink)
         assertEquals("https://main.example", (action as NavigationAction.DeepLink).url)
     }
+
+    @Test
+    fun deserialize_screenData_asStringifiedJson() {
+        val jsonStr = """
+            {
+                "id": "msg_stringified",
+                "title": "Test",
+                "body": "Body",
+                "screen_name": "consultation",
+                "screen_data": "{\"id\": \"abc-123\", \"type\": \"online\"}"
+            }
+        """.trimIndent()
+
+        val payload = json.decodeFromString<DashXPayload>(jsonStr)
+
+        assertEquals("msg_stringified", payload.id)
+        assertEquals("consultation", payload.screenName)
+        assertEquals(mapOf("id" to "abc-123", "type" to "online"), payload.screenData)
+    }
+
+    @Test
+    fun deserialize_screenData_asJsonObject() {
+        val jsonStr = """
+            {
+                "id": "msg_object",
+                "screen_name": "chatroom",
+                "screen_data": {"id": "xyz-789"}
+            }
+        """.trimIndent()
+
+        val payload = json.decodeFromString<DashXPayload>(jsonStr)
+
+        assertEquals("chatroom", payload.screenName)
+        assertEquals(mapOf("id" to "xyz-789"), payload.screenData)
+    }
+
+    @Test
+    fun deserialize_screenData_null() {
+        val jsonStr = """{"id": "msg_null"}"""
+        val payload = json.decodeFromString<DashXPayload>(jsonStr)
+        assertNull(payload.screenData)
+    }
+
+    @Test
+    fun deserialize_actionButton_screenData_asStringifiedJson() {
+        val jsonStr = """
+            {
+                "id": "msg_btn_str",
+                "action_buttons": [
+                    {
+                        "identifier": "view",
+                        "label": "View",
+                        "screenName": "details",
+                        "screenData": "{\"orderId\": \"ord-456\"}"
+                    }
+                ]
+            }
+        """.trimIndent()
+
+        val payload = json.decodeFromString<DashXPayload>(jsonStr)
+
+        val button = payload.actionButtons?.first()
+        assertNotNull(button)
+        assertEquals("details", button?.screenName)
+        assertEquals(mapOf("orderId" to "ord-456"), button?.screenData)
+    }
 }
