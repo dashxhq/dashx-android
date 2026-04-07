@@ -236,7 +236,7 @@ class SystemContext {
         if (location != null) {
             locationData[LATITUDE] = location.latitude
             locationData[LONGITUDE] = location.longitude
-            locationData[SPEED] = location.speed
+            locationData[SPEED] = location.speed.toDouble()
         }
 
         put(LOCATION, locationData)
