@@ -122,6 +122,20 @@ class DashXPayloadTest {
     }
 
     @Test
+    fun roundTrip_serialization_withScreenData() {
+        val original = DashXPayload(
+            id = "msg_rt",
+            screenName = "Detail",
+            screenData = mapOf("id" to "123", "type" to "order"),
+        )
+
+        val serialized = json.encodeToString(original)
+        val deserialized = json.decodeFromString<DashXPayload>(serialized)
+
+        assertEquals(original, deserialized)
+    }
+
+    @Test
     fun lightSettings_deserialization() {
         val jsonStr = """
             {
@@ -361,5 +375,33 @@ class DashXPayloadTest {
         assertNotNull(button)
         assertEquals("details", button?.screenName)
         assertEquals(mapOf("orderId" to "ord-456"), button?.screenData)
+    }
+
+    @Test
+    fun deserialize_screenData_malformedString() {
+        val jsonStr = """{"id": "msg_bad", "screen_data": "not-json"}"""
+        val payload = json.decodeFromString<DashXPayload>(jsonStr)
+        assertNull(payload.screenData)
+    }
+
+    @Test
+    fun deserialize_screenData_nonStringPrimitives() {
+        val jsonStr = """
+            {"id": "msg_prim", "screen_data": {"count": 42, "active": true, "name": "test"}}
+        """.trimIndent()
+
+        val payload = json.decodeFromString<DashXPayload>(jsonStr)
+        assertEquals(mapOf("count" to "42", "active" to "true", "name" to "test"), payload.screenData)
+    }
+
+    @Test
+    fun deserialize_screenData_nestedObjects() {
+        val jsonStr = """
+            {"id": "msg_nested", "screen_data": {"id": "1", "filters": {"status": "active"}}}
+        """.trimIndent()
+
+        val payload = json.decodeFromString<DashXPayload>(jsonStr)
+        assertEquals("1", payload.screenData?.get("id"))
+        assertEquals("{\"status\":\"active\"}", payload.screenData?.get("filters"))
     }
 }

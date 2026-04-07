@@ -18,65 +18,13 @@ import androidx.core.content.ContextCompat
 import com.dashx.android.graphql.generated.type.TrackMessageStatus
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
-import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.builtins.MapSerializer
-import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.decodeFromString
-import kotlinx.serialization.descriptors.SerialDescriptor
 import kotlinx.serialization.encodeToString
-import kotlinx.serialization.encoding.Decoder
-import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonDecoder
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import java.net.HttpURLConnection
 import java.net.URL
-
-/**
- * Custom serializer that handles `screen_data` as either a JSON object or a stringified JSON string.
- * When the server sends `screen_data` via FCM, nested objects may arrive as stringified JSON.
- */
-object FlexibleStringMapSerializer : KSerializer<Map<String, String>?> {
-    private val mapSerializer = MapSerializer(String.serializer(), String.serializer())
-    override val descriptor: SerialDescriptor = mapSerializer.descriptor
-
-    override fun serialize(encoder: Encoder, value: Map<String, String>?) {
-        if (value != null) {
-            encoder.encodeSerializableValue(mapSerializer, value)
-        } else {
-            encoder.encodeNull()
-        }
-    }
-
-    override fun deserialize(decoder: Decoder): Map<String, String>? {
-        val jsonDecoder = decoder as? JsonDecoder ?: return null
-        val element = jsonDecoder.decodeJsonElement()
-
-        return when (element) {
-            is JsonObject -> {
-                element.mapValues { it.value.jsonPrimitive.content }
-            }
-            is JsonPrimitive -> {
-                if (element.isString) {
-                    try {
-                        val parsed = Json.parseToJsonElement(element.content).jsonObject
-                        parsed.mapValues { it.value.jsonPrimitive.content }
-                    } catch (_: Exception) {
-                        null
-                    }
-                } else {
-                    null
-                }
-            }
-            else -> null
-        }
-    }
-}
 
 @Serializable
 data class ActionButton(
