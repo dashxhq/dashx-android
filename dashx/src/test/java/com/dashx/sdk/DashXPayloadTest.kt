@@ -378,6 +378,41 @@ class DashXPayloadTest {
     }
 
     @Test
+    fun deserialize_richLanding_asStringTrue() {
+        val jsonStr = """{"id": "msg_rl", "url": "https://example.com", "rich_landing": "true"}"""
+        val payload = json.decodeFromString<DashXPayload>(jsonStr)
+        assertEquals(true, payload.richLanding)
+    }
+
+    @Test
+    fun deserialize_richLanding_asStringFalse() {
+        val jsonStr = """{"id": "msg_rl2", "rich_landing": "false"}"""
+        val payload = json.decodeFromString<DashXPayload>(jsonStr)
+        assertEquals(false, payload.richLanding)
+    }
+
+    @Test
+    fun deserialize_richLanding_asNativeBool() {
+        val jsonStr = """{"id": "msg_rl3", "rich_landing": true}"""
+        val payload = json.decodeFromString<DashXPayload>(jsonStr)
+        assertEquals(true, payload.richLanding)
+    }
+
+    @Test
+    fun deserialize_actionButton_richLanding_asString() {
+        val jsonStr = """
+            {
+                "id": "msg_btn_rl",
+                "action_buttons": [
+                    {"identifier": "open", "label": "Open", "url": "https://example.com", "richLanding": "true"}
+                ]
+            }
+        """.trimIndent()
+        val payload = json.decodeFromString<DashXPayload>(jsonStr)
+        assertEquals(true, payload.actionButtons?.first()?.richLanding)
+    }
+
+    @Test
     fun deserialize_screenData_malformedString() {
         val jsonStr = """{"id": "msg_bad", "screen_data": "not-json"}"""
         val payload = json.decodeFromString<DashXPayload>(jsonStr)

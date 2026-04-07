@@ -36,6 +36,7 @@ data class ActionButton(
     @SerialName("screenName") val screenName: String? = null,
     @Serializable(with = FlexibleStringMapSerializer::class)
     @SerialName("screenData") val screenData: Map<String, String>? = null,
+    @Serializable(with = FlexibleBoolSerializer::class)
     @SerialName("richLanding") val richLanding: Boolean? = null,
 )
 
@@ -60,6 +61,7 @@ data class DashXPayload(
     @Serializable(with = FlexibleStringMapSerializer::class)
     @SerialName("screen_data") val screenData: Map<String, String>? = null,
     @SerialName("action_buttons") val actionButtons: List<ActionButton>? = null,
+    @Serializable(with = FlexibleBoolSerializer::class)
     @SerialName("rich_landing") val richLanding: Boolean? = null,
 )
 
