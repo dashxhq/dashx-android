@@ -55,7 +55,7 @@ data class DashXPayload(
     @SerialName("visibility") val visibility: Int? = null,
     @Serializable(with = FlexibleIntSerializer::class)
     @SerialName("notification_count") val notificationCount: Int? = null,
-    @SerialName("light_settings") val lightSettings: String? = null,
+    @SerialName("light_settings") val lightSettings: LightSettings? = null,
     @SerialName("color") val color: String? = null,
     @SerialName("tag") val tag: String? = null,
     @SerialName("click_action") val clickAction: String? = null,
@@ -171,9 +171,7 @@ open class DashXFirebaseMessagingService : FirebaseMessagingService() {
             }
         }
 
-        dashXData.lightSettings?.let { lightSettings ->
-            val ls = json.decodeFromString<LightSettings>(lightSettings)
-
+        dashXData.lightSettings?.let { ls ->
             channel.enableLights(true)
             channel.lightColor = Color.parseColor(ls.color)
         }
@@ -300,10 +298,9 @@ open class DashXFirebaseMessagingService : FirebaseMessagingService() {
 
         dashXData.notificationCount?.let { notificationBuilder.setNumber(it) }
 
-        dashXData.lightSettings?.let { lightSettings ->
+        dashXData.lightSettings?.let { ls ->
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
                 try {
-                    val ls = json.decodeFromString<LightSettings>(lightSettings)
                     val color = Color.parseColor(ls.color)
                     notificationBuilder.setLights(color, ls.on, ls.off)
                 } catch (t: Throwable) {

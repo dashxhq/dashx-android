@@ -25,7 +25,7 @@ class DashXPayloadTest {
                 "sound": "notification_sound",
                 "visibility": 1,
                 "notification_count": 5,
-                "light_settings": "{\"color\":\"#FF0000\",\"light_on_duration\":300,\"light_off_duration\":1000}",
+                "light_settings": {"color": "#FF0000", "light_on_duration": 300, "light_off_duration": 1000},
                 "color": "#00FF00",
                 "tag": "promo",
                 "click_action": "com.example.OPEN_DETAIL",
@@ -51,6 +51,9 @@ class DashXPayloadTest {
         assertEquals(1, payload.visibility)
         assertEquals(5, payload.notificationCount)
         assertNotNull(payload.lightSettings)
+        assertEquals("#FF0000", payload.lightSettings?.color)
+        assertEquals(300, payload.lightSettings?.on)
+        assertEquals(1000, payload.lightSettings?.off)
         assertEquals("#00FF00", payload.color)
         assertEquals("promo", payload.tag)
         assertEquals("com.example.OPEN_DETAIL", payload.clickAction)
