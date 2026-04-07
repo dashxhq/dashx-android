@@ -26,7 +26,6 @@ import kotlinx.serialization.json.Json
 import java.net.HttpURLConnection
 import java.net.URL
 
-
 @Serializable
 data class ActionButton(
     @SerialName("identifier") val identifier: String,
@@ -35,6 +34,7 @@ data class ActionButton(
     @SerialName("url") val url: String? = null,
     @SerialName("clickAction") val clickAction: String? = null,
     @SerialName("screenName") val screenName: String? = null,
+    @Serializable(with = FlexibleStringMapSerializer::class)
     @SerialName("screenData") val screenData: Map<String, String>? = null,
     @SerialName("richLanding") val richLanding: Boolean? = null,
 )
@@ -57,6 +57,7 @@ data class DashXPayload(
     @SerialName("tag") val tag: String? = null,
     @SerialName("click_action") val clickAction: String? = null,
     @SerialName("screen_name") val screenName: String? = null,
+    @Serializable(with = FlexibleStringMapSerializer::class)
     @SerialName("screen_data") val screenData: Map<String, String>? = null,
     @SerialName("action_buttons") val actionButtons: List<ActionButton>? = null,
     @SerialName("rich_landing") val richLanding: Boolean? = null,

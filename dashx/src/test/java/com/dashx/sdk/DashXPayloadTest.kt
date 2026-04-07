@@ -122,6 +122,20 @@ class DashXPayloadTest {
     }
 
     @Test
+    fun roundTrip_serialization_withScreenData() {
+        val original = DashXPayload(
+            id = "msg_rt",
+            screenName = "Detail",
+            screenData = mapOf("id" to "123", "type" to "order"),
+        )
+
+        val serialized = json.encodeToString(original)
+        val deserialized = json.decodeFromString<DashXPayload>(serialized)
+
+        assertEquals(original, deserialized)
+    }
+
+    @Test
     fun lightSettings_deserialization() {
         val jsonStr = """
             {
@@ -295,5 +309,99 @@ class DashXPayloadTest {
         val action = payload.resolveNavigationAction("missing")
         assertTrue(action is NavigationAction.DeepLink)
         assertEquals("https://main.example", (action as NavigationAction.DeepLink).url)
+    }
+
+    @Test
+    fun deserialize_screenData_asStringifiedJson() {
+        val jsonStr = """
+            {
+                "id": "msg_stringified",
+                "title": "Test",
+                "body": "Body",
+                "screen_name": "consultation",
+                "screen_data": "{\"id\": \"abc-123\", \"type\": \"online\"}"
+            }
+        """.trimIndent()
+
+        val payload = json.decodeFromString<DashXPayload>(jsonStr)
+
+        assertEquals("msg_stringified", payload.id)
+        assertEquals("consultation", payload.screenName)
+        assertEquals(mapOf("id" to "abc-123", "type" to "online"), payload.screenData)
+    }
+
+    @Test
+    fun deserialize_screenData_asJsonObject() {
+        val jsonStr = """
+            {
+                "id": "msg_object",
+                "screen_name": "chatroom",
+                "screen_data": {"id": "xyz-789"}
+            }
+        """.trimIndent()
+
+        val payload = json.decodeFromString<DashXPayload>(jsonStr)
+
+        assertEquals("chatroom", payload.screenName)
+        assertEquals(mapOf("id" to "xyz-789"), payload.screenData)
+    }
+
+    @Test
+    fun deserialize_screenData_null() {
+        val jsonStr = """{"id": "msg_null"}"""
+        val payload = json.decodeFromString<DashXPayload>(jsonStr)
+        assertNull(payload.screenData)
+    }
+
+    @Test
+    fun deserialize_actionButton_screenData_asStringifiedJson() {
+        val jsonStr = """
+            {
+                "id": "msg_btn_str",
+                "action_buttons": [
+                    {
+                        "identifier": "view",
+                        "label": "View",
+                        "screenName": "details",
+                        "screenData": "{\"orderId\": \"ord-456\"}"
+                    }
+                ]
+            }
+        """.trimIndent()
+
+        val payload = json.decodeFromString<DashXPayload>(jsonStr)
+
+        val button = payload.actionButtons?.first()
+        assertNotNull(button)
+        assertEquals("details", button?.screenName)
+        assertEquals(mapOf("orderId" to "ord-456"), button?.screenData)
+    }
+
+    @Test
+    fun deserialize_screenData_malformedString() {
+        val jsonStr = """{"id": "msg_bad", "screen_data": "not-json"}"""
+        val payload = json.decodeFromString<DashXPayload>(jsonStr)
+        assertNull(payload.screenData)
+    }
+
+    @Test
+    fun deserialize_screenData_nonStringPrimitives() {
+        val jsonStr = """
+            {"id": "msg_prim", "screen_data": {"count": 42, "active": true, "name": "test"}}
+        """.trimIndent()
+
+        val payload = json.decodeFromString<DashXPayload>(jsonStr)
+        assertEquals(mapOf("count" to "42", "active" to "true", "name" to "test"), payload.screenData)
+    }
+
+    @Test
+    fun deserialize_screenData_nestedObjects() {
+        val jsonStr = """
+            {"id": "msg_nested", "screen_data": {"id": "1", "filters": {"status": "active"}}}
+        """.trimIndent()
+
+        val payload = json.decodeFromString<DashXPayload>(jsonStr)
+        assertEquals("1", payload.screenData?.get("id"))
+        assertEquals("{\"status\":\"active\"}", payload.screenData?.get("filters"))
     }
 }
