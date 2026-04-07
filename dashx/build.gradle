@@ -22,7 +22,7 @@ android {
     defaultConfig {
         minSdk 26
         targetSdk 34
-        versionCode 100200000 // 1.2.0 -> 100200000, 1.5.4 -> 100500400 and so on...
+        versionCode 100200100 // 1.2.1 -> 100200100, 1.5.4 -> 100500400 and so on...
         versionName sdkVersion
 
         buildConfigField 'String', 'VERSION_NAME', "\"$sdkVersion\""
