@@ -528,6 +528,36 @@ class DashX {
             }
         }
 
+        fun fetchAsset(
+            assetId: String,
+            onSuccess: (result: com.dashx.android.data.Asset) -> Unit,
+            onError: (error: DashXError) -> Unit
+        ) {
+            val query = AssetQuery(id = assetId)
+
+            executeQuery(query, onError) { response ->
+                val responseAsset = response.data?.asset
+                val responseJsonObject = JSONObject().apply {
+                    put("id", responseAsset?.id?.toString())
+                    put("resourceId", responseAsset?.resourceId?.toString())
+                    put("attributeId", responseAsset?.attributeId?.toString())
+                    put("uploadStatus", responseAsset?.uploadStatus?.rawValue)
+                    put(DATA, responseAsset?.`data`?.let { JSONObject(it.toString()) })
+                }
+
+                val decodedAsset = json.decodeFromString<com.dashx.android.data.Asset>(
+                    responseJsonObject.toString()
+                )
+
+                val assetData = decodedAsset.data.asset
+                if (assetData != null && assetData.url.isEmpty() && assetData.playbackIds.isNotEmpty()) {
+                    assetData.url = generateMuxVideoUrl(assetData.playbackIds[0].id)
+                }
+
+                onSuccess(decodedAsset)
+            }
+        }
+
         private suspend fun writeFileToUrl(
             file: File,
             url: String,
