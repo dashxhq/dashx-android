@@ -45,8 +45,10 @@ import kotlinx.coroutines.*
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.put
 import org.json.JSONObject
 import java.io.File
 import java.io.FileInputStream
@@ -898,6 +900,21 @@ class DashX {
                     ctx.contentResolver, Settings.Global.DEVICE_NAME
                 ) ?: Settings.Secure.getString(ctx.contentResolver, "bluetooth_name")
 
+                val packageInfo = runCatching { getPackageInfo(ctx) }.getOrNull()
+                val appName = packageInfo?.applicationInfo?.loadLabel(ctx.packageManager)?.toString()
+                val appVersion = packageInfo?.versionName
+                val metadata = buildJsonObject {
+                    put("app", buildJsonObject {
+                        put("identifier", ctx.packageName)
+                        appName?.let { put("name", it) }
+                        appVersion?.let { put("version", it) }
+                    })
+                    put("library", buildJsonObject {
+                        put("name", BuildConfig.LIBRARY_NAME)
+                        put("version", BuildConfig.VERSION_NAME)
+                    })
+                }
+
                 val mutation = SubscribeContactMutation(
                     input = SubscribeContactInput(
                         accountUid = accountUid?.let { Optional.Present(it) } ?: Optional.Absent,
@@ -906,9 +923,10 @@ class DashX {
                         kind = ContactKind.ANDROID,
                         value = token,
                         osName = Optional.Present("Android"),
-                        osVersion = Build.VERSION.RELEASE.let { Optional.Present(it) },
+                        osVersion = Optional.Present(Build.VERSION.RELEASE),
                         deviceManufacturer = Optional.Present(Build.MANUFACTURER),
-                        deviceModel = Optional.Present(Build.MODEL)
+                        deviceModel = Optional.Present(Build.MODEL),
+                        metadata = Optional.Present(metadata)
                     )
                 )
 
