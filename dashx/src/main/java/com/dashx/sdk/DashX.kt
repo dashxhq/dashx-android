@@ -105,10 +105,14 @@ class DashX {
             }
         }
 
-        internal fun dispatchNotificationClicked(payload: DashXPayload, action: NavigationAction?): Boolean {
+        internal fun dispatchNotificationClicked(
+            payload: DashXPayload,
+            action: NavigationAction?,
+            actionIdentifier: String? = null
+        ): Boolean {
             var suppressDefault = false
             for (listener in notificationListeners) {
-                if (listener.onNotificationClicked(payload, action)) {
+                if (listener.onNotificationClicked(payload, action, actionIdentifier)) {
                     suppressDefault = true
                 }
             }
