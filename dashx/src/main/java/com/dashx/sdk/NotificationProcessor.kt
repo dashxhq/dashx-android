@@ -38,7 +38,10 @@ class NotificationProcessor {
 
             DashX.trackNotificationNavigation(navigationAction, payload.id)
 
-            if (DashX.dispatchNotificationClicked(payload, navigationAction)) {
+            // `actionButtonId` is null when the notification body was tapped
+            // (no action button pressed) — listeners get that as-is so they
+            // can distinguish body taps from button taps.
+            if (DashX.dispatchNotificationClicked(payload, navigationAction, actionButtonId)) {
                 return
             }
 
