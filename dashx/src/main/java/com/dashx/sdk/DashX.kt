@@ -946,22 +946,62 @@ class DashX {
                 }
         }
 
-        fun unsubscribe() {
+        /**
+         * Unsubscribe the current device's FCM token from DashX push.
+         *
+         * The optional [onSuccess] callback receives a [Boolean] indicating
+         * whether the backend found and updated a matching subscribed
+         * contact:
+         *  - `true` — contact was found and unsubscribed.
+         *  - `false` — non-error outcome meaning "no matching contact
+         *    found"; typically the anonymous UID rotated since subscribe,
+         *    the FCM token is stale, or the contact was already
+         *    unsubscribed. From the end-user's perspective the device ends
+         *    up unsubscribed in both cases; the boolean is useful for
+         *    diagnostics and analytics.
+         *
+         * The optional [onError] callback fires for SDK-state problems
+         * (Firebase dependency missing, `configure()` not yet called) and
+         * transport failures (Firebase token-delete failure, GraphQL or
+         * network errors). These are distinct from `success: false` so
+         * callers can branch on the kind of outcome — and so [onSuccess]'s
+         * boolean stays a clean signal for legitimate non-error outcomes
+         * only. Both callbacks are nullable; pass either, both, or neither.
+         */
+        fun unsubscribe(
+            onSuccess: ((Boolean) -> Unit)? = null,
+            onError: ((DashXError) -> Unit)? = null,
+        ) {
             if (!isFirebaseAvailable()) {
                 DashXLog.e(tag, "Firebase is not available. Add firebase-messaging to your dependencies.")
+                onError?.let {
+                    coroutineScope.launch(callbackDispatcher) {
+                        it(DashXError.NotConfigured("Firebase is not available. Add firebase-messaging to your dependencies."))
+                    }
+                }
                 return
             }
 
             val ctx = context ?: run {
                 DashXLog.e(tag, "unsubscribe: context is null, configure() must be called first")
+                onError?.let {
+                    coroutineScope.launch(callbackDispatcher) { it(DashXError.NotConfigured()) }
+                }
                 return
             }
+
             val savedToken = getDashXSharedPreferences(ctx).getString(
                 SHARED_PREFERENCES_KEY_DEVICE_TOKEN, null
             )
 
             if (savedToken == null) {
-                DashXLog.e(tag, "unsubscribe() called without subscribing first")
+                // Legitimate "nothing to unsubscribe" — same semantics as the
+                // backend's "no matching contact" path. Surface as
+                // success(false), not an error.
+                DashXLog.d(tag, "unsubscribe() called without subscribing first")
+                onSuccess?.let {
+                    coroutineScope.launch(callbackDispatcher) { it(false) }
+                }
                 return
             }
 
@@ -971,10 +1011,16 @@ class DashX {
             FirebaseMessaging.getInstance().deleteToken()
                 .addOnCompleteListener(OnCompleteListener { task ->
                     if (!task.isSuccessful) {
+                        val message = task.exception?.message ?: "unknown error"
                         DashXLog.e(
                             tag,
-                            "FirebaseMessaging.getInstance().deleteToken() failed: $task.exception"
+                            "FirebaseMessaging.getInstance().deleteToken() failed: $message"
                         )
+                        onError?.let {
+                            coroutineScope.launch(callbackDispatcher) {
+                                it(DashXError.NetworkError("Firebase deleteToken failed: $message"))
+                            }
+                        }
                         return@OnCompleteListener
                     }
 
@@ -992,11 +1038,15 @@ class DashX {
                         )
                     )
 
-                    executeMutation(mutation, onError = { error ->
-                        DashXLog.e(tag, "Failed to unsubscribe: ${error.message}")
-                    }) { result ->
-                        DashXLog.d(tag, "Unsubscribed $savedToken successfully.")
-                        DashXLog.d(tag, result.data?.unsubscribeContact?.toString())
+                    // `executeMutation` dispatches `onError` on the callback
+                    // dispatcher and routes Apollo / GraphQL errors through
+                    // `DashXError`, so we can pass the consumer's `onError`
+                    // straight through. Its success block is also already
+                    // on the callback dispatcher — no extra `launch` needed.
+                    executeMutation(mutation, onError) { result ->
+                        val success = result.data?.unsubscribeContact?.success ?: false
+                        DashXLog.d(tag, "Unsubscribed $savedToken (success=$success).")
+                        onSuccess?.invoke(success)
                     }
                 })
         }
