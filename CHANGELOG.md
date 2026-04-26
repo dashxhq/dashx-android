@@ -2,6 +2,17 @@
 
 All notable changes to `dashx-android` are documented in this file. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
+## [1.2.8] — 2026-04-23
+
+### Added
+
+- **`DashX.unsubscribe(onSuccess: ((Boolean) -> Unit)? = null, onError: ((DashXError) -> Unit)? = null)`** — optional terminal callbacks for the unsubscribe flow, matching the convention used by `identify`, `track`, and other public methods. Backend mutation `unsubscribeContact` changed its return type from `Contact!` to `UnsubscribeContactResponse!` (with `success: Boolean`); the SDK now forwards that value to callers. Purely additive — existing call sites calling `DashX.unsubscribe()` compile unchanged because both callbacks default to `null`.
+  - **`onSuccess(true)`** — backend found and unsubscribed a matching contact.
+  - **`onSuccess(false)`** — non-error outcome meaning "no matching contact found" (typically the anonymous UID rotated since subscribe, the FCM token is stale, the contact is already unsubscribed, or `unsubscribe()` was called on a device that never subscribed in this session). The device ends up unsubscribed in both cases; the boolean is useful for diagnostics and analytics.
+  - **`onError(DashXError.NotConfigured)`** — Firebase Messaging dependency missing, or `configure()` not yet called. Distinct from `success: false` so callers can branch on SDK-misuse vs legitimate no-match.
+  - **`onError(DashXError.NetworkError)`** — Firebase `deleteToken()` failure (cannot proceed to the GraphQL mutation when the FCM token can't be deleted locally first).
+  - **`onError(DashXError.GraphQLError)`** — backend rejected the mutation (auth error, validation, etc.).
+
 ## [1.2.7] — 2026-04-21
 
 ### Added
