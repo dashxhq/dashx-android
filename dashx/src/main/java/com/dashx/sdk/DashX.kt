@@ -11,6 +11,7 @@ import com.apollographql.apollo.api.ApolloResponse
 import com.apollographql.apollo.api.Optional
 import com.apollographql.apollo.api.Query
 import com.apollographql.apollo.api.Mutation
+import com.apollographql.apollo.network.http.DefaultHttpEngine
 import com.dashx.android.graphql.generated.AssetQuery
 import com.dashx.android.graphql.generated.FetchRecordQuery
 import com.dashx.android.graphql.generated.FetchStoredPreferencesQuery
@@ -59,6 +60,7 @@ import java.time.Instant
 import java.time.format.DateTimeFormatter
 import java.util.UUID
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
 class DashX {
@@ -82,6 +84,51 @@ class DashX {
         @Volatile private var callbackDispatcher: CoroutineDispatcher = Dispatchers.Main.immediate
 
         private val pollCounter = AtomicInteger(1)
+
+        // In-flight guard for [refreshSubscriptionDeviceInfo]. The persisted
+        // [SHARED_PREFERENCES_KEY_SUBSCRIBED_AD_INFO_VERSION] only collapses
+        // backfills AFTER one completes and writes the version; without this
+        // flag, two ad-info fetches that resolve within the round-trip of the
+        // first mutation could both fire. Cleared in both the success and
+        // error branches of [runSubscribeMutation] so a transient network
+        // failure doesn't permanently block a future backfill.
+        private val isSubscriptionDeviceInfoRefreshInFlight = AtomicBoolean(false)
+
+        // In-flight guard against the unsubscribe ↔ ad-info-backfill race.
+        // [reset] calls [unsubscribe] and immediately rotates accountUid /
+        // accountAnonymousUid; without this guard, a [getAdvertisingInfo]
+        // completion that lands inside that window would call
+        // [refreshSubscriptionDeviceInfo], read the still-present saved
+        // token, and run a subscribe mutation under the NEW post-reset
+        // identity — creating a stray contact for the old FCM token under
+        // the new anonymous account. Belt-and-suspenders together with
+        // the eager clearing of [SHARED_PREFERENCES_KEY_DEVICE_TOKEN] at
+        // unsubscribe entry below.
+        private val isUnsubscribeInFlight = AtomicBoolean(false)
+
+        // Generation counter for push-subscription state. Bumped by
+        // [unsubscribe] at entry. Each subscribe mutation captures the
+        // generation at start; on response, if the current generation no
+        // longer matches, the response is "stale" (an unsubscribe ran
+        // through during this mutation's lifecycle) and must NOT write
+        // subscribe cache markers — even if the unsubscribe has already
+        // finished and cleared [isUnsubscribeInFlight]. Covers the
+        // timeout-reopens-race case where a long-running subscribe response
+        // arrives after unsubscribe has fully returned.
+        private val subscribeGeneration = AtomicInteger(0)
+
+        // Counter of currently in-flight subscribe mutations (normal AND
+        // backfill). When the count transitions 0→1, [inFlightSubscribesIdle]
+        // gets a fresh CompletableDeferred; when it transitions 1→0 (last
+        // subscribe completes), the deferred is completed. [unsubscribe]
+        // awaits this deferred BEFORE sending its backend mutation, so the
+        // backend always processes subscribe → unsubscribe in that order
+        // and can't accidentally end up Subscribed via reorder. Reading and
+        // writing the deferred reference is guarded by [subscribeStateLock]
+        // to keep the count + deferred consistent across threads.
+        private val inFlightSubscribeCount = AtomicInteger(0)
+        @Volatile private var inFlightSubscribesIdle: CompletableDeferred<Unit>? = null
+        private val subscribeStateLock = Any()
         private var coroutineJob = SupervisorJob()
         private var coroutineScope = CoroutineScope(Dispatchers.IO + coroutineJob)
         private val tag = DashX::class.java.simpleName
@@ -165,9 +212,19 @@ class DashX {
             this.context = context
             callbackDispatcher?.let { this.callbackDispatcher = it }
 
-            SystemContext.configure(context)
+            // Load stored identity and stand up the Apollo client BEFORE
+            // SystemContext.configure(...). That call kicks off the async
+            // getAdvertisingInfo() coroutine in [SystemContextUtils], whose
+            // completion invokes [refreshSubscriptionDeviceInfo] — which
+            // can fire a subscribe mutation. If the fetch resolves quickly
+            // (cached Play Services result), that mutation could otherwise
+            // run before accountUid / accountAnonymousUid / identityToken
+            // are loaded and before createGraphqlClient() has plumbed the
+            // configured publicKey + baseURI + targetEnvironment into Apollo,
+            // sending a malformed or unauthenticated request.
             loadFromStorage()
             createGraphqlClient()
+            SystemContext.configure(context)
             configureEventQueue(context)
         }
 
@@ -240,6 +297,23 @@ class DashX {
         private fun createApolloClient(): ApolloClient {
             return ApolloClient.Builder()
                 .serverUrl(baseURI ?: "https://api.dashx.com/graphql")
+                // Explicit transport timeouts. Apollo's defaults are not
+                // contractually documented and can change between versions;
+                // for mobile SDK code we want a deterministic upper bound so
+                // [awaitInFlightSubscribesIdle] (and any other caller waiting
+                // on a mutation/query) is guaranteed to make progress within
+                // a known wall-clock budget even on flaky / hung networks.
+                //
+                // Values: 15s connect (slow Wi-Fi, captive portals), 30s
+                // read (POST body + GraphQL response). The two timers are
+                // sequential — connect must succeed before the read clock
+                // starts — so the absolute worst-case wall clock for a
+                // single mutation/query is up to ~45s (connect stalls the
+                // full 15s, then read stalls the full 30s) before
+                // [executeMutation]'s catch path converts the failure into
+                // an onError invocation. Typical successful mutations
+                // complete in well under one second.
+                .httpEngine(DefaultHttpEngine(15_000L, 30_000L))
                 .addCustomScalarAdapter(JSON.type, JsonObjectScalarAdapter)
                 .apply {
                     publicKey?.let { addHttpHeader("X-Public-Key", it) }
@@ -275,13 +349,50 @@ class DashX {
         private fun <D : Mutation.Data> executeMutation(
             mutation: Mutation<D>,
             onError: ((DashXError) -> Unit)? = null,
+            onFinally: (() -> Unit)? = null,
             onSuccess: (ApolloResponse<D>) -> Unit
         ) {
-            coroutineScope.launch {
-                val response = apolloClient.mutation(mutation).execute()
+            val job = coroutineScope.launch {
+                val response: ApolloResponse<D>
+                try {
+                    response = apolloClient.mutation(mutation).execute()
+                } catch (t: Throwable) {
+                    // Convert non-cancellation Apollo failures into an
+                    // onError invocation so callers see them. Under
+                    // cancellation (shutdown), withContext below propagates
+                    // CancellationException out of the catch — neither
+                    // onError nor onSuccess fires, preserving the documented
+                    // [shutdown] contract: "no callbacks fire for cancelled
+                    // in-flight operations." Subscribe-state cleanup runs
+                    // via [onFinally] / [Job.invokeOnCompletion] regardless.
+                    val errorMsg = "Mutation execute failed: ${t.message ?: t::class.java.simpleName}"
+                    DashXLog.e(tag, errorMsg)
+                    withContext(callbackDispatcher) {
+                        onError?.invoke(DashXError.NetworkError(errorMsg))
+                    }
+                    return@launch
+                }
                 withContext(callbackDispatcher) {
                     if (!hasApolloErrors(response.errors, response.exception, onError)) {
                         onSuccess(response)
+                    }
+                }
+            }
+            // [Job.invokeOnCompletion] fires exactly once when the launched
+            // coroutine terminates — normal completion, exception, OR
+            // cancellation. This gives subscribe-state callers (which pass
+            // [onFinally]) a deterministic cleanup hook that runs even when
+            // [shutdown] cancels the parent job during the callback dispatch.
+            // Public callers that don't pass [onFinally] keep their old
+            // "no callbacks after shutdown" behavior. The handler MUST NOT
+            // throw — Job.invokeOnCompletion's contract — so wrap in
+            // try/catch defensively.
+            onFinally?.let { hook ->
+                job.invokeOnCompletion {
+                    try {
+                        hook()
+                    } catch (e: Throwable) {
+                        DashXLog.e(tag, "onFinally hook threw: ${e.message}")
                     }
                 }
             }
@@ -290,13 +401,35 @@ class DashX {
         private fun <D : Query.Data> executeQuery(
             query: Query<D>,
             onError: ((DashXError) -> Unit)? = null,
+            onFinally: (() -> Unit)? = null,
             onSuccess: (ApolloResponse<D>) -> Unit
         ) {
-            coroutineScope.launch {
-                val response = apolloClient.query(query).execute()
+            val job = coroutineScope.launch {
+                val response: ApolloResponse<D>
+                try {
+                    response = apolloClient.query(query).execute()
+                } catch (t: Throwable) {
+                    // Parallel handling of [executeMutation]'s catch — see
+                    // there for rationale.
+                    val errorMsg = "Query execute failed: ${t.message ?: t::class.java.simpleName}"
+                    DashXLog.e(tag, errorMsg)
+                    withContext(callbackDispatcher) {
+                        onError?.invoke(DashXError.NetworkError(errorMsg))
+                    }
+                    return@launch
+                }
                 withContext(callbackDispatcher) {
                     if (!hasApolloErrors(response.errors, response.exception, onError)) {
                         onSuccess(response)
+                    }
+                }
+            }
+            onFinally?.let { hook ->
+                job.invokeOnCompletion {
+                    try {
+                        hook()
+                    } catch (e: Throwable) {
+                        DashXLog.e(tag, "onFinally hook threw: ${e.message}")
                     }
                 }
             }
@@ -370,10 +503,54 @@ class DashX {
          * After calling this, [configure] must be called again before using the SDK.
          */
         fun shutdown() {
+            // Bump the subscribe generation so any in-flight subscribe
+            // response that arrives post-shutdown is recognized as stale by
+            // the post-response guard in [runSubscribeMutation] and skips
+            // the cache write. Same mechanism as [unsubscribe] uses for
+            // concurrent subscribes — matters here because the response
+            // could otherwise land in the new SDK session and resurrect
+            // subscribe state the consumer is tearing down.
+            subscribeGeneration.incrementAndGet()
+
             coroutineJob.cancel()
             EventQueue.shared().stop()
             coroutineJob = SupervisorJob()
             coroutineScope = CoroutineScope(Dispatchers.IO + coroutineJob)
+
+            // Reset the boolean state flags so the new SDK session starts
+            // unblocked. These could otherwise leak across [configure] if
+            // their normal cleanup mechanism never fires —
+            // e.g. [isUnsubscribeInFlight] is set synchronously in
+            // [unsubscribe] before the Firebase deleteToken() callback
+            // fires; if that callback never arrives (Firebase teardown
+            // mid-flight, app force-killed and restarted), the flag would
+            // otherwise stay true across the new session and block every
+            // subscribe()/refreshSubscriptionDeviceInfo() call via their
+            // unsubscribe-in-flight guards. set(false) is idempotent, so
+            // [Job.invokeOnCompletion] handlers from cancelled in-flight
+            // Jobs (which also write set(false) for these flags) are
+            // harmless no-ops when they fire afterward.
+            isSubscriptionDeviceInfoRefreshInFlight.set(false)
+            isUnsubscribeInFlight.set(false)
+
+            // NOT zeroing [inFlightSubscribeCount] or nulling
+            // [inFlightSubscribesIdle] here. The [coroutineJob.cancel] above
+            // propagates cancellation to every in-flight subscribe/unsubscribe
+            // Job; their [Job.invokeOnCompletion] handlers fire and call
+            // releaseMutation → endSubscribeMutation under
+            // [subscribeStateLock], which decrements the counter exactly
+            // once per Job and completes+nulls the deferred when the count
+            // reaches 0. Manually zeroing the counter here would push it
+            // negative when those handlers fire afterward —
+            // beginSubscribeMutation's `getAndIncrement() == 0` deferred-
+            // creation check would then return false for the new session's
+            // first subscribe (since pre-increment value would be negative,
+            // not 0), no new deferred would be created, and a subsequent
+            // unsubscribe's [awaitInFlightSubscribesIdle] would read `null`
+            // and skip its wait, corrupting backend ordering. Letting
+            // cancellation's natural cleanup drain the counter keeps the
+            // state machine consistent without needing generation-aware
+            // begin/end logic.
         }
 
         fun fetchRecord(
@@ -886,20 +1063,192 @@ class DashX {
         fun subscribe(token: String) {
             DashXLog.d(tag, "Subscribing with token.")
 
-                val ctx = context ?: run {
-                    DashXLog.e(tag, "subscribe: context is null, configure() must be called first")
-                    return
+            val ctx = context ?: run {
+                DashXLog.e(tag, "subscribe: context is null, configure() must be called first")
+                return
+            }
+
+            val sharedPrefs = getDashXSharedPreferences(ctx)
+            val savedToken = sharedPrefs.getString(SHARED_PREFERENCES_KEY_DEVICE_TOKEN, null)
+            val savedLibraryVersion = sharedPrefs.getString(
+                SHARED_PREFERENCES_KEY_SUBSCRIBED_LIBRARY_VERSION, null
+            )
+
+            // Core cache-hit gate: skip the mutation only when the FCM token AND the
+            // SDK version recorded on the contact already match what we'd send. This
+            // covers the contact's device_uid + library metadata + user agent. Note
+            // that the advertising-info enrichment is gated SEPARATELY (see
+            // [refreshSubscriptionDeviceInfo] below) — the async [getAdvertisingInfo]
+            // fetch must not block the core subscribe path, or apps with no Play
+            // Services / slow ad-info startup would re-subscribe on every launch.
+            if (savedToken == token && savedLibraryVersion == BuildConfig.VERSION_NAME) {
+                DashXLog.d(tag, "Already subscribed: $savedToken")
+                return
+            }
+
+            runSubscribeMutation(ctx, token)
+        }
+
+        /**
+         * Marks the start of a subscribe mutation: increments the in-flight
+         * count and, if this is the first concurrent subscribe, allocates a
+         * fresh [CompletableDeferred] that [unsubscribe] will await before
+         * sending its own backend mutation. Returns the [subscribeGeneration]
+         * snapshot the caller must compare against in its response callback
+         * to detect intervening unsubscribes.
+         */
+        private fun beginSubscribeMutation(): Int {
+            synchronized(subscribeStateLock) {
+                if (inFlightSubscribeCount.getAndIncrement() == 0) {
+                    inFlightSubscribesIdle = CompletableDeferred()
                 }
+            }
+            return subscribeGeneration.get()
+        }
 
-                val savedToken = getDashXSharedPreferences(ctx).getString(
-                    SHARED_PREFERENCES_KEY_DEVICE_TOKEN, null
-                )
-
-                if (savedToken == token) {
-                    DashXLog.d(tag, "Already subscribed: $savedToken")
-                    return
+        /**
+         * Marks a subscribe mutation as finished. When the count returns to
+         * zero, completes the idle deferred so any awaiting unsubscribe can
+         * proceed. MUST be called from every exit path of
+         * [runSubscribeMutation] (pre-flight guard, error callback, success
+         * callback) or unsubscribe will hang on the deferred forever.
+         */
+        private fun endSubscribeMutation() {
+            synchronized(subscribeStateLock) {
+                if (inFlightSubscribeCount.decrementAndGet() == 0) {
+                    inFlightSubscribesIdle?.complete(Unit)
+                    inFlightSubscribesIdle = null
                 }
+            }
+        }
 
+        /**
+         * Suspends until every in-flight subscribe mutation (normal or
+         * backfill, started before this call) completes.
+         *
+         * No coroutine-side timeout. Instead, the wait is bounded by the
+         * explicit Apollo HTTP timeouts configured in [createApolloClient]
+         * (15s connect + 30s read, sequential — up to ~45s combined), which
+         * guarantee any single subscribe mutation resolves — successfully,
+         * with a Network/GraphQL error, or via the catch path in
+         * [executeMutation] that converts a thrown exception into an onError
+         * invocation — within that budget. Once that resolves, the
+         * [runSubscribeMutation] cleanup runs, decrements the in-flight count,
+         * and completes the deferred this function awaits.
+         *
+         * A coroutine-side timeout was tried earlier and rejected: if it
+         * fired while a subscribe was truly still in flight, the late
+         * response could land after unsubscribe cleared
+         * [isUnsubscribeInFlight] and write the token back, AND the backend
+         * could process subscribe-after-unsubscribe. The [subscribeGeneration]
+         * check on the response side closes the local cache half of that
+         * race even if the Apollo timeout fires; waiting here for the
+         * Apollo-level termination closes the backend-ordering half.
+         */
+        private suspend fun awaitInFlightSubscribesIdle() {
+            val deferred = synchronized(subscribeStateLock) { inFlightSubscribesIdle }
+            deferred?.await()
+        }
+
+        /**
+         * Optional one-shot enrichment trigger. Called by [getAdvertisingInfo] once
+         * the async advertising-ID fetch resolves (successfully or with Play
+         * Services missing). If the device already has a saved FCM token and the
+         * contact's advertising info hasn't been synced for the current SDK
+         * version, runs a single subscribe mutation to backfill
+         * `device_advertising_uid` + `is_device_ad_tracking_enabled` onto the
+         * existing contact row. No-op otherwise — so multiple invocations during
+         * normal SDK lifecycle (each [SystemContext] refresh call also runs
+         * [getAdvertisingInfo]) collapse to at most one extra backend round-trip.
+         */
+        internal fun refreshSubscriptionDeviceInfo() {
+            // Bail if unsubscribe is mid-flight — see [isUnsubscribeInFlight].
+            // Combined with unsubscribe's eager clearing of the token below,
+            // this guarantees we never re-subscribe a token the consumer is
+            // actively tearing down, even if reset() rotates accountUid in
+            // the same tick.
+            if (isUnsubscribeInFlight.get()) return
+            val ctx = context ?: return
+            val sharedPrefs = getDashXSharedPreferences(ctx)
+            val savedToken =
+                sharedPrefs.getString(SHARED_PREFERENCES_KEY_DEVICE_TOKEN, null) ?: return
+            val syncedAdInfoVersion = sharedPrefs.getString(
+                SHARED_PREFERENCES_KEY_SUBSCRIBED_AD_INFO_VERSION, null
+            )
+            if (syncedAdInfoVersion == BuildConfig.VERSION_NAME) {
+                return
+            }
+            // Claim the in-flight slot atomically — if another backfill is
+            // already executing (started by an earlier ad-info completion that
+            // hasn't yet written SUBSCRIBED_AD_INFO_VERSION), drop this one.
+            if (!isSubscriptionDeviceInfoRefreshInFlight.compareAndSet(false, true)) {
+                return
+            }
+            DashXLog.d(tag, "Backfilling advertising info for existing subscription.")
+            runSubscribeMutation(ctx, savedToken, isAdInfoRefresh = true)
+        }
+
+        private fun runSubscribeMutation(
+            ctx: Context,
+            token: String,
+            isAdInfoRefresh: Boolean = false
+        ) {
+            // Register this mutation in the in-flight tracker BEFORE the
+            // unsubscribe-flight gate. Order matters: if we read the flag
+            // first and then increment, a concurrent unsubscribe between
+            // those two steps would see count=0, skip awaitInFlightSubscribesIdle,
+            // and send its backend mutation while ours is still in transit.
+            // Incrementing first guarantees any unsubscribe that observes
+            // !isUnsubscribeInFlight also observes count >= 1.
+            val gen = beginSubscribeMutation()
+
+            // Idempotent cleanup. Called from every exit path: pre-mutation
+            // guard, executeMutation onError, post-response stale guard,
+            // success-tail, AND the catch block if executeMutation throws
+            // synchronously before producing any callback (Apollo can in
+            // principle throw on serialization, configuration, or other
+            // pre-flight errors). The [AtomicBoolean] makes a duplicate call
+            // a no-op so we never double-decrement [inFlightSubscribeCount]
+            // or release [isSubscriptionDeviceInfoRefreshInFlight] twice.
+            // Without this guarantee, [awaitInFlightSubscribesIdle] could
+            // hang the next [unsubscribe] forever when the count gets stuck.
+            val released = AtomicBoolean(false)
+            fun releaseMutation() {
+                if (!released.compareAndSet(false, true)) return
+                endSubscribeMutation()
+                // Only the backfill path claims [isSubscriptionDeviceInfoRefreshInFlight],
+                // so only the backfill path may release it — a normal subscribe
+                // overlapping with an in-flight backfill must NOT clear the
+                // guard out from under it.
+                if (isAdInfoRefresh) {
+                    isSubscriptionDeviceInfoRefreshInFlight.set(false)
+                }
+            }
+
+            // Pre-mutation guard: abort if unsubscribe started between the
+            // caller's gate check and now. Closes the window where a backfill
+            // had already passed [refreshSubscriptionDeviceInfo]'s flag check
+            // but hadn't yet hit the wire. Without this, the mutation would
+            // create/refresh a contact at the backend that the in-progress
+            // unsubscribe should be tearing down. This guard runs BEFORE the
+            // try below because no Job is created if we early-return, so
+            // [onFinally] / [Job.invokeOnCompletion] can't run — explicit
+            // [releaseMutation] is the only cleanup path here.
+            if (isUnsubscribeInFlight.get()) {
+                DashXLog.d(tag, "Skipping subscribe mutation: unsubscribe is in flight.")
+                releaseMutation()
+                return
+            }
+
+            // Broad try wrapping ALL work after [beginSubscribeMutation] until
+            // [executeMutation] either kicks off a Job (after which
+            // [Job.invokeOnCompletion] guarantees [releaseMutation] runs) or
+            // throws synchronously. Mechanical safety against a throw from
+            // anywhere in metadata building, mutation construction, or the
+            // launch dispatch itself — without this, [inFlightSubscribeCount]
+            // could be stuck and [awaitInFlightSubscribesIdle] hang the next
+            // [unsubscribe].
+            try {
                 val name = Settings.Global.getString(
                     ctx.contentResolver, Settings.Global.DEVICE_NAME
                 ) ?: Settings.Secure.getString(ctx.contentResolver, "bluetooth_name")
@@ -926,24 +1275,88 @@ class DashX {
                         name = name?.let { Optional.Present(it) } ?: Optional.Absent,
                         kind = ContactKind.ANDROID,
                         value = token,
+                        userAgent = getAppUserAgent().takeIf { it.isNotEmpty() }
+                            ?.let { Optional.Present(it) } ?: Optional.Absent,
                         osName = Optional.Present("Android"),
                         osVersion = Optional.Present(Build.VERSION.RELEASE),
                         deviceManufacturer = Optional.Present(Build.MANUFACTURER),
                         deviceModel = Optional.Present(Build.MODEL),
+                        deviceUid = getDeviceId(ctx).takeIf { it.isNotEmpty() }
+                            ?.let { Optional.Present(it) } ?: Optional.Absent,
+                        deviceAdvertisingUid = getStoredAdvertisingId(ctx).takeIf { it.isNotEmpty() }
+                            ?.let { Optional.Present(it) } ?: Optional.Absent,
+                        isDeviceAdTrackingEnabled = Optional.Present(isAdTrackingEnabled(ctx)),
                         metadata = Optional.Present(metadata)
                     )
                 )
 
-                executeMutation(mutation, onError = { error ->
-                    DashXLog.e(tag, "Failed to subscribe: ${error.message}")
-                }) { result ->
+                // Once executeMutation has launched the Job, [releaseMutation]
+                // runs exactly once via [Job.invokeOnCompletion] in
+                // [executeMutation] — whether the response arrives, an error
+                // arrives, or the Job is cancelled. The onSuccess / onError
+                // lambdas here do business logic only; they no longer call
+                // [releaseMutation] explicitly.
+                executeMutation(
+                    mutation,
+                    onError = { error ->
+                        DashXLog.e(tag, "Failed to subscribe: ${error.message}")
+                    },
+                    onFinally = ::releaseMutation
+                ) { result ->
+                    // Post-response guard: if unsubscribe ran (or completed!)
+                    // between the time we sent this mutation and the time the
+                    // response arrived, do NOT write the subscribe cache markers.
+                    // We use the [subscribeGeneration] snapshot taken at entry
+                    // rather than the transient [isUnsubscribeInFlight] flag, so
+                    // a long-running subscribe response that lands AFTER
+                    // unsubscribe has fully returned (and cleared the flag) is
+                    // still recognized as stale. The mutation itself already hit
+                    // the backend; [unsubscribe]'s [awaitInFlightSubscribesIdle]
+                    // call waited for this callback before sending its own
+                    // backend mutation, so the contact this subscribe touched
+                    // will be torn down in order.
+                    if (subscribeGeneration.get() != gen) {
+                        DashXLog.d(
+                            tag,
+                            "Subscribe response stale (generation bumped by unsubscribe); skipping local cache write."
+                        )
+                        DashXLog.d(tag, result.data?.subscribeContact?.toString())
+                        return@executeMutation
+                    }
                     context?.let { c ->
                         getDashXSharedPreferences(c).edit().apply {
+                            // Always commit the core cache markers — token + SDK version —
+                            // so future same-token subscribe calls hit the gate.
                             putString(SHARED_PREFERENCES_KEY_DEVICE_TOKEN, token)
+                            putString(
+                                SHARED_PREFERENCES_KEY_SUBSCRIBED_LIBRARY_VERSION,
+                                BuildConfig.VERSION_NAME
+                            )
+                            // Separately mark advertising info as synced for this SDK
+                            // version, but ONLY when the async fetch has actually
+                            // resolved (so refreshSubscriptionDeviceInfo will run once
+                            // more after getAdvertisingInfo completes — at which point
+                            // this branch fires and we stop backfilling).
+                            if (hasAdvertisingInfoBeenFetched(c)) {
+                                putString(
+                                    SHARED_PREFERENCES_KEY_SUBSCRIBED_AD_INFO_VERSION,
+                                    BuildConfig.VERSION_NAME
+                                )
+                            }
                         }.apply()
                     }
                     DashXLog.d(tag, result.data?.subscribeContact?.toString())
                 }
+            } catch (t: Throwable) {
+                // Anything between [beginSubscribeMutation] and the
+                // executeMutation Job creation threw. The Job was never
+                // launched, so [Job.invokeOnCompletion] won't fire — clean
+                // up explicitly here. [releaseMutation] is idempotent, so
+                // double-firing (caught here AND via invokeOnCompletion
+                // somehow) is harmless.
+                DashXLog.e(tag, "Subscribe pre-dispatch failed: ${t.message}")
+                releaseMutation()
+            }
         }
 
         /**
@@ -1005,8 +1418,129 @@ class DashX {
                 return
             }
 
+            // Claim the unsubscribe-in-flight guard and clear the local
+            // subscribe cache eagerly — BEFORE the async FirebaseMessaging
+            // deleteToken() callback fires. This closes the race where
+            // [reset] rotates accountUid / accountAnonymousUid mid-unsubscribe
+            // and a [getAdvertisingInfo] completion lands inside that window;
+            // [refreshSubscriptionDeviceInfo] now sees the flag (or, even
+            // without the flag, the null saved token) and short-circuits
+            // instead of issuing a subscribe under the new identity. Matches
+            // iOS, which clears its UserDefaults FCM-token key before
+            // dispatching the unsubscribe mutation.
+            //
+            // Snapshot the identity NOW too so the unsubscribe mutation
+            // below addresses the contact that was actually subscribed,
+            // even if reset() rotates these companion fields before the
+            // Firebase callback fires.
+            isUnsubscribeInFlight.set(true)
+            // Bump the subscribe generation so any in-flight subscribe
+            // (normal OR backfill) recognizes itself as stale when its
+            // response arrives and skips writing the subscribe cache back.
+            // This is what plugs the timeout / late-response hole — even
+            // if [awaitInFlightSubscribesIdle] somehow returned early or
+            // the subscribe response is delivered after [isUnsubscribeInFlight]
+            // is cleared, the generation snapshot taken at subscribe entry
+            // won't match the current value and the post-response guard
+            // will refuse the cache write.
+            subscribeGeneration.incrementAndGet()
+            getDashXSharedPreferences(ctx).edit().apply {
+                remove(SHARED_PREFERENCES_KEY_DEVICE_TOKEN)
+                remove(SHARED_PREFERENCES_KEY_SUBSCRIBED_LIBRARY_VERSION)
+                remove(SHARED_PREFERENCES_KEY_SUBSCRIBED_AD_INFO_VERSION)
+            }.apply()
+
             val uid = accountUid
             val anonymousUid = accountAnonymousUid
+
+            // Dispatches the backend unsubscribe mutation. Deferred via
+            // coroutine so it waits for any in-flight subscribe mutation
+            // (normal OR ad-info backfill) started before unsubscribe began
+            // to complete first — without that sequencing, the backend could
+            // process subscribe AFTER unsubscribe (different worker instances,
+            // no per-(uid, kind, value) lock) and leave the contact Subscribed.
+            //
+            // `reportResult` controls whether to invoke the consumer's
+            // onSuccess/onError. We set it to `true` on the Firebase-success
+            // path (the normal flow), and `false` on the Firebase-failure
+            // path where we still attempt backend cleanup but have already
+            // surfaced the Firebase error to the caller.
+            fun sendBackendUnsubscribe(reportResult: Boolean) {
+                // [handedOff] is an idempotent "cleanup has been taken care
+                // of by someone" latch. The CAS-once semantics let three
+                // separate paths race safely:
+                //
+                //  1. Body's catch — body started but threw before the
+                //     handoff line (e.g. mutation construction failed).
+                //  2. Outer Job.invokeOnCompletion — fires when the launched
+                //     Job terminates by any means, INCLUDING when the body
+                //     never started (scope was cancelled before dispatch,
+                //     or got cancelled mid-launch). This is the safety net
+                //     that catches what a body-internal try/finally cannot.
+                //  3. The handoff `handedOff.set(true)` — body successfully
+                //     dispatched executeMutation, whose own onFinally hook
+                //     now owns clearing the flag.
+                //
+                // Without the outer invokeOnCompletion, a coroutineScope
+                // that gets cancelled between the `.launch` returning a Job
+                // and the body actually dispatching would never run the
+                // body's try/finally — leaving isUnsubscribeInFlight stuck
+                // true across the new SDK session created by shutdown().
+                val handedOff = AtomicBoolean(false)
+                val job = coroutineScope.launch {
+                    try {
+                        awaitInFlightSubscribesIdle()
+                        val mutation = UnsubscribeContactMutation(
+                            input = UnsubscribeContactInput(
+                                accountUid = uid?.let { Optional.Present(it) } ?: Optional.Absent,
+                                accountAnonymousUid = anonymousUid?.let { Optional.Present(it) } ?: Optional.Absent,
+                                value = savedToken
+                            )
+                        )
+                        // [onFinally] (registered via [Job.invokeOnCompletion]
+                        // in executeMutation) clears [isUnsubscribeInFlight]
+                        // for every termination path of THAT job — success,
+                        // error, and cancellation. onSuccess/onError do
+                        // consumer-reporting only.
+                        executeMutation(
+                            mutation,
+                            onError = { error ->
+                                if (reportResult) onError?.invoke(error)
+                            },
+                            onFinally = { isUnsubscribeInFlight.set(false) }
+                        ) { result ->
+                            val success = result.data?.unsubscribeContact?.success ?: false
+                            DashXLog.d(tag, "Unsubscribed $savedToken (success=$success).")
+                            if (reportResult) onSuccess?.invoke(success)
+                        }
+                        // executeMutation returned normally — its Job is
+                        // created and its onFinally is registered. Mark
+                        // cleanup as handed off so the outer
+                        // invokeOnCompletion below knows to skip.
+                        handedOff.set(true)
+                    } catch (t: Throwable) {
+                        // Body started but threw before [handedOff] was set
+                        // (e.g. cancellation during awaitInFlightSubscribesIdle,
+                        // or a synchronous throw from executeMutation's launch
+                        // dispatch). CAS makes the clear happen at most once
+                        // across this path and the outer invokeOnCompletion.
+                        if (handedOff.compareAndSet(false, true)) {
+                            isUnsubscribeInFlight.set(false)
+                        }
+                        throw t
+                    }
+                }
+                // Fires when the outer Job terminates by any means —
+                // including the case where the body never executed at all
+                // because the scope was cancelled before dispatch. CAS
+                // ensures we only clear if no other path already did (body
+                // catch, or successful handoff to executeMutation).
+                job.invokeOnCompletion {
+                    if (handedOff.compareAndSet(false, true)) {
+                        isUnsubscribeInFlight.set(false)
+                    }
+                }
+            }
 
             FirebaseMessaging.getInstance().deleteToken()
                 .addOnCompleteListener(OnCompleteListener { task ->
@@ -1014,8 +1548,18 @@ class DashX {
                         val message = task.exception?.message ?: "unknown error"
                         DashXLog.e(
                             tag,
-                            "FirebaseMessaging.getInstance().deleteToken() failed: $message"
+                            "FirebaseMessaging.getInstance().deleteToken() failed: $message. " +
+                                "Sending backend unsubscribe anyway to keep server-side state consistent."
                         )
+                        // Best-effort backend cleanup: we already cleared the
+                        // local subscribe cache at entry, so without this the
+                        // backend contact would linger Subscribed and the
+                        // caller would have no handle to retry (savedToken
+                        // is gone). Don't report the backend result via the
+                        // consumer callback — they're getting the Firebase
+                        // error reported below, which preserves the existing
+                        // failure-surface contract.
+                        sendBackendUnsubscribe(reportResult = false)
                         onError?.let {
                             coroutineScope.launch(callbackDispatcher) {
                                 it(DashXError.NetworkError("Firebase deleteToken failed: $message"))
@@ -1023,31 +1567,7 @@ class DashX {
                         }
                         return@OnCompleteListener
                     }
-
-                    context?.let { c ->
-                        getDashXSharedPreferences(c).edit().apply {
-                            remove(SHARED_PREFERENCES_KEY_DEVICE_TOKEN)
-                        }.apply()
-                    }
-
-                    val mutation = UnsubscribeContactMutation(
-                        input = UnsubscribeContactInput(
-                            accountUid = uid?.let { Optional.Present(it) } ?: Optional.Absent,
-                            accountAnonymousUid = anonymousUid?.let { Optional.Present(it) } ?: Optional.Absent,
-                            value = savedToken
-                        )
-                    )
-
-                    // `executeMutation` dispatches `onError` on the callback
-                    // dispatcher and routes Apollo / GraphQL errors through
-                    // `DashXError`, so we can pass the consumer's `onError`
-                    // straight through. Its success block is also already
-                    // on the callback dispatcher — no extra `launch` needed.
-                    executeMutation(mutation, onError) { result ->
-                        val success = result.data?.unsubscribeContact?.success ?: false
-                        DashXLog.d(tag, "Unsubscribed $savedToken (success=$success).")
-                        onSuccess?.invoke(success)
-                    }
+                    sendBackendUnsubscribe(reportResult = true)
                 })
         }
 
