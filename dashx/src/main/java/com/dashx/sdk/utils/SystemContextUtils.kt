@@ -14,7 +14,9 @@ import android.os.Build
 import android.provider.Settings
 import android.telephony.TelephonyManager
 import androidx.core.content.ContextCompat
+import com.dashx.android.DashX
 import com.dashx.android.utils.SystemContextConstants.ADVERTISING_ID
+import com.dashx.android.utils.SystemContextConstants.ADVERTISING_INFO_FETCHED
 import com.dashx.android.utils.SystemContextConstants.AD_TRACKING_ENABLED
 import com.google.android.gms.ads.identifier.AdvertisingIdClient
 import kotlinx.coroutines.CoroutineScope
@@ -123,7 +125,24 @@ fun getCarrierInfo(context: Context): String {
 
 @SuppressLint("HardwareIds")
 fun getDeviceId(context: Context): String {
-    return Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
+    // ANDROID_ID can be null on certain OEM builds despite the docs;
+    // coalesce to "" so callers can `isNotEmpty()` instead of null-checking.
+    return Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID) ?: ""
+}
+
+/** Empty when [getAdvertisingInfo] hasn't resolved, the user opted out, or Play Services is unavailable. */
+fun getStoredAdvertisingId(context: Context): String {
+    return getDashXSharedPreferences(context).getString(ADVERTISING_ID, "") ?: ""
+}
+
+/** Defaults to `false` — treat unknown as opt-out, matching SystemContext. */
+fun isAdTrackingEnabled(context: Context): Boolean {
+    return getDashXSharedPreferences(context).getBoolean(AD_TRACKING_ENABLED, false)
+}
+
+/** `true` once [getAdvertisingInfo] has resolved (success or failure). */
+fun hasAdvertisingInfoBeenFetched(context: Context): Boolean {
+    return getDashXSharedPreferences(context).getBoolean(ADVERTISING_INFO_FETCHED, false)
 }
 
 fun getDeviceManufacturer(): String {
@@ -149,19 +168,37 @@ fun getDeviceKind(): String {
 }
 
 fun getAdvertisingInfo(context: Context?) {
-    var adInfo: AdvertisingIdClient.Info? = null
     CoroutineScope(Dispatchers.IO).launch {
+        var adInfo: AdvertisingIdClient.Info? = null
         try {
             adInfo = context?.let { AdvertisingIdClient.getAdvertisingIdInfo(it) }
-            context?.let {
-                getDashXSharedPreferences(it).edit().apply {
-                    putString(ADVERTISING_ID, adInfo?.id)
-                    putBoolean(AD_TRACKING_ENABLED, !(adInfo?.isLimitAdTrackingEnabled ?: true))
-                }.apply()
-            }
         } catch (e: Exception) {
+            // Typically GooglePlayServicesNotAvailableException. We still
+            // mark the fetch as completed below so the backfill trigger
+            // converges instead of looping.
             e.printStackTrace()
         }
+        context?.let {
+            val prefs = getDashXSharedPreferences(it)
+            val previousAdvertisingId = prefs.getString(ADVERTISING_ID, "") ?: ""
+            val previousAdTrackingEnabled = prefs.getBoolean(AD_TRACKING_ENABLED, false)
+            val newAdvertisingId = adInfo?.id ?: ""
+            val newAdTrackingEnabled = !(adInfo?.isLimitAdTrackingEnabled ?: true)
+            prefs.edit().apply {
+                putString(ADVERTISING_ID, newAdvertisingId)
+                putBoolean(AD_TRACKING_ENABLED, newAdTrackingEnabled)
+                putBoolean(ADVERTISING_INFO_FETCHED, true)
+                // Invalidate the ad-info version when the ID or consent
+                // changes — otherwise the next refresh short-circuits on
+                // the version match and the new state is stranded.
+                if (newAdvertisingId != previousAdvertisingId ||
+                    newAdTrackingEnabled != previousAdTrackingEnabled
+                ) {
+                    remove(SHARED_PREFERENCES_KEY_SUBSCRIBED_AD_INFO_VERSION)
+                }
+            }.apply()
+        }
+        DashX.refreshSubscriptionDeviceInfo()
     }
 }
 
