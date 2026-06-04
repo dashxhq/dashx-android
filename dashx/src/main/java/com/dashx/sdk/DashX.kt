@@ -94,6 +94,16 @@ class DashX {
         // failure doesn't permanently block a future backfill.
         private val isSubscriptionDeviceInfoRefreshInFlight = AtomicBoolean(false)
 
+        // Latch for ad-info refresh requests that arrive while a previous
+        // backfill is in flight. When [refreshSubscriptionDeviceInfo]'s CAS
+        // fails (slot already claimed), we set this to true so the in-flight
+        // backfill can re-trigger a fresh refresh on release — picking up
+        // any ad-id / ATT consent change that landed during its round-trip.
+        // Without this, the in-flight backfill's success writes
+        // SUBSCRIBED_AD_INFO_VERSION = current and the dropped refresh is
+        // lost; the new ad-id would then be stranded until SDK version bumps.
+        private val subscriptionDeviceInfoRefreshPending = AtomicBoolean(false)
+
         // In-flight guard against the unsubscribe ↔ ad-info-backfill race.
         // [reset] calls [unsubscribe] and immediately rotates accountUid /
         // accountAnonymousUid; without this guard, a [getAdvertisingInfo]
@@ -105,6 +115,17 @@ class DashX {
         // the eager clearing of [SHARED_PREFERENCES_KEY_DEVICE_TOKEN] at
         // unsubscribe entry below.
         private val isUnsubscribeInFlight = AtomicBoolean(false)
+
+        // Generation counter for unsubscribe state. Bumped at the start of
+        // every [unsubscribe] call and inside [shutdown]. Every unsubscribe
+        // captures the post-increment value as its `flightId` and only
+        // clears [isUnsubscribeInFlight] when the captured `flightId` still
+        // matches the current value — so a stale [Job.invokeOnCompletion]
+        // from a cancelled-by-shutdown unsubscribe can't reset the flag for
+        // a NEWER session's in-flight unsubscribe. Without this, the old
+        // session's late cleanup could permit a refresh / subscribe to slip
+        // past the new session's unsubscribe gate.
+        private val unsubscribeFlightId = AtomicInteger(0)
 
         // Generation counter for push-subscription state. Bumped by
         // [unsubscribe] at entry. Each subscribe mutation captures the
@@ -517,6 +538,16 @@ class DashX {
             coroutineJob = SupervisorJob()
             coroutineScope = CoroutineScope(Dispatchers.IO + coroutineJob)
 
+            // Bump [unsubscribeFlightId] BEFORE clearing [isUnsubscribeInFlight].
+            // The new session's [unsubscribe] will capture a fresh post-bump
+            // value as its flightId; any stale [Job.invokeOnCompletion] from
+            // a cancelled-by-this-shutdown unsubscribe still holds its
+            // pre-bump captured value, so its [clearUnsubscribeIfCurrent]
+            // check will detect the mismatch and skip the clear — preventing
+            // the late cleanup from corrupting the new session's
+            // unsubscribe-in-flight flag.
+            unsubscribeFlightId.incrementAndGet()
+
             // Reset the boolean state flags so the new SDK session starts
             // unblocked. These could otherwise leak across [configure] if
             // their normal cleanup mechanism never fires —
@@ -526,12 +557,18 @@ class DashX {
             // mid-flight, app force-killed and restarted), the flag would
             // otherwise stay true across the new session and block every
             // subscribe()/refreshSubscriptionDeviceInfo() call via their
-            // unsubscribe-in-flight guards. set(false) is idempotent, so
-            // [Job.invokeOnCompletion] handlers from cancelled in-flight
-            // Jobs (which also write set(false) for these flags) are
-            // harmless no-ops when they fire afterward.
+            // unsubscribe-in-flight guards. set(false) is idempotent —
+            // and for [isUnsubscribeInFlight] specifically, the
+            // [unsubscribeFlightId] bump above guards against stale
+            // cancelled-Job clears corrupting the new session.
             isSubscriptionDeviceInfoRefreshInFlight.set(false)
             isUnsubscribeInFlight.set(false)
+            // Drop any pending ad-info refresh latch — the new session will
+            // fire its own [getAdvertisingInfo] on [configure] anyway, so a
+            // pre-shutdown latch carrying over has no value and would just
+            // cause one extra round-trip when the new session's first
+            // backfill releases.
+            subscriptionDeviceInfoRefreshPending.set(false)
 
             // NOT zeroing [inFlightSubscribeCount] or nulling
             // [inFlightSubscribesIdle] here. The [coroutineJob.cancel] above
@@ -1179,9 +1216,16 @@ class DashX {
                 return
             }
             // Claim the in-flight slot atomically — if another backfill is
-            // already executing (started by an earlier ad-info completion that
-            // hasn't yet written SUBSCRIBED_AD_INFO_VERSION), drop this one.
+            // already executing, latch [subscriptionDeviceInfoRefreshPending]
+            // so the in-flight backfill's [releaseMutation] re-fires a
+            // refresh on completion. Without this, an ad-id / ATT consent
+            // change that lands mid-backfill would be lost: the in-flight
+            // mutation (using the OLD ad-id) writes
+            // SUBSCRIBED_AD_INFO_VERSION = current, and the next refresh
+            // check sees the version match and returns early — stranding
+            // the new ad-id locally until the SDK version bumps.
             if (!isSubscriptionDeviceInfoRefreshInFlight.compareAndSet(false, true)) {
+                subscriptionDeviceInfoRefreshPending.set(true)
                 return
             }
             DashXLog.d(tag, "Backfilling advertising info for existing subscription.")
@@ -1222,6 +1266,23 @@ class DashX {
                 // guard out from under it.
                 if (isAdInfoRefresh) {
                     isSubscriptionDeviceInfoRefreshInFlight.set(false)
+                    // Pending re-trigger: if an ad-info change set
+                    // [subscriptionDeviceInfoRefreshPending] = true while we
+                    // were in flight, this mutation's payload is stale.
+                    // Invalidate the version marker the success branch may
+                    // have just written (so the re-fired refresh doesn't
+                    // short-circuit on a version match) and re-fire.
+                    // Atomically read+clear pending via [compareAndSet] so
+                    // multiple coalesced pending requests collapse into one
+                    // re-run.
+                    if (subscriptionDeviceInfoRefreshPending.compareAndSet(true, false)) {
+                        context?.let { c ->
+                            getDashXSharedPreferences(c).edit()
+                                .remove(SHARED_PREFERENCES_KEY_SUBSCRIBED_AD_INFO_VERSION)
+                                .apply()
+                        }
+                        refreshSubscriptionDeviceInfo()
+                    }
                 }
             }
 
@@ -1433,7 +1494,23 @@ class DashX {
             // below addresses the contact that was actually subscribed,
             // even if reset() rotates these companion fields before the
             // Firebase callback fires.
+            // Capture this unsubscribe's `flightId` BEFORE setting the
+            // in-flight flag, so every cleanup path below (executeMutation
+            // onFinally, body catch, outer Job.invokeOnCompletion) can use
+            // [clearUnsubscribeIfCurrent] to gate the clear on the
+            // generation still matching. If [shutdown] runs while this
+            // unsubscribe is mid-flight, it bumps [unsubscribeFlightId];
+            // any stale cleanup from this Job that fires AFTER a new
+            // session's unsubscribe captures its own flightId will see the
+            // mismatch and skip — protecting the new session's
+            // [isUnsubscribeInFlight] gate from being incorrectly cleared.
+            val flightId = unsubscribeFlightId.incrementAndGet()
             isUnsubscribeInFlight.set(true)
+            fun clearUnsubscribeIfCurrent() {
+                if (unsubscribeFlightId.get() == flightId) {
+                    isUnsubscribeInFlight.set(false)
+                }
+            }
             // Bump the subscribe generation so any in-flight subscribe
             // (normal OR backfill) recognizes itself as stale when its
             // response arrives and skips writing the subscribe cache back.
@@ -1501,13 +1578,18 @@ class DashX {
                         // in executeMutation) clears [isUnsubscribeInFlight]
                         // for every termination path of THAT job — success,
                         // error, and cancellation. onSuccess/onError do
-                        // consumer-reporting only.
+                        // consumer-reporting only. The clear is gated on
+                        // [unsubscribeFlightId] still matching this
+                        // unsubscribe's captured `flightId`, so a stale
+                        // cancelled-Job onFinally that fires after [shutdown]
+                        // bumped the id (and a new session may already be
+                        // running) becomes a no-op.
                         executeMutation(
                             mutation,
                             onError = { error ->
                                 if (reportResult) onError?.invoke(error)
                             },
-                            onFinally = { isUnsubscribeInFlight.set(false) }
+                            onFinally = { clearUnsubscribeIfCurrent() }
                         ) { result ->
                             val success = result.data?.unsubscribeContact?.success ?: false
                             DashXLog.d(tag, "Unsubscribed $savedToken (success=$success).")
@@ -1523,9 +1605,12 @@ class DashX {
                         // (e.g. cancellation during awaitInFlightSubscribesIdle,
                         // or a synchronous throw from executeMutation's launch
                         // dispatch). CAS makes the clear happen at most once
-                        // across this path and the outer invokeOnCompletion.
+                        // across this path and the outer invokeOnCompletion;
+                        // the clear itself is generation-gated via
+                        // [clearUnsubscribeIfCurrent] so a stale firing
+                        // after [shutdown] won't disturb a new session.
                         if (handedOff.compareAndSet(false, true)) {
-                            isUnsubscribeInFlight.set(false)
+                            clearUnsubscribeIfCurrent()
                         }
                         throw t
                     }
@@ -1534,10 +1619,14 @@ class DashX {
                 // including the case where the body never executed at all
                 // because the scope was cancelled before dispatch. CAS
                 // ensures we only clear if no other path already did (body
-                // catch, or successful handoff to executeMutation).
+                // catch, or successful handoff to executeMutation); the
+                // clear is generation-gated via [clearUnsubscribeIfCurrent]
+                // so a late cancellation that lands after [shutdown] has
+                // bumped [unsubscribeFlightId] (and possibly a new session
+                // has called unsubscribe) becomes a no-op.
                 job.invokeOnCompletion {
                     if (handedOff.compareAndSet(false, true)) {
-                        isUnsubscribeInFlight.set(false)
+                        clearUnsubscribeIfCurrent()
                     }
                 }
             }
