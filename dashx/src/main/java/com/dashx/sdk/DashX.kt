@@ -453,6 +453,14 @@ class DashX {
         }
 
         fun reset() {
+            // Bump here so a first-time subscribe in flight (no saved token
+            // yet) can't write DEVICE_TOKEN / version markers under the
+            // rotated identity. [unsubscribe] only bumps on the round-trip
+            // path; it early-returns when no token is saved — which IS the
+            // first-subscribe race.
+            subscribeGeneration.incrementAndGet()
+            subscriptionDeviceInfoRefreshPending.set(false)
+
             unsubscribe()
 
             accountUid = null
