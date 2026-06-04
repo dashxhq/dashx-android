@@ -125,42 +125,22 @@ fun getCarrierInfo(context: Context): String {
 
 @SuppressLint("HardwareIds")
 fun getDeviceId(context: Context): String {
-    // Settings.Secure.getString can return null on certain OEM/edge cases
-    // even though the platform docs imply otherwise — fall back to "" so
-    // callers (subscribe deviceUid, SystemContext device.id) can do a
-    // single `isNotEmpty()` check without risking an NPE on those devices.
+    // ANDROID_ID can be null on certain OEM builds despite the docs;
+    // coalesce to "" so callers can `isNotEmpty()` instead of null-checking.
     return Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID) ?: ""
 }
 
-/**
- * Returns the advertising ID captured asynchronously by [getAdvertisingInfo]
- * and persisted in [SharedPreferences]. Empty string when the async fetch
- * hasn't completed yet, when the user has opted out of ad tracking, or when
- * Google Play Services is unavailable.
- */
+/** Empty when [getAdvertisingInfo] hasn't resolved, the user opted out, or Play Services is unavailable. */
 fun getStoredAdvertisingId(context: Context): String {
     return getDashXSharedPreferences(context).getString(ADVERTISING_ID, "") ?: ""
 }
 
-/**
- * Returns the user's ad-tracking consent state captured by
- * [getAdvertisingInfo]. Defaults to `false` (treat unknown as opt-out)
- * which matches what [SystemContext] already sends to analytics.
- */
+/** Defaults to `false` — treat unknown as opt-out, matching SystemContext. */
 fun isAdTrackingEnabled(context: Context): Boolean {
     return getDashXSharedPreferences(context).getBoolean(AD_TRACKING_ENABLED, false)
 }
 
-/**
- * Whether [getAdvertisingInfo] has completed (successfully or with an
- * exception). Used by subscribe to decide whether to commit
- * `SHARED_PREFERENCES_KEY_SUBSCRIBED_AD_INFO_VERSION` (the ad-info-sync
- * marker, NOT the core subscribed-library-version marker, which is
- * always committed): if the fetch is still in flight, hold off so the
- * next refreshSubscriptionDeviceInfo run picks up the freshly-populated
- * ad-id; if the fetch has finished (regardless of result), it's safe to
- * mark ad-info as synced for this SDK version.
- */
+/** `true` once [getAdvertisingInfo] has resolved (success or failure). */
 fun hasAdvertisingInfoBeenFetched(context: Context): Boolean {
     return getDashXSharedPreferences(context).getBoolean(ADVERTISING_INFO_FETCHED, false)
 }
@@ -193,10 +173,9 @@ fun getAdvertisingInfo(context: Context?) {
         try {
             adInfo = context?.let { AdvertisingIdClient.getAdvertisingIdInfo(it) }
         } catch (e: Exception) {
-            // Typically GooglePlayServicesNotAvailableException — the device has no
-            // working Play Services so the advertising ID will never be available.
-            // We still mark the fetch as completed below so the backfill trigger
-            // converges to a no-op state instead of looping.
+            // Typically GooglePlayServicesNotAvailableException. We still
+            // mark the fetch as completed below so the backfill trigger
+            // converges instead of looping.
             e.printStackTrace()
         }
         context?.let {
@@ -208,19 +187,10 @@ fun getAdvertisingInfo(context: Context?) {
             prefs.edit().apply {
                 putString(ADVERTISING_ID, newAdvertisingId)
                 putBoolean(AD_TRACKING_ENABLED, newAdTrackingEnabled)
-                // Mark the fetch as resolved (success OR failure). Subsequent calls
-                // to DashX.refreshSubscriptionDeviceInfo will see this flag via
-                // [hasAdvertisingInfoBeenFetched] and commit the ad-info version
-                // on the next subscribe — bounding the retry to one extra round-trip.
                 putBoolean(ADVERTISING_INFO_FETCHED, true)
-                // If the user reset their advertising ID or flipped ad-tracking
-                // consent since the last sync, invalidate the synced ad-info
-                // version marker so [DashX.refreshSubscriptionDeviceInfo] sees a
-                // gen-mismatch and re-sends the contact's ad-info to the backend.
-                // Without this, [SHARED_PREFERENCES_KEY_SUBSCRIBED_AD_INFO_VERSION]
-                // already matching the current SDK version short-circuits the
-                // refresh, and the new ad-id/consent state is stranded locally
-                // until the FCM token rotates or the SDK version bumps.
+                // Invalidate the ad-info version when the ID or consent
+                // changes — otherwise the next refresh short-circuits on
+                // the version match and the new state is stranded.
                 if (newAdvertisingId != previousAdvertisingId ||
                     newAdTrackingEnabled != previousAdTrackingEnabled
                 ) {
@@ -228,9 +198,6 @@ fun getAdvertisingInfo(context: Context?) {
                 }
             }.apply()
         }
-        // Trigger the optional ad-info backfill if a token is already saved and
-        // this SDK version hasn't synced ad info yet. No-op when subscribe hasn't
-        // run yet (no saved token) or when ad info is already current.
         DashX.refreshSubscriptionDeviceInfo()
     }
 }
