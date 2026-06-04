@@ -15,6 +15,14 @@ const val SHARED_PREFERENCES_KEY_IDENTITY_TOKEN =
 const val SHARED_PREFERENCES_KEY_DEVICE_TOKEN =
     "$SHARED_PREFERENCES_PREFIX.$DEFAULT_INSTANCE.device_token"
 const val SHARED_PREFERENCES_KEY_BUILD = "$SHARED_PREFERENCES_PREFIX.$DEFAULT_INSTANCE.build"
+const val SHARED_PREFERENCES_KEY_SUBSCRIBED_LIBRARY_VERSION =
+    "$SHARED_PREFERENCES_PREFIX.$DEFAULT_INSTANCE.subscribed_library_version"
+/// SDK version for which the contact's advertising info was last synced.
+/// Separate from [SHARED_PREFERENCES_KEY_SUBSCRIBED_LIBRARY_VERSION] so the
+/// core subscribe cache isn't blocked waiting for the async
+/// [getAdvertisingInfo] fetch.
+const val SHARED_PREFERENCES_KEY_SUBSCRIBED_AD_INFO_VERSION =
+    "$SHARED_PREFERENCES_PREFIX.$DEFAULT_INSTANCE.subscribed_ad_info_version"
 const val INTERNAL_EVENT_APP_INSTALLED = "Application Installed"
 const val INTERNAL_EVENT_APP_UPDATED = "Application Updated"
 const val INTERNAL_EVENT_APP_OPENED = "Application Opened"
@@ -89,6 +97,9 @@ object SystemContextConstants {
     const val DEVICE = "device"
     const val AD_TRACKING_ENABLED = "adTrackingEnabled"
     const val ADVERTISING_ID = "advertisingId"
+    /// `true` once [getAdvertisingInfo] has resolved (success or failure).
+    /// Subscribe checks this before committing the ad-info version marker.
+    const val ADVERTISING_INFO_FETCHED = "advertisingInfoFetched"
     const val ID = "id"
     const val KIND = "kind"
     const val MANUFACTURER = "manufacturer"
