@@ -2,6 +2,87 @@
 
 All notable changes to `dashx-android` are documented in this file. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
+## [1.3.1] — 2026-06-08
+
+### Fixed
+
+Crash hardening across the notification and system-context paths. Several
+platform-API and remote-payload reads could throw and take down the host app
+(including from a routine `track()`, which builds `SystemContext`
+synchronously without a guard):
+
+- **`subscribe()`** read the hidden `bluetooth_name` secure setting as a
+  device-name fallback. On Android 12+ (API 31) that throws
+  `SecurityException: Settings key: <bluetooth_name> is only readable to apps
+  with targetSdkVersion lower than or equal to: 31`. The read is now wrapped
+  and degrades to `null` (optional metadata). This was the reported
+  production crash.
+- **`SystemContext` network/device-state reads** now degrade to safe defaults
+  instead of throwing:
+  - `getBluetoothInfo` skipped the permission check entirely on API 31+ and
+    called `adapter.isEnabled`, which throws `SecurityException` without
+    `BLUETOOTH_CONNECT`; it now gates on `BLUETOOTH_CONNECT` (API 31+) vs
+    legacy `BLUETOOTH`, null-checks the (possibly absent) adapter, and catches.
+  - `getCarrierInfo` / `getWifiInfo` / `getCellularInfo` / `getLocationCoordinates`
+    no longer force-cast system services that are null on devices lacking the
+    hardware (non-telephony tablets, Android TV, Wear), and guard reads that
+    can throw `SecurityException` / `IllegalArgumentException` (e.g. a missing
+    `GPS_PROVIDER`).
+  - `getIpHostAddresses` catches the `SocketException` that
+    `NetworkInterface.getNetworkInterfaces()` can throw.
+  - `getOsName` catches failures from reflecting over `Build.VERSION_CODES`.
+- **Notification channel creation** (API 26+) called `Color.parseColor()` on
+  the payload's `light_settings.color` without a guard — an invalid value
+  threw `IllegalArgumentException` and aborted channel creation before the
+  notification posted. Now caught, mirroring the existing pre-O `setLights`
+  guard.
+- **`DashXActivityLifecycleCallbacks.registerCallbacks`** force-cast the
+  caller's `Context` to `Application` (`ClassCastException` when an
+  `Activity`/`Service`/wrapped context was passed into lifecycle/screen
+  tracking). It now resolves `applicationContext as? Application` and logs +
+  no-ops if unavailable, leaving registration to retry on a later enable call.
+- **`DashXBrowser.openRichLanding`** left the Custom Tabs `launchUrl()` path
+  unguarded (only the `ACTION_VIEW` fallback was wrapped); a provider that was
+  disabled/uninstalled after resolution threw `ActivityNotFoundException`
+  through the notification rich-landing click flow. It is now wrapped and
+  falls back to `ACTION_VIEW`.
+
+## [1.3.0] — 2026-06-04
+
+### Added
+
+- **`subscribeContact` payload now carries device identifiers at the contact
+  top level**: `userAgent`, `deviceUid` (`ANDROID_ID`), `deviceAdvertisingUid`
+  (Google Advertising ID), and `isDeviceAdTrackingEnabled`. The advertising ID
+  / consent is fetched asynchronously off the main thread via `AdvertisingIdClient`;
+  subscribe proceeds without it and re-syncs once it resolves (see below).
+
+### Changed
+
+- **Subscribe/unsubscribe concurrency safety.** A generation counter
+  (`subscribeGeneration`) plus an in-flight guard (`isUnsubscribeInFlight`)
+  ensure an in-flight subscribe can't write `DEVICE_TOKEN` / version markers
+  back after an `unsubscribe()`, and stale subscribe responses landing after
+  unsubscribe are dropped rather than re-subscribing the device.
+- **Subscribe cache is now keyed on SDK version, not just the FCM token.** A
+  new `subscribed_library_version` marker means an SDK upgrade re-subscribes
+  instead of being short-circuited by an unchanged token. A separate
+  `subscribed_ad_info_version` marker tracks advertising-info sync
+  independently, so the core subscribe cache isn't blocked waiting on the
+  async advertising fetch, and an advertising-ID or consent change invalidates
+  only that marker and triggers a re-sync.
+- **`refreshSubscriptionDeviceInfo()`** (internal) re-syncs the subscribed
+  contact when device/advertising info changes after the initial subscribe.
+- `getDeviceId()` coalesces a null `ANDROID_ID` (possible on some OEM builds)
+  to `""` so callers can use `isNotEmpty()`.
+
+### Fixed
+
+- First-subscribe race during identity rotation / `reset()`: a first-time
+  subscribe in flight (no saved token yet) could write the device token and
+  version markers under the rotated identity. The generation counter is now
+  bumped on rotation so that write is recognized as stale.
+
 ## [1.2.8] — 2026-04-23
 
 ### Added
@@ -42,8 +123,7 @@ All notable changes to `dashx-android` are documented in this file. Format loose
   mutation — `app.{identifier, name, version}` (host app identity, used by
   the backend to scope broadcasts via `FCMSettings.app_identifier`) and
   `library.{name, version}` (SDK slug + version, used by the backend to gate
-  per-contact behaviour by SDK version). Mirrors the equivalent payload that
-  `dashx-ios` has been sending since 1.3.0.
+  per-contact behaviour by SDK version).
 - `SubscribeContactInput.metadata` is now typed as `JSON` (kotlinx
   `JsonObject`) rather than a fixed input object, matching the backend
   change that accepts arbitrary JSON for extensibility. `osName` / `osVersion`
