@@ -1158,7 +1158,13 @@ class DashX {
             try {
                 val name = Settings.Global.getString(
                     ctx.contentResolver, Settings.Global.DEVICE_NAME
-                ) ?: Settings.Secure.getString(ctx.contentResolver, "bluetooth_name")
+                ) ?: runCatching {
+                    // "bluetooth_name" is a hidden/unsupported secure setting.
+                    // Reading it throws SecurityException on API 31+ for apps
+                    // targeting >31, so degrade to null rather than aborting
+                    // (or crashing) subscribe over optional device-name metadata.
+                    Settings.Secure.getString(ctx.contentResolver, "bluetooth_name")
+                }.getOrNull()
 
                 val packageInfo = runCatching { getPackageInfo(ctx) }.getOrNull()
                 val appName = packageInfo?.applicationInfo?.loadLabel(ctx.packageManager)?.toString()
