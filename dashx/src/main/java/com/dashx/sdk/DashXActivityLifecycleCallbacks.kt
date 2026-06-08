@@ -72,8 +72,19 @@ class DashXActivityLifecycleCallbacks : Application.ActivityLifecycleCallbacks {
         private var lifecycleTrackingEnabled = false
 
         private fun registerCallbacks(context: Context) {
+            // Callers may pass an Activity/Service/ContextWrapper; only an
+            // Application can register lifecycle callbacks. Resolve via
+            // applicationContext and no-op (don't crash) if unavailable —
+            // leaving the field null so a later enable call can retry.
+            val application = context.applicationContext as? Application
+            if (application == null) {
+                DashXLog.e(
+                    "DashXActivityLifecycleCallbacks",
+                    "Lifecycle/screen tracking requires an Application context; skipping registration."
+                )
+                return
+            }
             dashXActivityLifecycleCallbacks = DashXActivityLifecycleCallbacks()
-            val application = context as Application
             application.registerActivityLifecycleCallbacks(dashXActivityLifecycleCallbacks)
         }
 

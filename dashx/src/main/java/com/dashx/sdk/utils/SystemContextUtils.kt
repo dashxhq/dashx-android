@@ -31,7 +31,9 @@ private val displayMetricsInfo = Resources.getSystem().displayMetrics
 
 fun getIpHostAddresses(): HashMap<String, String> {
     val ipAddressHashMap = hashMapOf<String, String>()
-    NetworkInterface.getNetworkInterfaces()?.toList()?.map { networkInterface ->
+    // NetworkInterface.getNetworkInterfaces() throws SocketException on some
+    // devices/network states — return whatever we have rather than crashing.
+    runCatching { NetworkInterface.getNetworkInterfaces()?.toList() }.getOrNull()?.map { networkInterface ->
         networkInterface.inetAddresses?.toList()?.filter {
             !it.isLoopbackAddress && (it is Inet4Address || it is Inet6Address)
         }?.map {
@@ -69,14 +71,26 @@ fun getAppUserAgent(): String {
 }
 
 fun getBluetoothInfo(context: Context): Boolean {
-    if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.R) {
-        if (!PermissionUtils.hasPermissions(context, android.Manifest.permission.BLUETOOTH)) {
-            return false
-        }
+    // On API 31+ reading the adapter state requires BLUETOOTH_CONNECT; on
+    // older releases the legacy BLUETOOTH permission covers it. Without the
+    // right permission `adapter.isEnabled` throws SecurityException.
+    val requiredPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        android.Manifest.permission.BLUETOOTH_CONNECT
+    } else {
+        android.Manifest.permission.BLUETOOTH
+    }
+    if (!PermissionUtils.hasPermissions(context, requiredPermission)) {
+        return false
     }
 
-    val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
-    return bluetoothManager.adapter.isEnabled
+    // The service/adapter is absent on devices without Bluetooth (cast and
+    // adapter are null), and `isEnabled` can still throw SecurityException on
+    // some OEM builds even with the permission granted — degrade to false.
+    return runCatching {
+        val bluetoothManager =
+            context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+        bluetoothManager?.adapter?.isEnabled ?: false
+    }.getOrDefault(false)
 }
 
 fun getWifiInfo(context: Context): Boolean {
@@ -85,9 +99,14 @@ fun getWifiInfo(context: Context): Boolean {
             android.Manifest.permission.ACCESS_WIFI_STATE
         )
     ) {
-        val wifiManager =
-            context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-        wifiManager.isWifiEnabled
+        // WIFI_SERVICE can be null on devices without Wi-Fi hardware, and the
+        // state read can throw SecurityException on some OEM builds — degrade
+        // to false, consistent with the other network/device-state reads.
+        runCatching {
+            val wifiManager =
+                context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+            wifiManager?.isWifiEnabled ?: false
+        }.getOrDefault(false)
     } else false
 }
 
@@ -95,32 +114,31 @@ fun getWifiInfo(context: Context): Boolean {
 fun getCellularInfo(context: Context): Boolean {
     if (PermissionUtils.hasPermissions(context, android.Manifest.permission.ACCESS_NETWORK_STATE)) {
         val connectivityManager =
-            context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+                ?: return false
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val capabilities =
-                connectivityManager.getNetworkCapabilities(connectivityManager.activeNetwork)
-
-            if (capabilities != null) {
-                if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) {
-                    return true
-                }
+        // Network-state reads can throw SecurityException on some OEM builds
+        // even with the permission declared — degrade to "not cellular".
+        return runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val capabilities =
+                    connectivityManager.getNetworkCapabilities(connectivityManager.activeNetwork)
+                capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) ?: false
+            } else {
+                connectivityManager.activeNetworkInfo?.isConnected ?: false
             }
-        } else {
-            val activeNetworkInfo = connectivityManager.activeNetworkInfo
-
-            if (activeNetworkInfo != null && activeNetworkInfo.isConnected) {
-                return true
-            }
-        }
+        }.getOrDefault(false)
     }
 
     return false
 }
 
 fun getCarrierInfo(context: Context): String {
-    val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
-    return telephonyManager.networkOperatorName
+    // TELEPHONY_SERVICE is absent on non-telephony devices (many tablets,
+    // Android TV, Wear), so the service can be null — coalesce to "".
+    val telephonyManager =
+        context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
+    return telephonyManager?.networkOperatorName ?: ""
 }
 
 @SuppressLint("HardwareIds")
@@ -217,19 +235,28 @@ fun getLocationCoordinates(context: Context): Location? {
         return null
     }
 
-    val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+    val locationManager =
+        context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return null
 
-    return locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+    // GPS_PROVIDER may not exist on the device (IllegalArgumentException) and
+    // the read can still throw SecurityException despite the checks above.
+    return runCatching {
+        locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+    }.getOrNull()
 }
 
 fun getOsName(): String {
-    var osName = ""
-    val fields = Build.VERSION_CODES::class.java.fields
-    fields.filter { it.getInt(Build.VERSION_CODES::class) == Build.VERSION.SDK_INT }
-        .forEach {
-            osName = it.name
-        }
-    return osName
+    // Reflecting over Build.VERSION_CODES can throw (IllegalAccessException /
+    // non-int fields); the OS-name label is best-effort, so degrade to "".
+    return runCatching {
+        var osName = ""
+        val fields = Build.VERSION_CODES::class.java.fields
+        fields.filter { it.getInt(Build.VERSION_CODES::class) == Build.VERSION.SDK_INT }
+            .forEach {
+                osName = it.name
+            }
+        osName
+    }.getOrDefault("")
 }
 
 fun getOsVersion(): String {
