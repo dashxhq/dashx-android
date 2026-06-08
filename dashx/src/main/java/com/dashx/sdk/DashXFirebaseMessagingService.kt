@@ -172,8 +172,16 @@ open class DashXFirebaseMessagingService : FirebaseMessagingService() {
         }
 
         dashXData.lightSettings?.let { ls ->
-            channel.enableLights(true)
-            channel.lightColor = Color.parseColor(ls.color)
+            // ls.color is remote payload data; an invalid value throws
+            // IllegalArgumentException and would abort channel creation before
+            // the notification posts. Mirror the pre-O setLights guard below.
+            try {
+                val color = Color.parseColor(ls.color)
+                channel.enableLights(true)
+                channel.lightColor = color
+            } catch (t: Throwable) {
+                DashXLog.e(tag, "Invalid light_settings: ${t.message}")
+            }
         }
 
         channel.description = CHANNEL_DESCRIPTION

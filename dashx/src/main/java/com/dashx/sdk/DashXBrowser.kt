@@ -20,18 +20,30 @@ object DashXBrowser {
         val uri = Uri.parse(url.trim())
         val packageName = CustomTabsClient.getPackageName(context, null)
         if (packageName != null) {
-            CustomTabsIntent.Builder()
-                .build()
-                .also { it.intent.setPackage(packageName) }
-                .launchUrl(context, uri)
-        } else {
+            // launchUrl() ultimately calls startActivity() and can throw
+            // (e.g. the resolved provider was disabled/uninstalled since
+            // resolution). Guard it and fall through to ACTION_VIEW rather
+            // than letting it escape the notification-click flow.
             try {
-                val fallback = Intent(Intent.ACTION_VIEW, uri)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                context.startActivity(fallback)
+                CustomTabsIntent.Builder()
+                    .build()
+                    .also { it.intent.setPackage(packageName) }
+                    .launchUrl(context, uri)
+                return
             } catch (e: Throwable) {
-                DashXLog.e("DashXBrowser", "No Activity found for URL: $url – ${e.message}")
+                DashXLog.e(
+                    "DashXBrowser",
+                    "Custom Tabs launch failed for URL: $url – ${e.message}; falling back to ACTION_VIEW"
+                )
             }
+        }
+
+        try {
+            val fallback = Intent(Intent.ACTION_VIEW, uri)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(fallback)
+        } catch (e: Throwable) {
+            DashXLog.e("DashXBrowser", "No Activity found for URL: $url – ${e.message}")
         }
     }
 }
