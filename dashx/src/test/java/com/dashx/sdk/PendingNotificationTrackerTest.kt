@@ -72,11 +72,10 @@ class PendingNotificationTrackerTest {
 
     /**
      * Reproduces the configure/flush handoff race deterministically:
-     *   1. A notification decides to persist because the SDK looked unconfigured.
-     *   2. configure() then flips the flag and flushes — but the store is still EMPTY.
-     *   3. The notification finally persists its entry.
-     * Without the post-persist re-check in [PendingNotificationTracker.append] the entry would sit
-     * pending until the next configure(); the re-check must replay it immediately.
+     *   1. a notification decides to persist because the SDK looked unconfigured,
+     *   2. configure() flips the flag and flushes — but the store is still empty,
+     *   3. the notification finally persists.
+     * Without the post-persist re-check in [PendingNotificationTracker.append] the entry strands.
      */
     @Test
     fun `entry persisted during configure-flush handoff is not stranded`() {

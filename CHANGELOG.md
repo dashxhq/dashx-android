@@ -2,6 +2,32 @@
 
 All notable changes to `dashx-android` are documented in this file. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
+## [1.3.2] — 2026-08-17
+
+### Fixed
+
+Notification taps no longer crash the app when they arrive before `DashX.configure()`
+has completed — e.g. a push that cold-starts the app straight into the SDK's
+notification receiver, or a host that configures DashX from a coroutine/background
+thread so `Application.onCreate()` returns before configuration finishes. Previously
+this threw `NullPointerException: Configure SystemContext before accessing it.` from
+`track()` during the receiver's `onCreate`.
+
+- **`track()` / `trackEventBlocking()`** now no-op (with a log) when called before
+  `configure()` instead of dereferencing an unbuilt `SystemContext`. `track()` also
+  signals `onError(DashXError.NotConfigured())`, so the `trackAsync()` suspend wrapper
+  fails fast instead of hanging forever.
+- **Notification open / delivery / dismissal / navigation / deep-link tracking**
+  (`dx_message` OPENED, DELIVERED, DISMISSED, `dx_notification_navigated`,
+  `dx_deep_link_opened`) is now **persisted** when the SDK isn't configured yet and
+  **replayed with its original timestamps** once `configure()` runs, so no event is
+  lost on a cold-start tap. Navigation itself (deep link / rich landing / click action)
+  still runs regardless.
+- **`isConfigured`** is now backed by a dedicated flag, set only after every subsystem
+  is initialized and cleared at the start of `shutdown()`, rather than inferred from a
+  non-null context — closing a window where a concurrent notification could observe a
+  half-initialized or torn-down SDK as ready.
+
 ## [1.3.1] — 2026-06-08
 
 ### Fixed

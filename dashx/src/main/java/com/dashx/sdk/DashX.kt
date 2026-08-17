@@ -76,11 +76,9 @@ class DashX {
 
         @Volatile private var context: Context? = null
 
-        // Distinct from `context != null`: context is assigned partway through init() — before the
-        // Apollo client, SystemContext, and event queue are ready — and is never cleared on
-        // shutdown(). This flag flips true only once init() has finished wiring every subsystem and
-        // false at the start of shutdown(), so isConfigured() never reports a half-initialized or
-        // torn-down SDK as ready.
+        // Not `context != null`: context is set mid-init() and never cleared on shutdown(). Flips
+        // true only after init() finishes and false at shutdown() start, so isConfigured() can't
+        // report a half-initialized or torn-down SDK as ready.
         @Volatile private var configured = false
 
         /**
@@ -219,14 +217,11 @@ class DashX {
             SystemContext.configure(context)
             configureEventQueue(context)
 
-            // Mark configured only now that every subsystem (Apollo, SystemContext, event queue) is
-            // ready — a concurrent notification must not observe isConfigured() == true against
-            // half-initialized state. Must be set BEFORE the flush below, otherwise the replayed
-            // track()/trackMessage() calls would see an unconfigured SDK and drop themselves.
+            // Set before the flush below, or the replayed track()/trackMessage() calls would see an
+            // unconfigured SDK and drop themselves.
             configured = true
 
-            // Replay any notification tracking captured before configure() ran (e.g. a cold start
-            // launched by tapping/receiving/dismissing a push). See [PendingNotificationTracker].
+            // Replay notification tracking captured before configure() ran. See [PendingNotificationTracker].
             PendingNotificationTracker.flush(context)
         }
 
@@ -492,9 +487,7 @@ class DashX {
          * After calling this, [configure] must be called again before using the SDK.
          */
         fun shutdown() {
-            // Reconfiguration is required after shutdown — flip this first so any concurrent
-            // notification treats the SDK as unconfigured (and defers its tracking) until
-            // configure() runs again.
+            // Flip first so a concurrent notification treats the SDK as unconfigured until configure() reruns.
             configured = false
 
             // Mark in-flight subscribes stale before cancelling — late
@@ -805,8 +798,7 @@ class DashX {
         ) {
             if (!isConfigured()) {
                 DashXLog.e(tag, "track() called before configure(); dropping event '$event'")
-                // Always signal onError — the suspend wrapper trackAsync() awaits a callback and
-                // would hang forever otherwise. Dispatched like the SDK's other early-error paths.
+                // Signal onError or the trackAsync() suspend wrapper hangs forever awaiting a callback.
                 onError?.let { cb ->
                     coroutineScope.launch(callbackDispatcher) { cb(DashXError.NotConfigured()) }
                 }
@@ -944,11 +936,7 @@ class DashX {
             )
         }
 
-        /**
-         * Replay-safe variant that preserves the original [timestamp] (e.g. the moment a
-         * notification was tapped) when the call was deferred until after [configure]. Used by
-         * [PendingNotificationTracker.flush].
-         */
+        /** Preserves the original [timestamp] (e.g. the tap time) for calls replayed after [configure]. */
         internal fun trackMessage(id: String, status: TrackMessageStatus, timestamp: String) {
             trackMessageInternal(id, status, timestamp, null, null)
         }
@@ -974,16 +962,12 @@ class DashX {
             }
         }
 
-        /** Whether [configure] has run. Guards analytics paths that a notification tap can reach
-         *  before the host has configured the SDK (e.g. a cold start launched by the tap). */
         internal fun isConfigured(): Boolean = configured
 
         /**
-         * Tracks a notification message-status update when configured; otherwise persists it (with
-         * the current timestamp) via [PendingNotificationTracker] so a cold-start
-         * tap/receive/dismiss that beats [configure] isn't lost. A [Context] is always available at
-         * these call sites (Activity / Service / BroadcastReceiver) even when DashX isn't yet
-         * configured, which is why it's passed in rather than read from [context].
+         * Tracks when configured, else persists for replay after [configure]. [context] is passed in
+         * because the `context` field is null before configure() at these (Activity/Service/Receiver)
+         * call sites.
          */
         internal fun trackMessageOrPersist(context: Context, id: String, status: TrackMessageStatus) {
             if (isConfigured()) {
@@ -994,11 +978,7 @@ class DashX {
             }
         }
 
-        /**
-         * Records the `dx_notification_navigated` event when configured; otherwise persists it so a
-         * cold-start tap that beats [configure] isn't lost. See [trackMessageOrPersist] for why the
-         * [Context] is passed in.
-         */
+        /** Tracks `dx_notification_navigated` when configured, else persists it. See [trackMessageOrPersist]. */
         internal fun trackNotificationNavigationOrPersist(
             context: Context,
             action: NavigationAction?,
@@ -1013,11 +993,8 @@ class DashX {
             }
         }
 
-        /**
-         * Builds the `dx_notification_navigated` event data for every notification tap, regardless
-         * of navigation type (deep link, screen, click action, rich landing, etc.). The tap time is
-         * stamped into `timestamp` here so it survives a deferred (persisted) replay.
-         */
+        /** Builds the `dx_notification_navigated` event data; stamps tap time into `timestamp` so it
+         *  survives a deferred replay. */
         private fun notificationNavigationData(
             action: NavigationAction?,
             notificationId: String?
@@ -1071,11 +1048,7 @@ class DashX {
             track(EVENT_DEEP_LINK_OPENED, deepLinkData(uri, source))
         }
 
-        /**
-         * Records the `dx_deep_link_opened` event when configured; otherwise persists it so a
-         * cold-start notification tap that beats [configure] isn't lost. See [trackMessageOrPersist]
-         * for why the [Context] is passed in.
-         */
+        /** Tracks `dx_deep_link_opened` when configured, else persists it. See [trackMessageOrPersist]. */
         internal fun processDeepLinkOrPersist(context: Context, uri: Uri, source: String?) {
             val data = deepLinkData(uri, source)
             if (isConfigured()) {

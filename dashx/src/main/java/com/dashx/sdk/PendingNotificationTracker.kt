@@ -10,18 +10,12 @@ import java.time.Instant
 import java.time.format.DateTimeFormatter
 
 /**
- * Durable store for notification tracking captured before [DashX.configure] has run — e.g. a
- * cold start launched directly by tapping (or receiving/dismissing) a push, where the OS brings
- * up the SDK's receiver before the host app calls `configure`. Entries persist to
- * SharedPreferences (which only needs a [Context], not a configured DashX) so they survive
- * process death, and are replayed with their original timestamps once DashX is configured.
- *
- * Persistence and flush coordinate through a single [lock] and a post-persist re-check so an entry
- * written during the configure/flush handoff is never stranded (see [append]).
- *
- * Best-effort: the store is bounded and cleared on flush. Replayed navigation events fall back to
- * [EventQueue] on network failure; replayed message-status updates are fire-and-forget, matching
- * the live path.
+ * Durable store for notification tracking captured before [DashX.configure] runs — e.g. a push that
+ * cold-starts the app straight into the SDK's receiver. Persists to SharedPreferences (only needs a
+ * [Context]) so entries survive process death, and replays them with their original timestamps once
+ * configured. Persist and flush coordinate under [lock] with a post-persist re-check so an entry
+ * written during the configure/flush handoff is never stranded (see [append]). Best-effort:
+ * bounded and cleared on flush.
  */
 internal object PendingNotificationTracker {
 
@@ -106,11 +100,8 @@ internal object PendingNotificationTracker {
         )
     }
 
-    /**
-     * Replay everything persisted, then clear — atomically under [lock], so concurrent flushes
-     * can't double-send. Called from [DashX.init] after DashX is fully configured (so the replayed
-     * calls succeed) and from [append]'s post-persist re-check.
-     */
+    /** Replay everything persisted, then clear — atomically under [lock] so concurrent flushes
+     *  can't double-send. Called after configure() (from [DashX.init]) and from [append]. */
     internal fun flush(store: PendingStore) {
         val entries = synchronized(lock) {
             val current = store.read()
@@ -134,11 +125,9 @@ internal object PendingNotificationTracker {
             store.write(current)
         }
 
-        // Close the configure/flush handoff race: if configure() flipped the flag AND its flush ran
-        // before this entry was persisted (so it saw an empty store), the entry would otherwise sit
-        // pending until the next configure() — which may never happen this process. Re-checking
-        // here and flushing ourselves guarantees it is replayed. [flush] clears under [lock], so if
-        // configure()'s flush already took it this is a harmless no-op.
+        // Close the configure/flush handoff race: if configure()'s flush ran before this entry was
+        // persisted (saw an empty store), it would sit pending until the next configure(). Re-check
+        // and self-flush; [flush] clears under [lock], so a double-take is a harmless no-op.
         if (isConfiguredProvider()) {
             flush(store)
         }
