@@ -23,10 +23,7 @@ class NotificationProcessor {
                 return
             }
 
-            dashXClient.trackMessage(
-                payload.id,
-                TrackMessageStatus.OPENED
-            )
+            DashX.trackMessageOrPersist(context, payload.id, TrackMessageStatus.OPENED)
 
             if (context !is Activity) {
                 DashXLog.e(tag, "'context' must be an instance of Activity class")
@@ -36,7 +33,7 @@ class NotificationProcessor {
             val actionButtonId = extras?.getString(NotificationReceiver.NOTIFICATION_ACTION_BUTTON_ID)
             val navigationAction = payload.resolveNavigationAction(actionButtonId)
 
-            DashX.trackNotificationNavigation(navigationAction, payload.id)
+            DashX.trackNotificationNavigationOrPersist(context, navigationAction, payload.id)
 
             // `actionButtonId` is null when the notification body was tapped
             // (no action button pressed) — listeners get that as-is so they
@@ -47,7 +44,7 @@ class NotificationProcessor {
 
             when (navigationAction) {
                 is NavigationAction.DeepLink -> {
-                    DashX.processDeepLink(Uri.parse(navigationAction.url), "notification")
+                    DashX.processDeepLinkOrPersist(context, Uri.parse(navigationAction.url), "notification")
                     try {
                         context.startActivity(urlOpenIntent(navigationAction.url))
                     } catch (e: Throwable) {
@@ -56,7 +53,7 @@ class NotificationProcessor {
                     return
                 }
                 is NavigationAction.RichLanding -> {
-                    DashX.processDeepLink(Uri.parse(navigationAction.url), "notification")
+                    DashX.processDeepLinkOrPersist(context, Uri.parse(navigationAction.url), "notification")
                     DashXBrowser.openRichLanding(context, navigationAction.url)
                     return
                 }
@@ -70,7 +67,7 @@ class NotificationProcessor {
                 null -> {
                     val clickUrl = resolveClickUrl(payload, extras, actionButtonId)
                     if (clickUrl != null) {
-                        DashX.processDeepLink(Uri.parse(clickUrl), "notification")
+                        DashX.processDeepLinkOrPersist(context, Uri.parse(clickUrl), "notification")
                         try {
                             context.startActivity(urlOpenIntent(clickUrl))
                         } catch (e: Throwable) {
