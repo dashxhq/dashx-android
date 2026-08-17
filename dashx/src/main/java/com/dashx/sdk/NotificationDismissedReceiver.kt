@@ -33,10 +33,7 @@ class NotificationDismissedReceiver : BroadcastReceiver() {
             } ?: notificationId?.let { DashXPayload(id = it) }
 
             notificationId?.let { id ->
-                dashXClient.trackMessage(
-                    id,
-                    TrackMessageStatus.DISMISSED
-                )
+                dashXClient.trackMessageOrPersist(context, id, TrackMessageStatus.DISMISSED)
             }
 
             payload?.let { DashX.dispatchNotificationDismissed(it) }
