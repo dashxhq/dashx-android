@@ -131,7 +131,7 @@ open class DashXFirebaseMessagingService : FirebaseMessagingService() {
                     }
                 }
 
-                dashXClient.trackMessage(id, TrackMessageStatus.DELIVERED)
+                dashXClient.trackMessageOrPersist(applicationContext, id, TrackMessageStatus.DELIVERED)
             }
         }
     }
