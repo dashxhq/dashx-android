@@ -83,7 +83,6 @@ class DashXErrorTest {
 
         assertSame(error, exception.error)
         assertEquals("connection lost", exception.message)
-        assertTrue(exception is Exception)
     }
 
     @Test

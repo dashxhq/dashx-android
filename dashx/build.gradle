@@ -48,6 +48,11 @@ android {
         apiVersion = '1.9'
         languageVersion = '1.9'
     }
+
+    testOptions {
+        // JVM unit tests exercise the realtime actor, which logs through android.util.Log.
+        unitTests.returnDefaultValues = true
+    }
 }
 
 dependencies {

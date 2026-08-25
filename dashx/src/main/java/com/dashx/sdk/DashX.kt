@@ -455,6 +455,7 @@ class DashX {
                         )
                     }
                 })
+                .addInterceptor(AuthRetryInterceptor())
                 .apply {
                     publicKey?.let { addHttpHeader("X-Public-Key", it) }
                     targetEnvironment?.let { addHttpHeader("X-Target-Environment", it) }
@@ -747,49 +748,82 @@ class DashX {
          * Single-flight provider load, stamped with the session generation: a token arriving after
          * the identity moved on is discarded. Only the provider's first callback is accepted; a
          * provider that never calls back times out to [ConnectionState.AuthenticationFailed].
+         *
+         * The returned deferred completes AFTER the token is installed in the snapshot (or with
+         * null on failure/staleness), so an awaiting retry never re-sends the rejected token.
          */
-        private fun requestTokenLoad(forceRefresh: Boolean) {
-            val bound = boundProvider ?: return
-            val inFlight = CompletableDeferred<String?>()
-            if (!tokenLoadInFlight.compareAndSet(null, inFlight)) return // single-flight
+        private fun startOrJoinTokenLoad(forceRefresh: Boolean): CompletableDeferred<String?>? {
+            val bound = boundProvider ?: return null
+            while (true) {
+                tokenLoadInFlight.get()?.let { return it } // join the in-flight load
+                val fresh = CompletableDeferred<String?>()
+                if (tokenLoadInFlight.compareAndSet(null, fresh)) {
+                    launchTokenLoad(bound, forceRefresh, fresh)
+                    return fresh
+                }
+            }
+        }
 
+        private fun launchTokenLoad(
+            bound: BoundProvider,
+            forceRefresh: Boolean,
+            result: CompletableDeferred<String?>
+        ) {
             val generationAtRequest = account.get().sessionGeneration
             val accepted = AtomicBoolean(false)
 
             coroutineScope.launch {
-                val result = try {
+                val raw = CompletableDeferred<String?>()
+                val token = try {
                     withTimeout(TOKEN_LOAD_TIMEOUT_MS) {
                         bound.provider.loadToken(forceRefresh, object : DashXTokenCallback {
                             override fun onToken(token: String) {
-                                if (accepted.compareAndSet(false, true)) inFlight.complete(token)
+                                if (accepted.compareAndSet(false, true)) raw.complete(token)
                             }
                             override fun onUnavailable(cause: Throwable?) {
-                                if (accepted.compareAndSet(false, true)) inFlight.complete(null)
+                                if (accepted.compareAndSet(false, true)) raw.complete(null)
                             }
                         })
-                        inFlight.await()
+                        raw.await()
                     }
                 } catch (t: TimeoutCancellationException) {
                     accepted.set(true)
                     null
-                } finally {
-                    tokenLoadInFlight.compareAndSet(inFlight, null)
                 }
 
-                val current = account.get()
-                val stale = current.sessionGeneration != generationAtRequest ||
-                    boundProvider?.uid != bound.uid
-                if (stale) return@launch
+                try {
+                    val current = account.get()
+                    val stale = current.sessionGeneration != generationAtRequest ||
+                        boundProvider?.uid != bound.uid
 
-                if (result != null) {
-                    account.updateAndGet { it.copy(identityToken = result) } // T1: generation unchanged
-                    saveToStorage()
-                    realtimeRuntime?.onIdentityChanged()
-                        ?: com.dashx.android.chat.ChatCoordinator.onIdentityAvailable()
-                } else {
-                    publishAuthFailed(null)
+                    if (!stale && token != null) {
+                        account.updateAndGet { it.copy(identityToken = token) } // T1: generation unchanged
+                        saveToStorage()
+                        realtimeRuntime?.onIdentityChanged()
+                            ?: com.dashx.android.chat.ChatCoordinator.onIdentityAvailable()
+                        result.complete(token)
+                    } else {
+                        if (!stale) publishAuthFailed(null)
+                        result.complete(null)
+                    }
+                } finally {
+                    tokenLoadInFlight.compareAndSet(result, null)
+                    result.complete(null) // no-op unless an earlier path failed to complete
                 }
             }
+        }
+
+        private fun requestTokenLoad(forceRefresh: Boolean) {
+            startOrJoinTokenLoad(forceRefresh)
+        }
+
+        /**
+         * GraphQL retry hook: refresh the token and report whether a NEW token is installed. Joins
+         * any in-flight load rather than stacking a second provider call.
+         */
+        internal suspend fun awaitTokenRefresh(): Boolean {
+            val deferred = startOrJoinTokenLoad(forceRefresh = true) ?: return false
+            return deferred.await() != null
         }
 
         private fun publishAuthFailed(cause: Throwable?) {

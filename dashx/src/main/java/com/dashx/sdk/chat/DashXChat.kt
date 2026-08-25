@@ -142,6 +142,7 @@ internal object ChatCoordinator {
     }
 
     /** Every decoded realtime frame — the unread-refresh trigger feed. */
+    @Suppress("UNUSED_PARAMETER")
     fun onGlobalFrame(frame: DashXRealtimeMessage) {
         // Reserved: near-real-time unread refresh hooks consume this.
     }

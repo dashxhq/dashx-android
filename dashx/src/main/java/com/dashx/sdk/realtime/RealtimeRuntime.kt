@@ -66,7 +66,9 @@ internal class RealtimeRuntime(
     private val onAuthRejected: () -> Unit,
     /** State sink owned by DashX, which drops a detached runtime's late writes. */
     private val publishState: (ConnectionState) -> Unit,
-    initialForeground: Boolean
+    initialForeground: Boolean,
+    /** Test seam; production uses the OkHttp client below. */
+    private val socketFactory: ((Request, WebSocketListener) -> WebSocket)? = null
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val commands = Channel<RealtimeCommand>(Channel.UNLIMITED)
@@ -282,7 +284,9 @@ internal class RealtimeRuntime(
                 commands.trySend(RealtimeCommand.SocketFailed(generation, t))
             }
         }
-        connectingSocket = client.newWebSocket(Request.Builder().url(url).build(), listener)
+        val request = Request.Builder().url(url).build()
+        connectingSocket = socketFactory?.invoke(request, listener)
+            ?: client.newWebSocket(request, listener)
         publishState()
     }
 

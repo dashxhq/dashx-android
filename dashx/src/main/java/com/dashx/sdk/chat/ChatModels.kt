@@ -49,7 +49,7 @@ data class ChatMessage(
                 // arrive pre-ordered by the backend's (turn_seq, created_at, id).
                 turnSeq = 0L,
                 renderedContent = f.renderedContent as? JsonObject ?: JsonObject(emptyMap()),
-                createdAt = f.createdAt?.toString(),
+                createdAt = f.createdAt.toString(),
                 sentAt = f.sentAt?.toString()
             )
         }
