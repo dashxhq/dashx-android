@@ -20,13 +20,20 @@ import kotlinx.coroutines.flow.flow
  * - `data != null` means something executed; retrying a mutation then is how a message double-sends.
  * - An empty errors list must not refresh: `all {}` is vacuously true on it.
  * - `FORBIDDEN` never refreshes — a new token will not grant permission.
+ *
+ * The retry is generation-guarded: if the identity switched while the refresh ran, the new token
+ * belongs to a different account and the old-era request must not be resent under it.
  */
-internal class AuthRetryInterceptor : ApolloInterceptor {
+internal class AuthRetryInterceptor(
+    private val refreshToken: suspend () -> Boolean = { DashX.awaitTokenRefresh() },
+    private val sessionGeneration: () -> Long = { DashX.currentSessionGeneration() }
+) : ApolloInterceptor {
 
     override fun <D : Operation.Data> intercept(
         request: ApolloRequest<D>,
         chain: ApolloInterceptorChain
     ): Flow<ApolloResponse<D>> = flow {
+        val generationAtStart = sessionGeneration()
         val first = chain.proceed(request).first()
         if (!isPreExecutionUnauthorized(first)) {
             emit(first)
@@ -34,7 +41,11 @@ internal class AuthRetryInterceptor : ApolloInterceptor {
         }
         // awaitTokenRefresh joins any in-flight load and completes only after the new token is
         // installed in the snapshot, so the retried request picks it up via the HTTP interceptor.
-        if (!DashX.awaitTokenRefresh()) {
+        if (!refreshToken()) {
+            emit(first)
+            return@flow
+        }
+        if (sessionGeneration() != generationAtStart) {
             emit(first)
             return@flow
         }

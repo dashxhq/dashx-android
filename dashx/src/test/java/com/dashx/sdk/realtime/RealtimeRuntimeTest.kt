@@ -31,12 +31,17 @@ private class FakeWebSocket(private val originalRequest: Request) : WebSocket {
 }
 
 /** Drives the actor through the socket-factory seam; no network, no Android runtime. */
-private class Harness(initialForeground: Boolean = true, var url: String? = "wss://realtime.test/socket") {
+private class Harness(
+    initialForeground: Boolean = true,
+    var url: String? = "wss://realtime.test/socket",
+    ackTimeoutMs: Long = 60_000
+) {
     val states = CopyOnWriteArrayList<ConnectionState>()
     val authRejections = AtomicInteger(0)
     val sockets = CopyOnWriteArrayList<FakeWebSocket>()
     val listeners = CopyOnWriteArrayList<WebSocketListener>()
     val established = CopyOnWriteArrayList<Boolean>()
+    val subscribeErrors = CopyOnWriteArrayList<com.dashx.android.DashXError>()
 
     val runtime = RealtimeRuntime(
         urlProvider = { url },
@@ -46,14 +51,16 @@ private class Harness(initialForeground: Boolean = true, var url: String? = "wss
         initialForeground = initialForeground,
         socketFactory = { request, listener ->
             FakeWebSocket(request).also { sockets.add(it); listeners.add(listener) }
-        }
+        },
+        ackTimeoutMs = ackTimeoutMs
     )
 
     fun subscribe(conversationId: String = "c1"): DashXRealtimeSubscription =
         runtime.subscribe(SubscriberHandle(
             channelName = RealtimeRuntime.chatChannelName(conversationId),
             onFrame = { },
-            onEstablished = { established.add(it) }
+            onEstablished = { established.add(it) },
+            onSubscribeError = { subscribeErrors.add(it) }
         ))
 
     fun open(index: Int = sockets.size - 1) {
@@ -174,6 +181,115 @@ class RealtimeRuntimeTest {
         // Defect-5 regression: a fresh identity revives even a terminally-closed runtime.
         harness.runtime.onIdentityChanged()
         awaitUntil(what = "revived socket") { harness.sockets.size == 2 }
+    }
+
+    @Test
+    fun terminal4401_refreshesOnce_secondRejectionStaysTerminal() {
+        val harness = Harness()
+        harness.subscribe("c1")
+        awaitUntil(what = "socket 1") { harness.sockets.size == 1 }
+        harness.open(0)
+
+        harness.listeners[0].onClosed(harness.sockets[0], 4401, "UNAUTHORIZED")
+        awaitUntil(what = "refresh hook") { harness.authRejections.get() == 1 }
+
+        // The refresh installs a token; a refresh-driven identity change earns one reconnect
+        // but must not re-arm the hook.
+        harness.runtime.onIdentityChanged(fromAuthRefresh = true)
+        awaitUntil(what = "reconnect socket") { harness.sockets.size == 2 }
+        harness.open(1)
+        harness.listeners[1].onClosed(harness.sockets[1], 4401, "UNAUTHORIZED")
+
+        awaitUntil(what = "AuthenticationFailed") {
+            harness.states.lastOrNull() is ConnectionState.AuthenticationFailed
+        }
+        Thread.sleep(400)
+        assertEquals("the second 4401 must not refresh again", 1, harness.authRejections.get())
+        assertEquals("no further reconnects", 2, harness.sockets.size)
+    }
+
+    @Test
+    fun terminal4403_neverRefreshes() {
+        val harness = Harness()
+        harness.subscribe("c1")
+        awaitUntil(what = "socket 1") { harness.sockets.size == 1 }
+        harness.open(0)
+
+        harness.listeners[0].onClosed(harness.sockets[0], 4403, "FORBIDDEN")
+        awaitUntil(what = "AuthenticationFailed") {
+            harness.states.lastOrNull() is ConnectionState.AuthenticationFailed
+        }
+        Thread.sleep(400)
+        assertEquals("a permission problem must not burn a token refresh", 0, harness.authRejections.get())
+        assertEquals(1, harness.sockets.size)
+    }
+
+    @Test
+    fun acknowledgement_reArmsTheRefreshHook() {
+        val harness = Harness()
+        harness.subscribe("c1")
+        awaitUntil(what = "socket 1") { harness.sockets.size == 1 }
+        harness.open(0)
+        harness.listeners[0].onClosed(harness.sockets[0], 4401, "UNAUTHORIZED")
+        awaitUntil(what = "first refresh") { harness.authRejections.get() == 1 }
+
+        harness.runtime.onIdentityChanged(fromAuthRefresh = true)
+        awaitUntil(what = "socket 2") { harness.sockets.size == 2 }
+        harness.open(1)
+        // The server accepts the refreshed token for real work…
+        harness.ack("in_app_chat:conversation:c1", 1)
+        awaitUntil(what = "ack processed") { harness.established.size == 1 }
+
+        // …so a LATER 4401 (ordinary expiry) earns a fresh refresh cycle.
+        harness.listeners[1].onClosed(harness.sockets[1], 4401, "UNAUTHORIZED")
+        awaitUntil(what = "second refresh") { harness.authRejections.get() == 2 }
+    }
+
+    @Test
+    fun unacknowledgedSubscription_timesOutToSubscribeError_ackPreventsIt() {
+        val harness = Harness(ackTimeoutMs = 150)
+        harness.subscribe("c1")
+        awaitUntil(what = "socket created") { harness.sockets.size == 1 }
+        harness.open(0)
+        awaitUntil(what = "subscribe error", timeoutMs = 2000) { harness.subscribeErrors.size == 1 }
+        assertTrue(harness.subscribeErrors[0] is com.dashx.android.DashXError.SubscriptionFailed)
+
+        // A second conversation whose ack arrives in time never errors.
+        harness.subscribe("c2")
+        awaitUntil(what = "SUBSCRIBE for c2") {
+            harness.sockets[0].sent.any { it.contains("in_app_chat:conversation:c2") }
+        }
+        harness.ack("in_app_chat:conversation:c2", 0)
+        Thread.sleep(400)
+        assertEquals("an acked channel must not time out", 1, harness.subscribeErrors.size)
+    }
+
+    @Test
+    fun reopenedChannel_onALiveSocket_getsAFreshAckDeadline() {
+        val harness = Harness(ackTimeoutMs = 150)
+        val first = harness.subscribe("c1")
+        harness.subscribe("c2") // keeps the socket alive across c1's close
+        awaitUntil(what = "socket created") { harness.sockets.size == 1 }
+        harness.open(0)
+        harness.ack("in_app_chat:conversation:c1", 0)
+        harness.ack("in_app_chat:conversation:c2", 0)
+        awaitUntil(what = "both acked") { harness.established.size == 2 }
+        Thread.sleep(300)
+        assertEquals("acked channels never time out", 0, harness.subscribeErrors.size)
+
+        first.unsubscribe()
+        awaitUntil(what = "UNSUBSCRIBE sent") {
+            harness.sockets[0].sent.any { it.contains("UNSUBSCRIBE") && it.contains("conversation:c1") }
+        }
+        assertEquals("socket stays alive for c2", null, harness.sockets[0].closedCode)
+
+        // Reopen c1 on the SAME connection; the server never acks this new attempt. The earlier
+        // acknowledgement must not satisfy the new subscription's deadline.
+        harness.subscribe("c1")
+        awaitUntil(what = "fresh deadline fires", timeoutMs = 2000) { harness.subscribeErrors.size == 1 }
+        assertTrue(harness.subscribeErrors[0] is com.dashx.android.DashXError.SubscriptionFailed)
+        Thread.sleep(300)
+        assertEquals("exactly one deadline for the new attempt", 1, harness.subscribeErrors.size)
     }
 
     @Test

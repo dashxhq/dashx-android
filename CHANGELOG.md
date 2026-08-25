@@ -20,13 +20,18 @@ host's backend creates the conversation and returns the
     `loadPreviousPage()`, `setVisible(Boolean)` (drives read-marking and push
     suppression), `setOnTerminated(...)`, and idempotent `close()`. Leases on
     the same `(identity, conversation)` share one subscription and message
-    list; shared state tears down when the last lease closes. Missed messages
-    are reconciled after every reconnect, live frames are merged by server id,
-    and read-marking is debounced.
+    list; shared state tears down when the last lease closes. After a
+    reconnect, missed messages are fetched forward from the newest known
+    message (`afterMessageId` cursor), preserving already-loaded history; live
+    frames are merged by server id, and read-marking is debounced. A
+    subscription that is never acknowledged (invalid or unauthorized
+    conversation) surfaces as `ConversationState.Error(SubscriptionFailed)`
+    instead of loading forever.
   - `fetchConversations` / `fetchConversation` / `summarizeConversations` /
     `summarizeUnread` / `resolveConversation` for conversation lists and
-    counts. `summarizeUnread` is near-real-time: refreshed on foreground, push
-    receipt, subscribed-conversation frames, and successful mark-read.
+    counts. `summarizeUnread` is an on-demand query — the SDK does not push
+    updates to it; re-query on the triggers the host cares about (foreground,
+    push receipt, mark-read).
 - **Raw chat operations** as `DashX` extensions, for hosts that skip the
   managed lease: `sendInAppChatMessage`, `fetchInAppChatMessages`,
   `summarizeInAppChatMessages`, `fetchInAppChatConversations`,
@@ -36,11 +41,16 @@ host's backend creates the conversation and returns the
 - **Managed realtime connection.** One WebSocket for the whole SDK, owned by an
   internal single-writer actor. It connects only when something is subscribed,
   the app is foregrounded, and an identity token exists; disconnects on
-  background; reconnects with exponential backoff + jitter (1s–30s). Observe it
-  via `DashX.connectionState` (`StateFlow<ConnectionState>`: `Idle` /
-  `Connecting` / `Connected` / `Suspended` / `AuthenticationFailed`) or
-  `addConnectionStateListener` / `removeConnectionStateListener`. `configure()`
-  gains an optional `realtimeBaseURI`.
+  background; reconnects with exponential backoff + jitter (1s–30s). A terminal
+  close in the 4400 band stops reconnecting; 4401 specifically triggers one
+  token refresh through the registered provider — a refreshed token that is
+  rejected again stays `AuthenticationFailed` rather than looping, and 4403
+  never burns a refresh. Observe it via `DashX.connectionState`
+  (`StateFlow<ConnectionState>`: `Idle` / `Connecting` / `Connected` /
+  `Suspended` / `AuthenticationFailed`) or `addConnectionStateListener` /
+  `removeConnectionStateListener`. The realtime URI is overridable via
+  `DashX.setRealtimeBaseUri` — a separate setter, so `configure()` keeps its
+  pre-1.4 JVM signature.
 - **`DashX.setIdentityTokenProvider(uid, DashXTokenProvider)`** — on-demand
   identity-token loading. The SDK calls the provider when it needs a token
   (with `forceRefresh = true` after the server rejects the current one),
@@ -62,6 +72,8 @@ host's backend creates the conversation and returns the
 - **`DashXError.SessionEnded`** — delivered to a lease's `setOnTerminated`
   callback (and its terminal `Error` state) when the session ends underneath
   it: identity switch, `reset()`, or `shutdown()`.
+- **`DashXError.SubscriptionFailed`** — a realtime channel subscription that
+  was never acknowledged within its deadline.
 
 ### Changed
 
@@ -72,7 +84,10 @@ host's backend creates the conversation and returns the
   to every request.
 - **Auth retry.** A request rejected before execution with `UNAUTHORIZED` (and
   no data) is retried once after refreshing the identity token through the
-  registered provider. `FORBIDDEN` and partial-data responses never retry.
+  registered provider. `FORBIDDEN` and partial-data responses never retry, and
+  the retry is generation-guarded: if the identity switched while the refresh
+  ran, the original rejection is returned rather than resending the old
+  request under the new identity's token.
 - **`setIdentity` / `reset()` / `shutdown()` now manage the chat and realtime
   subsystems.** Switching to a different uid or calling `reset()` ends open
   chat sessions (leases receive `SessionEnded`) and recycles the realtime

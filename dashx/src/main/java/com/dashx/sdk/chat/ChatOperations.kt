@@ -55,14 +55,17 @@ fun DashX.Companion.fetchInAppChatMessages(
     conversationId: String,
     limit: Int? = null,
     page: Int? = null,
+    afterMessageId: String? = null,
     onSuccess: (result: List<FetchInAppChatMessagesQuery.FetchInAppChatMessage>) -> Unit,
     onError: (error: DashXError) -> Unit
-) { fetchInAppChatMessagesJob(conversationId, limit, page, onSuccess, onError) }
+) { fetchInAppChatMessagesJob(conversationId, limit, page, afterMessageId, onSuccess, onError) }
 
 internal fun DashX.Companion.fetchInAppChatMessagesJob(
     conversationId: String,
     limit: Int? = null,
     page: Int? = null,
+    /** Cursor mode: rows strictly after this message. The backend rejects a non-null [page] with it. */
+    afterMessageId: String? = null,
     onSuccess: (result: List<FetchInAppChatMessagesQuery.FetchInAppChatMessage>) -> Unit,
     onError: (error: DashXError) -> Unit
 ): Job {
@@ -70,7 +73,8 @@ internal fun DashX.Companion.fetchInAppChatMessagesJob(
     val query = FetchInAppChatMessagesQuery(
         conversationId = conversationId,
         limit = limit?.let { Optional.Present(it) } ?: Optional.Absent,
-        page = page?.let { Optional.Present(it) } ?: Optional.Absent
+        page = page?.let { Optional.Present(it) } ?: Optional.Absent,
+        afterMessageId = afterMessageId?.let { Optional.Present(it) } ?: Optional.Absent
     )
     return executeQuery(query, onError) { result ->
         onSuccess(result.data?.fetchInAppChatMessages ?: listOf())

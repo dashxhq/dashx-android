@@ -5,6 +5,7 @@ import com.dashx.android.DashXError
 import com.dashx.android.DashXLog
 import com.dashx.android.graphql.generated.FetchInAppChatConversationQuery
 import com.dashx.android.graphql.generated.FetchInAppChatConversationsQuery
+import com.dashx.android.graphql.generated.FetchInAppChatMessagesQuery
 import com.dashx.android.graphql.generated.ResolveInAppChatConversationMutation
 import com.dashx.android.graphql.generated.SendInAppChatMessageMutation
 import com.dashx.android.realtime.DashXRealtimeMessage
@@ -61,8 +62,8 @@ class DashXChat internal constructor(val chatIdentityId: String) {
         onError: (DashXError) -> Unit
     ) = DashX.summarizeInAppChatConversations(chatIdentityId, statuses, properties, onSuccess, onError)
 
-    /** Near-real-time, not realtime: refreshed on foreground, push receipt, subscribed-conversation
-     * frames, and successful mark-read — not on unsubscribed conversations' activity. */
+    /** On-demand count — the SDK does not push updates to it. Re-query on the triggers the host
+     * cares about: foreground, push receipt, mark-read. */
     fun summarizeUnread(onSuccess: (Int) -> Unit, onError: (DashXError) -> Unit) =
         DashX.summarizeInAppChatUnread(chatIdentityId, onSuccess, onError)
 
@@ -149,14 +150,80 @@ internal object ChatCoordinator {
 }
 
 /**
- * Shared state for one `(identity, conversation)`: the realtime subscription, the reconciliation
- * buffer, the synchronized message list, and read marking. See the plan's §6 — first open and
- * rejected-state recovery both run the snapshot algorithm; reconnect currently rebuilds via the
- * same snapshot (the `afterMessageId` cursor replaces this once dashx-backend ships it).
+ * Operations one conversation session needs, seamed so the synchronizer is testable without a
+ * socket or GraphQL transport. The default delegates to DashX.
  */
-internal class ConversationSession(private val key: ChatSessionKey) {
+internal interface ChatSessionBackend {
+    fun subscribe(handle: SubscriberHandle): DashXRealtimeSubscription
+    suspend fun summarizeMessages(conversationId: String): Int
+    suspend fun fetchPage(conversationId: String, limit: Int, page: Int): List<ChatMessage>
+    suspend fun fetchAfter(conversationId: String, limit: Int, afterMessageId: String): List<ChatMessage>
+    fun markRead(
+        identityId: String,
+        conversationId: String,
+        lastMessageId: String,
+        onSuccess: (Boolean) -> Unit,
+        onError: (DashXError) -> Unit
+    )
+    fun setConversationVisible(conversationId: String, visible: Boolean)
+    fun dismissConversationNotifications(conversationId: String)
+}
+
+internal object DashXChatSessionBackend : ChatSessionBackend {
+    override fun subscribe(handle: SubscriberHandle): DashXRealtimeSubscription =
+        DashX.requireRealtimeRuntime().subscribe(handle)
+
+    override suspend fun summarizeMessages(conversationId: String): Int =
+        DashX.awaitOperation { ok, err -> DashX.summarizeInAppChatMessagesJob(conversationId, ok, err) }
+
+    override suspend fun fetchPage(conversationId: String, limit: Int, page: Int): List<ChatMessage> =
+        DashX.awaitOperation<List<FetchInAppChatMessagesQuery.FetchInAppChatMessage>> { ok, err ->
+            DashX.fetchInAppChatMessagesJob(conversationId, limit, page, null, ok, err)
+        }.map { ChatMessage.from(it) }
+
+    override suspend fun fetchAfter(conversationId: String, limit: Int, afterMessageId: String): List<ChatMessage> =
+        DashX.awaitOperation<List<FetchInAppChatMessagesQuery.FetchInAppChatMessage>> { ok, err ->
+            DashX.fetchInAppChatMessagesJob(conversationId, limit, null, afterMessageId, ok, err)
+        }.map { ChatMessage.from(it) }
+
+    override fun markRead(
+        identityId: String,
+        conversationId: String,
+        lastMessageId: String,
+        onSuccess: (Boolean) -> Unit,
+        onError: (DashXError) -> Unit
+    ) {
+        DashX.markInAppChatConversationReadJob(identityId, conversationId, lastMessageId, onSuccess, onError)
+    }
+
+    override fun setConversationVisible(conversationId: String, visible: Boolean) {
+        DashX.pushRuntime.setConversationVisible(conversationId, visible)
+    }
+
+    override fun dismissConversationNotifications(conversationId: String) {
+        com.dashx.android.push.DashXPush.dismissConversation(conversationId)
+    }
+}
+
+/**
+ * Shared state for one `(identity, conversation)`: the realtime subscription, the reconciliation
+ * buffer, the synchronized message list, and read marking. See the plan's §6 — first open runs the
+ * history snapshot; reconnect fetches forward from the high-water mark with the `afterMessageId`
+ * cursor, preserving already-loaded history.
+ *
+ * Every synchronizer mutation runs on [syncLane], a single-parallelism dispatcher: frames, sync
+ * cycles, paging, and read marking are serialized, so no two coroutines ever interleave writes to
+ * [messages]. Suspension points inside a sync cycle still let queued frame merges run — that is
+ * what the reconciliation buffer absorbs — but every non-suspending stretch is atomic.
+ */
+internal class ConversationSession(
+    private val key: ChatSessionKey,
+    private val backend: ChatSessionBackend = DashXChatSessionBackend
+) {
 
     private val scope = CoroutineScope(SupervisorJob(DashX.chatSessionJob) + Dispatchers.IO)
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    private val syncLane = Dispatchers.IO.limitedParallelism(1)
 
     private val mutableState = MutableStateFlow<ConversationState>(ConversationState.Loading)
     val state: StateFlow<ConversationState> get() = mutableState
@@ -166,21 +233,26 @@ internal class ConversationSession(private val key: ChatSessionKey) {
     private var ended = false
     private val lock = Any()
 
-    // ---- synchronizer state (mutated only inside syncMutex-protected coroutines) ----
+    // ---- synchronizer state: confined to [syncLane] ----
     private val buffer = ArrayList<ChatMessage>()
     private var buffering = true
     private var bufferOverflowed = false
     private var messages: List<ChatMessage> = emptyList()
     private var snapshotDone = false
     private var syncing = false
+    private var resyncPending = false
+    private var rebuildUsed = false
     private var oldestFetchedPage = Int.MAX_VALUE
+    /** High-water mark: id of the greatest merged message under [ChatMessage.ORDER]. The reconnect
+     * cursor. Merges only add, so it never moves backward; only a rebuild replaces it. */
+    private var lastKnownMessageId: String? = null
 
-    private var subscription: DashXRealtimeSubscription? = null
-
-    // ---- read marking (validated tracker mechanics, session-internal) ----
+    // ---- read marking ----
     private var markedMessageId: String? = null
     private val markInFlight = AtomicBoolean(false)
     private var pendingMarkJob: Job? = null
+
+    private var subscription: DashXRealtimeSubscription? = null
 
     fun newLease(): DashXConversationLease? {
         synchronized(lock) {
@@ -191,102 +263,180 @@ internal class ConversationSession(private val key: ChatSessionKey) {
                 val handle = SubscriberHandle(
                     channelName = RealtimeRuntime.chatChannelName(key.conversationId),
                     onFrame = { frame -> onFrame(frame) },
-                    onEstablished = { isResubscribe -> onEstablished(isResubscribe) }
+                    onEstablished = { isResubscribe -> onEstablished(isResubscribe) },
+                    onSubscribeError = { error -> onSubscribeError(error) }
                 )
-                subscription = DashX.requireRealtimeRuntime().subscribe(handle)
+                subscription = backend.subscribe(handle)
             }
             return lease
         }
     }
 
-    // ---- realtime ingress (actor thread) ----
+    // ---- realtime ingress (actor thread → lane) ----
 
     private fun onFrame(frame: DashXRealtimeMessage) {
         val message = (frame as? DashXRealtimeMessage.InAppChatMessage)?.message ?: return
         val chatMessage = ChatMessage.from(message)
-        scope.launch { mergeLive(chatMessage) }
+        scope.launch(syncLane) { mergeLive(chatMessage) }
     }
 
     private fun onEstablished(isResubscribe: Boolean) {
-        scope.launch {
-            if (!snapshotDone) {
-                snapshotAndReplace()
-            } else if (isResubscribe) {
-                // Interim reconnect recovery: rebuild on a candidate and atomically replace. The
-                // afterMessageId cursor loop replaces this once the backend argument ships.
-                synchronized(lock) { buffering = true; buffer.clear(); bufferOverflowed = false }
-                snapshotAndReplace()
+        DashXLog.d(TAG, "Channel acknowledged for ${key.conversationId} (isResubscribe=$isResubscribe)")
+        scope.launch(syncLane) {
+            if (syncing) {
+                // A reconnect acknowledged mid-cycle: the running fetch may predate the gap, so
+                // re-run once this cycle completes rather than assuming it covered everything.
+                resyncPending = true
+                return@launch
             }
+            runSync()
         }
     }
 
-    // ---- synchronizer ----
-
-    private suspend fun mergeLive(message: ChatMessage) {
-        val shouldBuffer = synchronized(lock) {
-            if (buffering) {
-                if (buffer.size >= BUFFER_LIMIT) bufferOverflowed = true else buffer.add(message)
-                true
-            } else false
+    /** The subscription was rejected or never acknowledged (invalid or unauthorized conversation).
+     * Only a conversation with nothing to show surfaces it; an established snapshot stays on screen
+     * and a late acknowledgement still reconciles. */
+    private fun onSubscribeError(error: DashXError) {
+        scope.launch(syncLane) {
+            if (snapshotDone) {
+                DashXLog.e(TAG, "Subscription problem on ${key.conversationId} after sync: ${error.message}")
+                return@launch
+            }
+            publishState(ConversationState.Error(error))
         }
-        if (shouldBuffer) return
+    }
 
-        val merged = mergeInto(messages, listOf(message))
-        messages = merged
-        emitReady(merged)
+    // ---- synchronizer (all lane-confined) ----
+
+    private fun mergeLive(message: ChatMessage) {
+        if (buffering) {
+            if (buffer.size >= BUFFER_LIMIT) bufferOverflowed = true else buffer.add(message)
+            return
+        }
+        applyMerge(listOf(message))
         maybeMarkRead()
     }
 
-    /** First open, and (interim) reconnect: candidate snapshot, one merge, one atomic emission. */
-    private suspend fun snapshotAndReplace() {
-        synchronized(lock) {
-            if (syncing) return
-            syncing = true
-        }
+    private suspend fun runSync() {
+        syncing = true
+        rebuildUsed = false
         try {
-            while (true) {
-                val count = DashX.awaitOperation<Int> { ok, err ->
-                    DashX.summarizeInAppChatMessagesJob(key.conversationId, ok, err)
-                }
-                val lastPage = maxOf(1, (count + PAGE_SIZE - 1) / PAGE_SIZE)
-                val rows = DashX.awaitOperation<List<com.dashx.android.graphql.generated.FetchInAppChatMessagesQuery.FetchInAppChatMessage>> { ok, err ->
-                    DashX.fetchInAppChatMessagesJob(key.conversationId, PAGE_SIZE, lastPage, ok, err)
-                }
-                val candidate = rows.map { ChatMessage.from(it) }
-
-                val (bufferSnapshot, overflowed) = synchronized(lock) {
-                    val copy = buffer.toList()
-                    val over = bufferOverflowed
-                    if (!over) {
-                        buffer.clear()
-                        buffering = false
-                    } else {
-                        // Overflow: discard the candidate and repeat with a fresh buffer snapshot.
-                        buffer.clear()
-                        bufferOverflowed = false
-                    }
-                    copy to over
-                }
-                if (overflowed) continue
-
-                val replacement = mergeInto(candidate.sortedWith(ChatMessage.ORDER), bufferSnapshot)
-                messages = replacement
-                snapshotDone = true
-                oldestFetchedPage = lastPage
-                emitReady(replacement)
-                maybeMarkRead()
-                return
-            }
+            do {
+                resyncPending = false
+                // No valid cursor (first open, or nothing merged yet) → history snapshot;
+                // otherwise fetch forward from the high-water mark.
+                if (!snapshotDone || lastKnownMessageId == null) snapshotAndReplace() else cursorReconcile()
+            } while (resyncPending)
         } catch (t: Throwable) {
             if (t is kotlinx.coroutines.CancellationException) throw t
-            synchronized(lock) { buffering = false }
             val error = (t as? com.dashx.android.DashXException)?.error
                 ?: DashXError.NetworkError(t.message ?: "chat synchronization failed")
-            mutableState.value = ConversationState.Error(error)
-            notifyListeners(ConversationState.Error(error))
+            if (snapshotDone && error is DashXError.NetworkError) {
+                // Keep the displayed snapshot on a transient failure; the next reconnect retries.
+                DashXLog.e(TAG, "Reconciliation failed for ${key.conversationId}: ${error.message}")
+            } else {
+                publishState(ConversationState.Error(error))
+            }
+            // Buffering stays on: a partial live list must not follow the Error, and the next
+            // acknowledged sync starts from a fresh buffer anyway.
         } finally {
-            synchronized(lock) { syncing = false }
+            syncing = false
         }
+    }
+
+    /** First open, no-cursor recovery, and rejected-cursor rebuild: candidate snapshot, one merge,
+     * one atomic replacement, one emission. */
+    private suspend fun snapshotAndReplace() {
+        while (true) {
+            startBuffering()
+            val count = backend.summarizeMessages(key.conversationId)
+            val lastPage = maxOf(1, (count + PAGE_SIZE - 1) / PAGE_SIZE)
+            val candidate = backend.fetchPage(key.conversationId, PAGE_SIZE, lastPage)
+                .sortedWith(ChatMessage.ORDER)
+            val (bufferSnapshot, overflowed) = drainBufferAndResumeLive()
+            if (overflowed) continue // discard the candidate; repeat with a fresh buffer
+            val replacement = mergeInto(candidate, bufferSnapshot)
+            messages = replacement
+            snapshotDone = true
+            oldestFetchedPage = lastPage
+            lastKnownMessageId = replacement.lastOrNull()?.id
+            emitReady(replacement)
+            maybeMarkRead()
+            return
+        }
+    }
+
+    /** Reconnect: fetch strictly after the high-water mark, page forward until a short page, then
+     * merge the buffered frames. Never touches already-loaded history. */
+    private suspend fun cursorReconcile() {
+        var retryAttempt = 0
+        while (true) {
+            startBuffering()
+            var cursor = lastKnownMessageId ?: run { snapshotAndReplace(); return }
+            val fetched = ArrayList<ChatMessage>()
+            try {
+                while (true) {
+                    val rows = backend.fetchAfter(key.conversationId, PAGE_SIZE, cursor)
+                    if (rows.isEmpty()) break
+                    fetched += rows
+                    cursor = rows.last().id // ascending on (turnSeq, createdAt, id)
+                    if (rows.size < PAGE_SIZE) break
+                }
+            } catch (t: Throwable) {
+                if (t is kotlinx.coroutines.CancellationException) throw t
+                val error = (t as? com.dashx.android.DashXException)?.error
+                if (error is DashXError.GraphQLError) {
+                    if (rebuildUsed) throw t // a rebuilt mark rejected again is terminal, not a loop
+                    // The server rejected the retained cursor (deleted message). Rebuild — never
+                    // merge, or the deleted id survives as the mark and rejects forever.
+                    rebuildUsed = true
+                    snapshotAndReplace()
+                    return
+                }
+                // Incomplete walk: merging the partial fetch or the buffer would advance the
+                // high-water mark past the unfetched gap and skip those messages forever. Discard
+                // both, keep the snapshot and the stable cursor, and retry the whole walk — every
+                // discarded message is still on the server, after the unchanged mark.
+                retryAttempt += 1
+                DashXLog.e(TAG, "Cursor walk failed for ${key.conversationId} " +
+                    "(attempt $retryAttempt): ${t.message}")
+                delay(cursorRetryDelay(retryAttempt))
+                continue
+            }
+            val (bufferSnapshot, overflowed) = drainBufferAndResumeLive()
+            if (overflowed) continue // restart from the unchanged high-water mark
+            applyMerge(fetched + bufferSnapshot)
+            maybeMarkRead()
+            return
+        }
+    }
+
+    private fun cursorRetryDelay(attempt: Int): Long =
+        (CURSOR_RETRY_BASE_MS shl (attempt - 1).coerceAtMost(5)).coerceAtMost(CURSOR_RETRY_MAX_MS)
+
+    private fun startBuffering() {
+        buffering = true
+        buffer.clear()
+        bufferOverflowed = false
+    }
+
+    private fun drainBufferAndResumeLive(): Pair<List<ChatMessage>, Boolean> {
+        val copy = buffer.toList()
+        val overflowed = bufferOverflowed
+        buffer.clear()
+        bufferOverflowed = false
+        if (!overflowed) buffering = false
+        return copy to overflowed
+    }
+
+    /** Merges into the current list; emits only when something actually changed. */
+    private fun applyMerge(additions: List<ChatMessage>) {
+        if (additions.isEmpty()) return
+        val merged = mergeInto(messages, additions)
+        if (merged == messages) return // duplicates only → no state churn
+        messages = merged
+        lastKnownMessageId = merged.lastOrNull()?.id
+        emitReady(merged)
     }
 
     private fun mergeInto(base: List<ChatMessage>, additions: List<ChatMessage>): List<ChatMessage> {
@@ -298,9 +448,12 @@ internal class ConversationSession(private val key: ChatSessionKey) {
     }
 
     private fun emitReady(list: List<ChatMessage>) {
-        val ready = ConversationState.Ready(list)
-        mutableState.value = ready
-        notifyListeners(ready)
+        publishState(ConversationState.Ready(list))
+    }
+
+    private fun publishState(state: ConversationState) {
+        mutableState.value = state
+        notifyListeners(state)
     }
 
     private fun notifyListeners(state: ConversationState) {
@@ -310,18 +463,15 @@ internal class ConversationSession(private val key: ChatSessionKey) {
     }
 
     private fun loadPreviousPageInternal(onError: ((DashXError) -> Unit)?) {
-        scope.launch {
+        scope.launch(syncLane) {
             val page = oldestFetchedPage - 1
             if (!snapshotDone || page < 1) return@launch
             try {
-                val rows = DashX.awaitOperation<List<com.dashx.android.graphql.generated.FetchInAppChatMessagesQuery.FetchInAppChatMessage>> { ok, err ->
-                    DashX.fetchInAppChatMessagesJob(key.conversationId, PAGE_SIZE, page, ok, err)
-                }
+                val rows = backend.fetchPage(key.conversationId, PAGE_SIZE, page)
                 oldestFetchedPage = page
-                // Prepends older rows; the high-water mark (newest message) cannot move backward.
-                val merged = mergeInto(messages, rows.map { ChatMessage.from(it) })
-                messages = merged
-                emitReady(merged)
+                // Prepends older rows: the merge only adds, so the greatest element — the
+                // high-water mark — cannot move backward.
+                applyMerge(rows)
             } catch (t: Throwable) {
                 if (t is kotlinx.coroutines.CancellationException) throw t
                 val error = (t as? com.dashx.android.DashXException)?.error
@@ -331,7 +481,7 @@ internal class ConversationSession(private val key: ChatSessionKey) {
         }
     }
 
-    // ---- read marking ----
+    // ---- read marking (lane-confined; network callbacks hop back onto the lane) ----
 
     private fun anyLeaseVisible() = leases.any { it.visibleNow }
 
@@ -340,7 +490,7 @@ internal class ConversationSession(private val key: ChatSessionKey) {
         val newest = messages.lastOrNull()?.id ?: return
         if (newest == markedMessageId) return
         pendingMarkJob?.cancel()
-        pendingMarkJob = scope.launch {
+        pendingMarkJob = scope.launch(syncLane) {
             delay(MARK_DEBOUNCE_MS) // coalesce the burst a history load or rapid exchange produces
             markNow(newest)
         }
@@ -349,14 +499,16 @@ internal class ConversationSession(private val key: ChatSessionKey) {
     private fun markNow(messageId: String) {
         if (messageId == markedMessageId) return
         if (!markInFlight.compareAndSet(false, true)) return
-        DashX.markInAppChatConversationReadJob(
+        backend.markRead(
             identityId = key.chatIdentityId,
             conversationId = key.conversationId,
             lastMessageId = messageId,
             onSuccess = { success ->
-                markInFlight.set(false)
-                if (success) markedMessageId = messageId
-                maybeMarkRead() // a newer message may have rendered while this was in flight
+                scope.launch(syncLane) {
+                    markInFlight.set(false)
+                    if (success) markedMessageId = messageId
+                    maybeMarkRead() // a newer message may have rendered while this was in flight
+                }
             },
             onError = {
                 // Left unmarked on purpose: the next message retries, and the only cost of a missed
@@ -368,7 +520,7 @@ internal class ConversationSession(private val key: ChatSessionKey) {
     }
 
     fun onAppForegrounded() {
-        scope.launch { maybeMarkRead() }
+        scope.launch(syncLane) { maybeMarkRead() }
     }
 
     // ---- lifecycle ----
@@ -383,7 +535,7 @@ internal class ConversationSession(private val key: ChatSessionKey) {
         }
         subscription?.unsubscribe()
         subscription = null
-        DashX.pushRuntime.setConversationVisible(key.conversationId, false)
+        backend.setConversationVisible(key.conversationId, false)
         val terminal = ConversationState.Error(DashXError.SessionEnded())
         mutableState.value = terminal
         notifyListeners(terminal)
@@ -400,7 +552,7 @@ internal class ConversationSession(private val key: ChatSessionKey) {
             if (!leases.remove(lease)) return
             if (lease.visibleNow) {
                 lease.visibleNow = false
-                if (!anyLeaseVisible()) DashX.pushRuntime.setConversationVisible(key.conversationId, false)
+                if (!anyLeaseVisible()) backend.setConversationVisible(key.conversationId, false)
             }
             teardown = leases.isEmpty() && !ended
             if (teardown) ended = true
@@ -452,10 +604,10 @@ internal class ConversationSession(private val key: ChatSessionKey) {
             if (closed.get()) return
             this.visibleNow = visible
             val any = anyLeaseVisible()
-            DashX.pushRuntime.setConversationVisible(key.conversationId, any)
+            backend.setConversationVisible(key.conversationId, any)
             if (visible) {
-                com.dashx.android.push.DashXPush.dismissConversation(key.conversationId)
-                scope.launch { maybeMarkRead() }
+                backend.dismissConversationNotifications(key.conversationId)
+                scope.launch(syncLane) { maybeMarkRead() }
             }
         }
 
@@ -470,5 +622,7 @@ internal class ConversationSession(private val key: ChatSessionKey) {
         internal const val PAGE_SIZE = 50
         private const val BUFFER_LIMIT = 500
         private const val MARK_DEBOUNCE_MS = 400L
+        private const val CURSOR_RETRY_BASE_MS = 1_000L
+        private const val CURSOR_RETRY_MAX_MS = 30_000L
     }
 }

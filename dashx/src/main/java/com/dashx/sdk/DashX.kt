@@ -92,7 +92,10 @@ class DashX {
             val uid: String?,
             val anonymousUid: String?,
             val identityToken: String?,
-            val sessionGeneration: Long
+            val sessionGeneration: Long,
+            /** Bumped by every explicit token write (setIdentity): a provider load requested under
+             * an older epoch is stale and must not overwrite the newer explicit token. */
+            val tokenEpoch: Long = 0
         )
 
         internal val account = AtomicReference(AccountSnapshot(null, null, null, 0L))
@@ -317,10 +320,17 @@ class DashX {
             publicKey: String,
             baseURI: String? = null,
             targetEnvironment: String? = null,
-            callbackDispatcher: CoroutineDispatcher? = null,
-            realtimeBaseURI: String? = null
+            callbackDispatcher: CoroutineDispatcher? = null
         ) {
-            init(context, publicKey, baseURI, targetEnvironment, callbackDispatcher, realtimeBaseURI)
+            init(context, publicKey, baseURI, targetEnvironment, callbackDispatcher)
+        }
+
+        /**
+         * Overrides the realtime WebSocket base URI (e.g. staging). A separate setter, not a
+         * [configure] parameter, so the pre-1.4 JVM signature of [configure] stays intact.
+         */
+        fun setRealtimeBaseUri(baseUri: String?) {
+            realtimeBaseURI = baseUri
         }
 
         /**
@@ -336,11 +346,9 @@ class DashX {
             publicKey: String,
             baseURI: String? = null,
             targetEnvironment: String? = null,
-            callbackDispatcher: CoroutineDispatcher? = null,
-            realtimeBaseURI: String? = null
+            callbackDispatcher: CoroutineDispatcher? = null
         ) {
             this.baseURI = baseURI
-            this.realtimeBaseURI = realtimeBaseURI
             this.publicKey = publicKey
             this.targetEnvironment = targetEnvironment
             this.context = context
@@ -426,7 +434,7 @@ class DashX {
             }.apply()
         }
 
-        /** Recreated when identity/token changes (setIdentity, init). */
+        /** Built once per init(); the HTTP interceptor reads the identity token per request. */
         @Volatile private var apolloClient = createApolloClient()
 
         private fun createGraphqlClient() {
@@ -687,11 +695,21 @@ class DashX {
             if (isActivation || isRefresh) {
                 // T0 / T1: the session generation is unchanged — there is no prior authenticated
                 // work to invalidate (T0) or it must survive (T1).
-                account.updateAndGet { it.copy(uid = uid, identityToken = token) }
+                account.updateAndGet {
+                    it.copy(uid = uid, identityToken = token, tokenEpoch = it.tokenEpoch + 1)
+                }
+                // The explicit token supersedes any in-flight provider load: awaiting retries get
+                // this token, and the load's own result is stale under the new epoch.
+                tokenLoadInFlight.getAndSet(null)?.complete(token)
             } else {
                 endIdentitySession() // T2
                 account.updateAndGet {
-                    it.copy(uid = uid, identityToken = token, sessionGeneration = it.sessionGeneration + 1)
+                    it.copy(
+                        uid = uid,
+                        identityToken = token,
+                        sessionGeneration = it.sessionGeneration + 1,
+                        tokenEpoch = it.tokenEpoch + 1
+                    )
                 }
             }
 
@@ -699,6 +717,7 @@ class DashX {
             realtimeRuntime?.onIdentityChanged() ?: run {
                 // T0 with waiting leases and no runtime yet: the coordinator connects on demand.
                 com.dashx.android.chat.ChatCoordinator.onIdentityAvailable()
+                publishDirect(ConnectionState.Idle) // §8: no runtime → Idle; clears a stale failure
             }
         }
 
@@ -713,11 +732,20 @@ class DashX {
                     boundProvider = BoundProvider(uid, provider)
                     account.updateAndGet { it.copy(uid = uid, identityToken = null) }
                     saveToStorage()
+                    publishDirect(ConnectionState.Connecting) // §5 rule 1: loading → Connecting
                     requestTokenLoad(forceRefresh = false)
                 }
                 current.uid == uid -> { // attach/replace for the current uid — not a transition
                     boundProvider = BoundProvider(uid, provider)
-                    if (current.identityToken == null) requestTokenLoad(forceRefresh = false)
+                    // A replaced provider invalidates its predecessor's in-flight load; the next
+                    // load below (or a later rejection) goes to the new provider.
+                    tokenLoadInFlight.getAndSet(null)?.complete(null)
+                    val authFailed = connectionState.value is ConnectionState.AuthenticationFailed
+                    if (current.identityToken == null || authFailed) {
+                        // A cached token under AuthenticationFailed IS the rejected token.
+                        publishDirect(ConnectionState.Connecting)
+                        requestTokenLoad(forceRefresh = authFailed && current.identityToken != null)
+                    }
                 }
                 else -> { // T2 — switch
                     endIdentitySession()
@@ -726,6 +754,7 @@ class DashX {
                         it.copy(uid = uid, identityToken = null, sessionGeneration = it.sessionGeneration + 1)
                     }
                     saveToStorage()
+                    publishDirect(ConnectionState.Connecting) // §5 rule 1: loading → Connecting
                     requestTokenLoad(forceRefresh = false)
                 }
             }
@@ -769,47 +798,64 @@ class DashX {
             forceRefresh: Boolean,
             result: CompletableDeferred<String?>
         ) {
-            val generationAtRequest = account.get().sessionGeneration
+            val requestSnapshot = account.get()
             val accepted = AtomicBoolean(false)
 
-            coroutineScope.launch {
-                val raw = CompletableDeferred<String?>()
+            val job = coroutineScope.launch {
+                var failureCause: Throwable? = null
                 val token = try {
                     withTimeout(TOKEN_LOAD_TIMEOUT_MS) {
+                        val raw = CompletableDeferred<String?>()
                         bound.provider.loadToken(forceRefresh, object : DashXTokenCallback {
                             override fun onToken(token: String) {
                                 if (accepted.compareAndSet(false, true)) raw.complete(token)
                             }
                             override fun onUnavailable(cause: Throwable?) {
-                                if (accepted.compareAndSet(false, true)) raw.complete(null)
+                                if (accepted.compareAndSet(false, true)) {
+                                    failureCause = cause
+                                    raw.complete(null)
+                                }
                             }
                         })
                         raw.await()
                     }
                 } catch (t: TimeoutCancellationException) {
                     accepted.set(true)
+                    failureCause = t
+                    null
+                } catch (t: CancellationException) {
+                    throw t // scope teardown; the completion handler below still cleans up
+                } catch (t: Throwable) { // a provider that throws instead of calling back
+                    accepted.set(true)
+                    failureCause = t
+                    DashXLog.e(tag, "Token provider threw: ${t.message}")
                     null
                 }
 
-                try {
-                    val current = account.get()
-                    val stale = current.sessionGeneration != generationAtRequest ||
-                        boundProvider?.uid != bound.uid
+                val current = account.get()
+                val stale = current.sessionGeneration != requestSnapshot.sessionGeneration ||
+                    current.tokenEpoch != requestSnapshot.tokenEpoch ||
+                    boundProvider !== bound
 
-                    if (!stale && token != null) {
-                        account.updateAndGet { it.copy(identityToken = token) } // T1: generation unchanged
-                        saveToStorage()
-                        realtimeRuntime?.onIdentityChanged()
-                            ?: com.dashx.android.chat.ChatCoordinator.onIdentityAvailable()
-                        result.complete(token)
-                    } else {
-                        if (!stale) publishAuthFailed(null)
-                        result.complete(null)
+                if (!stale && token != null) {
+                    account.updateAndGet { it.copy(identityToken = token) } // T1: generation unchanged
+                    saveToStorage()
+                    realtimeRuntime?.onIdentityChanged(fromAuthRefresh = true) ?: run {
+                        com.dashx.android.chat.ChatCoordinator.onIdentityAvailable()
+                        publishDirect(ConnectionState.Idle) // §8: no runtime → Idle after recovery
                     }
-                } finally {
-                    tokenLoadInFlight.compareAndSet(result, null)
-                    result.complete(null) // no-op unless an earlier path failed to complete
+                    result.complete(token)
+                } else {
+                    if (!stale) publishAuthFailed(failureCause)
+                    result.complete(null)
                 }
+            }
+
+            // Runs on EVERY completion — normal, provider throw, scope cancellation, even a scope
+            // already dead when launch was called — so the single-flight slot can never leak.
+            job.invokeOnCompletion {
+                tokenLoadInFlight.compareAndSet(result, null)
+                result.complete(null) // no-op unless an earlier path failed to complete
             }
         }
 
@@ -826,14 +872,23 @@ class DashX {
             return deferred.await() != null
         }
 
-        private fun publishAuthFailed(cause: Throwable?) {
-            mutableConnectionState.value = ConnectionState.AuthenticationFailed(cause)
+        /** Direct publish for states DashX itself owns (no runtime yet, or auth failures). */
+        private fun publishDirect(state: ConnectionState) {
+            if (mutableConnectionState.value == state) return
+            mutableConnectionState.value = state
             connectionStateListeners.forEach { l ->
                 coroutineScope.launch(callbackDispatcher) {
-                    runCatching { l.onConnectionStateChanged(ConnectionState.AuthenticationFailed(cause)) }
+                    runCatching { l.onConnectionStateChanged(state) }
                 }
             }
         }
+
+        private fun publishAuthFailed(cause: Throwable?) {
+            publishDirect(ConnectionState.AuthenticationFailed(cause))
+        }
+
+        /** Era stamp for the GraphQL auth retry: never resend an old-era request with a new-era token. */
+        internal fun currentSessionGeneration(): Long = account.get().sessionGeneration
 
         /** A terminal 44xx close: ask the bound provider for a fresh token, once. */
         private fun onRealtimeAuthRejected() {
