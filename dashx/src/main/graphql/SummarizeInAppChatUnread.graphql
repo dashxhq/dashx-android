@@ -1,0 +1,7 @@
+# Global visitor-inbound unread across every conversation the visitor owns for
+# this chat identity. A different valid chat identity yields 0, not an error.
+query SummarizeInAppChatUnread($identityId: UUID!) {
+  summarizeInAppChatUnread(input: { identityId: $identityId }) {
+    count
+  }
+}

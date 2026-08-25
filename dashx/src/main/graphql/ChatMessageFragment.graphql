@@ -1,0 +1,12 @@
+fragment ChatMessageFragment on Message {
+  id
+  conversationId
+  renderedContent
+  # Stable per send attempt — reconcile optimistic rows against this, not `id`.
+  externalUid
+  senderId
+  # `USER` for the visitor's own message; anything else is an agent or AI reply.
+  aiRole
+  sentAt
+  createdAt
+}

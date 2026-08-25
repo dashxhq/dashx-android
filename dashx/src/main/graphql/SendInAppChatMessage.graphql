@@ -1,0 +1,17 @@
+mutation SendInAppChatMessage(
+  $conversationId: UUID!
+  $identityId: UUID!
+  $content: JSON!
+  $clientMessageId: String!
+) {
+  sendInAppChatMessage(
+    input: {
+      conversationId: $conversationId
+      identityId: $identityId
+      content: $content
+      clientMessageId: $clientMessageId
+    }
+  ) {
+    ...ChatMessageFragment
+  }
+}

@@ -57,6 +57,9 @@ dependencies {
     // Coroutines
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1'
 
+    // Process-level foreground/background for the realtime socket lifecycle.
+    implementation 'androidx.lifecycle:lifecycle-process:2.8.7'
+
     compileOnly platform('com.google.firebase:firebase-bom:31.5.0')
     compileOnly 'com.google.firebase:firebase-messaging-ktx:23.1.2'
 
