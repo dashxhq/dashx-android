@@ -2,6 +2,87 @@
 
 All notable changes to `dashx-android` are documented in this file. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
+## [1.4.0] — Unreleased
+
+### Added
+
+In-app chat. The SDK now manages a realtime WebSocket connection and exposes a
+conversation API on top of it. Conversation **creation is server-only** — the
+host's backend creates the conversation and returns the
+`(conversationId, chatIdentityId)` pair everything below consumes.
+
+- **`DashX.chat(chatIdentityId)`** — identity-scoped chat surface.
+  - `openConversation(conversationId): DashXConversationLease` — a managed
+    handle exposing `state: StateFlow<ConversationState>` (`Loading` /
+    `Ready(messages)` / `Error`, plus listener add/remove for non-coroutine
+    hosts), `sendMessage(content)` (returns the client message id
+    *synchronously* — the idempotency key a host-triggered retry must reuse),
+    `loadPreviousPage()`, `setVisible(Boolean)` (drives read-marking and push
+    suppression), `setOnTerminated(...)`, and idempotent `close()`. Leases on
+    the same `(identity, conversation)` share one subscription and message
+    list; shared state tears down when the last lease closes. Missed messages
+    are reconciled after every reconnect, live frames are merged by server id,
+    and read-marking is debounced.
+  - `fetchConversations` / `fetchConversation` / `summarizeConversations` /
+    `summarizeUnread` / `resolveConversation` for conversation lists and
+    counts. `summarizeUnread` is near-real-time: refreshed on foreground, push
+    receipt, subscribed-conversation frames, and successful mark-read.
+- **Raw chat operations** as `DashX` extensions, for hosts that skip the
+  managed lease: `sendInAppChatMessage`, `fetchInAppChatMessages`,
+  `summarizeInAppChatMessages`, `fetchInAppChatConversations`,
+  `fetchInAppChatConversation`, `summarizeInAppChatConversations`,
+  `summarizeInAppChatUnread`, `markInAppChatConversationRead`,
+  `resolveInAppChatConversation`.
+- **Managed realtime connection.** One WebSocket for the whole SDK, owned by an
+  internal single-writer actor. It connects only when something is subscribed,
+  the app is foregrounded, and an identity token exists; disconnects on
+  background; reconnects with exponential backoff + jitter (1s–30s). Observe it
+  via `DashX.connectionState` (`StateFlow<ConnectionState>`: `Idle` /
+  `Connecting` / `Connected` / `Suspended` / `AuthenticationFailed`) or
+  `addConnectionStateListener` / `removeConnectionStateListener`. `configure()`
+  gains an optional `realtimeBaseURI`.
+- **`DashX.setIdentityTokenProvider(uid, DashXTokenProvider)`** — on-demand
+  identity-token loading. The SDK calls the provider when it needs a token
+  (with `forceRefresh = true` after the server rejects the current one),
+  single-flights concurrent loads, and times a hung provider out after 30s into
+  `AuthenticationFailed`. `DashXTokenProvider.suspending {}` and `.blocking {}`
+  adapters cover coroutine and Java hosts. Register it in
+  `Application.onCreate()`: the cached token survives process death, the
+  provider cannot.
+- **Composable push.** Hosts with their own `FirebaseMessagingService` can
+  delegate to the SDK instead of registering ours:
+  `DashXPush.isDashXMessage(remoteMessage)`,
+  `DashXPush.handleMessage(context, remoteMessage): Boolean` (`true` =
+  recognized and consumed — displayed or deliberately suppressed), and
+  `DashXPush.onNewToken(token)`; remove the built-in service with
+  `tools:node="remove"`. Chat pushes collapse per conversation in the tray, are
+  suppressed while that conversation is visible in a foregrounded app, and are
+  dismissed when it becomes visible. `DashX.setNotificationDisplayDecider` lets
+  a host veto display of any notification it renders in-app itself.
+- **`DashXError.SessionEnded`** — delivered to a lease's `setOnTerminated`
+  callback (and its terminal `Error` state) when the session ends underneath
+  it: identity switch, `reset()`, or `shutdown()`.
+
+### Changed
+
+- **GraphQL requests read the identity token per request.** Previously
+  `setIdentity` rebuilt the Apollo client to bake the token into headers, so a
+  request built just before an identity change could still carry the old token.
+  The client is now built once; an HTTP interceptor attaches the current token
+  to every request.
+- **Auth retry.** A request rejected before execution with `UNAUTHORIZED` (and
+  no data) is retried once after refreshing the identity token through the
+  registered provider. `FORBIDDEN` and partial-data responses never retry.
+- **`setIdentity` / `reset()` / `shutdown()` now manage the chat and realtime
+  subsystems.** Switching to a different uid or calling `reset()` ends open
+  chat sessions (leases receive `SessionEnded`) and recycles the realtime
+  connection under the new credentials. `shutdown()` releases the connection
+  and chat resources along with the rest of the SDK while — as before — leaving
+  the stored identity intact for the next `configure()`.
+- `DashXFirebaseMessagingService` delegates to `DashXPush`, so the built-in
+  service and a host's custom service share one notification pipeline. No
+  behavior change for hosts using the built-in service.
+
 ## [1.3.2] — 2026-08-17
 
 ### Fixed
