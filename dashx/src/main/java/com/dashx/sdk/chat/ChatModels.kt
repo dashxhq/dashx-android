@@ -44,10 +44,7 @@ data class ChatMessage(
                 externalUid = f.externalUid,
                 senderId = f.senderId?.toString(),
                 aiRole = f.aiRole,
-                // Backend prerequisite: core-api's GraphQL Message does not expose turn_seq yet.
-                // 0 keeps ordering consistent — fetched history precedes live frames, and pages
-                // arrive pre-ordered by the backend's (turn_seq, created_at, id).
-                turnSeq = 0L,
+                turnSeq = f.turnSeq?.toLong() ?: 0L,
                 renderedContent = f.renderedContent as? JsonObject ?: JsonObject(emptyMap()),
                 createdAt = f.createdAt.toString(),
                 sentAt = f.sentAt?.toString()

@@ -61,7 +61,8 @@ class DashXErrorTest {
             DashXError.GraphQLError("err"),
             DashXError.NetworkError("err"),
             DashXError.AssetError("err"),
-            DashXError.SessionEnded()
+            DashXError.SessionEnded(),
+            DashXError.SubscriptionFailed()
         )
 
         errors.forEach { error ->
@@ -72,6 +73,7 @@ class DashXErrorTest {
                 is DashXError.NetworkError -> assertNotNull(error.message)
                 is DashXError.AssetError -> assertNotNull(error.message)
                 is DashXError.SessionEnded -> assertNotNull(error.message)
+                is DashXError.SubscriptionFailed -> assertNotNull(error.message)
             }
         }
     }

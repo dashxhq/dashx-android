@@ -99,17 +99,19 @@ apollo {
 
         mapScalar("JSON", "kotlinx.serialization.json.JsonObject")
 
-        schemaFiles.from("$buildDir/graphql/schema.graphqls")
+        // Committed so builds are reproducible without staging introspection. Carries two
+        // hand-added fields anticipating unshipped dashx-backend changes (Message.turnSeq,
+        // FetchInAppChatMessagesInput.afterMessageId); when refreshing from the introspection
+        // download below, port them over until the backend ships.
+        schemaFiles.from("src/main/graphql/schema.graphqls")
 
+        // Manual refresh only (downloadServiceApolloSchemaFromIntrospection); lands in build/
+        // scratch, never over the committed schema above — diff and port changes by hand.
         introspection {
             endpointUrl = "https://api.dashx-staging.com/graphql"
             schemaFile = file("$buildDir/graphql/schema.graphqls")
         }
     }
-}
-
-tasks.named("preBuild") {
-    dependsOn("downloadServiceApolloSchemaFromIntrospection")
 }
 
 mavenPublishing {

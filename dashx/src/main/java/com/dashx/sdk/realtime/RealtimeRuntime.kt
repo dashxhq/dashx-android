@@ -1,5 +1,6 @@
 package com.dashx.android.realtime
 
+import com.dashx.android.DashXError
 import com.dashx.android.DashXLog
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
@@ -31,7 +32,10 @@ interface DashXRealtimeSubscription {
 internal class SubscriberHandle(
     val channelName: String,
     val onFrame: (DashXRealtimeMessage) -> Unit,
-    val onEstablished: (isResubscribe: Boolean) -> Unit
+    val onEstablished: (isResubscribe: Boolean) -> Unit,
+    /** The channel was not acknowledged within [RealtimeRuntime.ACK_TIMEOUT_MS] of being requested
+     * — invalid or unauthorized. The subscription stays registered; a later ack still recovers. */
+    val onSubscribeError: (DashXError) -> Unit = {}
 )
 
 internal sealed interface RealtimeCommand {
@@ -42,10 +46,13 @@ internal sealed interface RealtimeCommand {
     data class RetryConnect(val generation: Long) : RealtimeCommand
     data class Subscribe(val handle: SubscriberHandle) : RealtimeCommand
     data class Unsubscribe(val handle: SubscriberHandle) : RealtimeCommand
+    data class AckDeadline(val generation: Long, val channel: String, val attempt: Long) : RealtimeCommand
     data object Foregrounded : RealtimeCommand
     data object Backgrounded : RealtimeCommand
-    /** Identity installed, replaced, or refreshed: recycle the socket under the new credentials. */
-    data object IdentityChanged : RealtimeCommand
+    /** Identity installed, replaced, or refreshed: recycle the socket under the new credentials.
+     * [fromAuthRefresh] marks a token minted because the server rejected the previous one — it earns
+     * one reconnect attempt but does not re-arm the 4401 refresh hook. */
+    data class IdentityChanged(val fromAuthRefresh: Boolean) : RealtimeCommand
     data class EndSession(val ack: CompletableDeferred<Unit>) : RealtimeCommand
 }
 
@@ -62,13 +69,14 @@ internal class RealtimeRuntime(
     private val urlProvider: () -> String?,
     /** Every decoded frame, after channel routing — feeds unread refresh triggers. */
     private val onAnyFrame: (DashXRealtimeMessage) -> Unit,
-    /** A terminal 44xx close: DashX asks the bound token provider for a fresh token, once. */
+    /** A terminal 4401 close: DashX asks the bound token provider for a fresh token, once. */
     private val onAuthRejected: () -> Unit,
     /** State sink owned by DashX, which drops a detached runtime's late writes. */
     private val publishState: (ConnectionState) -> Unit,
     initialForeground: Boolean,
     /** Test seam; production uses the OkHttp client below. */
-    private val socketFactory: ((Request, WebSocketListener) -> WebSocket)? = null
+    private val socketFactory: ((Request, WebSocketListener) -> WebSocket)? = null,
+    private val ackTimeoutMs: Long = ACK_TIMEOUT_MS
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val commands = Channel<RealtimeCommand>(Channel.UNLIMITED)
@@ -85,7 +93,16 @@ internal class RealtimeRuntime(
     private var connectingSocket: WebSocket? = null
     private var isForeground = initialForeground
     private var authFailed = false
+    /** One refresh per rejection cycle: set when 4401 fires the hook, re-armed only by an ack or an
+     * external (non-refresh) identity change — a refreshed token that 4401s again stays terminal. */
+    private var authRefreshAttempted = false
     private var reconnectAttempts = 0
+    /** Channel → id of the SUBSCRIBE attempt still awaiting its acknowledgement. An entry is removed
+     * by the ack (or the channel's unsubscribe) and overwritten by a newer attempt, so a deadline
+     * fires only when ITS OWN attempt is still pending — a channel re-subscribed on a live socket
+     * gets a fresh deadline, and a stale deadline can't fire against the new attempt. */
+    private val pendingAcks = HashMap<String, Long>()
+    private var subscribeAttemptCounter = 0L
     private val subscriptions = LinkedHashMap<String, CopyOnWriteArrayList<SubscriberHandle>>()
     /** Channel → generation of its first acknowledgement. NOT cleared on reconnect: a later-generation
      * acknowledgement is exactly how a re-subscribe is recognised. */
@@ -117,7 +134,9 @@ internal class RealtimeRuntime(
 
     fun onForeground() { commands.trySend(RealtimeCommand.Foregrounded) }
     fun onBackground() { commands.trySend(RealtimeCommand.Backgrounded) }
-    fun onIdentityChanged() { commands.trySend(RealtimeCommand.IdentityChanged) }
+    fun onIdentityChanged(fromAuthRefresh: Boolean = false) {
+        commands.trySend(RealtimeCommand.IdentityChanged(fromAuthRefresh))
+    }
 
     /** Initiates teardown; the actor completes it. Returns a deferred for tests needing confirmation. */
     fun endSession(): CompletableDeferred<Unit> {
@@ -136,9 +155,11 @@ internal class RealtimeRuntime(
                     .let { it.add(command.handle); it.size == 1 }
                 when {
                     socket == null && connectingSocket == null -> connect()
-                    socket != null && isFirstForChannel ->
+                    socket != null && isFirstForChannel -> {
                         socket?.send(DashXRealtimeCodec.encodeChannelFrame(
                             DashXRealtimeCodec.TYPE_SUBSCRIBE, command.handle.channelName))
+                        scheduleAckDeadline(command.handle.channelName, beginSubscribeAttempt(command.handle.channelName))
+                    }
                     else -> Unit
                 }
                 publishState()
@@ -150,6 +171,7 @@ internal class RealtimeRuntime(
                 if (list.isEmpty()) {
                     subscriptions.remove(command.handle.channelName)
                     firstAckGeneration.remove(command.handle.channelName)
+                    pendingAcks.remove(command.handle.channelName)
                     socket?.send(DashXRealtimeCodec.encodeChannelFrame(
                         DashXRealtimeCodec.TYPE_UNSUBSCRIBE, command.handle.channelName))
                 }
@@ -169,10 +191,11 @@ internal class RealtimeRuntime(
                 publishState()
             }
 
-            RealtimeCommand.IdentityChanged -> {
+            is RealtimeCommand.IdentityChanged -> {
                 // A new identity is a fresh intent: terminal auth failure no longer applies, and any
                 // socket — connected OR still connecting — carries the old token in its URL.
                 authFailed = false
+                if (!command.fromAuthRefresh) authRefreshAttempted = false
                 reconnectAttempts = 0
                 closeSocket()
                 connect()
@@ -187,6 +210,7 @@ internal class RealtimeRuntime(
                 // Server subscription state is per connection: every channel re-subscribes.
                 subscriptions.keys.forEach {
                     command.socket.send(DashXRealtimeCodec.encodeChannelFrame(DashXRealtimeCodec.TYPE_SUBSCRIBE, it))
+                    scheduleAckDeadline(it, beginSubscribeAttempt(it))
                 }
                 publishState()
             }
@@ -198,6 +222,10 @@ internal class RealtimeRuntime(
                     is DashXRealtimeMessage.Ping ->
                         socket?.send(DashXRealtimeCodec.encodeBareFrame(DashXRealtimeCodec.TYPE_PONG))
                     is DashXRealtimeMessage.SubscriptionSucceeded -> {
+                        pendingAcks.remove(frame.channel)
+                        // The server accepted this token for real work: a later 4401 (expiry) earns
+                        // a fresh refresh cycle.
+                        authRefreshAttempted = false
                         val first = firstAckGeneration[frame.channel]
                         val isResubscribe = first != null && first < connectionGeneration
                         if (first == null) firstAckGeneration[frame.channel] = connectionGeneration
@@ -218,7 +246,13 @@ internal class RealtimeRuntime(
                 if (isTerminalCloseCode(command.code)) {
                     authFailed = true
                     DashXLog.e(TAG, "Realtime closed with terminal code ${command.code} (${command.reason})")
-                    onAuthRejected()
+                    // Only 4401 means a fresh token could help; 4403 (and the rest of the band) is a
+                    // permission problem no refresh fixes. One attempt per cycle — a refreshed token
+                    // that gets 4401'd again stays AuthenticationFailed instead of looping.
+                    if (command.code == CLOSE_CODE_UNAUTHORIZED && !authRefreshAttempted) {
+                        authRefreshAttempted = true
+                        onAuthRejected()
+                    }
                 } else {
                     scheduleReconnect()
                 }
@@ -239,10 +273,22 @@ internal class RealtimeRuntime(
                 if (socket == null && connectingSocket == null) connect()
             }
 
+            is RealtimeCommand.AckDeadline -> {
+                if (command.generation != connectionGeneration) return
+                // Fire only if THIS attempt is still awaiting its ack — not when the channel was
+                // acked, unsubscribed, or re-subscribed under a newer attempt since.
+                if (pendingAcks[command.channel] != command.attempt) return
+                subscriptions[command.channel]?.forEach {
+                    it.onSubscribeError(DashXError.SubscriptionFailed(
+                        "Channel ${command.channel} was not acknowledged within ${ackTimeoutMs}ms"))
+                }
+            }
+
             is RealtimeCommand.EndSession -> {
                 closeSocket()
                 subscriptions.clear()
                 firstAckGeneration.clear()
+                pendingAcks.clear()
                 publishState(ConnectionState.Idle)
                 commands.close()
                 command.ack.complete(Unit)
@@ -290,6 +336,20 @@ internal class RealtimeRuntime(
         publishState()
     }
 
+    private fun beginSubscribeAttempt(channel: String): Long {
+        subscribeAttemptCounter += 1
+        pendingAcks[channel] = subscribeAttemptCounter
+        return subscribeAttemptCounter
+    }
+
+    private fun scheduleAckDeadline(channel: String, attempt: Long) {
+        val generation = connectionGeneration
+        scope.launch {
+            delay(ackTimeoutMs)
+            commands.trySend(RealtimeCommand.AckDeadline(generation, channel, attempt))
+        }
+    }
+
     private fun scheduleReconnect() {
         if (authFailed || !isForeground || subscriptions.isEmpty()) return
         reconnectAttempts += 1
@@ -322,6 +382,9 @@ internal class RealtimeRuntime(
         private const val MAX_RECONNECT_DELAY_MS = 30_000L
         private const val TERMINAL_CLOSE_CODE_MIN = 4400
         private const val TERMINAL_CLOSE_CODE_MAX = 4499
+        /** Mirrors HTTP 401 (websocket_handler.rs) — the only close a token refresh can fix. */
+        private const val CLOSE_CODE_UNAUTHORIZED = 4401
+        internal const val ACK_TIMEOUT_MS = 10_000L
 
         fun isTerminalCloseCode(code: Int): Boolean =
             code in TERMINAL_CLOSE_CODE_MIN..TERMINAL_CLOSE_CODE_MAX
