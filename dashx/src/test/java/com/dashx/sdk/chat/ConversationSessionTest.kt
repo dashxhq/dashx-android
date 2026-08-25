@@ -311,4 +311,58 @@ class ConversationSessionTest {
         awaitUntil(what = "cursor fetch") { backend.fetchAfterCursors.size == 1 }
         assertEquals("the mark is the newest message, not the last-fetched page's tail", "m060", backend.fetchAfterCursors[0])
     }
+
+    @Test
+    fun outOfOrderFrame_doesNotAdvanceTheCursor_reconnectRecoversTheLostSibling() {
+        val backend = FakeBackend()
+        val (_, lease) = openReady(backend, listOf(msg("m1", 1)))
+
+        // m2 and m3 commit server-side, but m3's frame overtakes m2's (frames are keyed per
+        // message, not per conversation) and m2's is lost with the connection. m3 is displayed,
+        // yet the server has only confirmed history through m1.
+        backend.handles[0].onFrame(frame("m3", 3))
+        awaitUntil(what = "m3 displayed") { readyIds(lease) == listOf("m1", "m3") }
+
+        backend.after = { cursor -> if (cursor == "m1") listOf(msg("m2", 2), msg("m3", 3)) else emptyList() }
+        backend.handles[0].onEstablished(true)
+
+        awaitUntil(what = "lost sibling recovered") { readyIds(lease) == listOf("m1", "m2", "m3") }
+        assertEquals(
+            "the reconnect walk must start at the server-confirmed cursor, not the frame — " +
+                "afterMessageId=m3 could never return m2",
+            listOf("m1"),
+            backend.fetchAfterCursors
+        )
+
+        // The walk's last fetched row is now server-confirmed and becomes the cursor.
+        backend.handles[0].onEstablished(true)
+        awaitUntil(what = "second cursor fetch") { backend.fetchAfterCursors.size == 2 }
+        assertEquals("m3", backend.fetchAfterCursors[1])
+    }
+
+    @Test
+    fun bufferedFrameDuringSnapshot_doesNotAdvanceTheCursor() {
+        val backend = FakeBackend()
+        backend.count = 1
+        backend.pages = mapOf(1 to listOf(msg("m1", 1)))
+        val gate = CompletableDeferred<Unit>()
+        backend.pageGate = gate
+
+        val session = ConversationSession(key, backend)
+        val lease = session.newLease()!!
+        backend.handles[0].onEstablished(false)
+        awaitUntil(what = "fetch started") { backend.fetchPageCalls.size == 1 }
+
+        // Same overtake, one layer deeper: the frame lands while the snapshot is still fetching,
+        // so it merges from the buffer — the cursor must still come from the fetched page only.
+        backend.handles[0].onFrame(frame("m3", 3))
+        gate.complete(Unit)
+        awaitUntil(what = "snapshot + buffered frame Ready") { readyIds(lease) == listOf("m1", "m3") }
+
+        backend.after = { cursor -> if (cursor == "m1") listOf(msg("m2", 2), msg("m3", 3)) else emptyList() }
+        backend.handles[0].onEstablished(true)
+
+        awaitUntil(what = "gap healed") { readyIds(lease) == listOf("m1", "m2", "m3") }
+        assertEquals(listOf("m1"), backend.fetchAfterCursors)
+    }
 }

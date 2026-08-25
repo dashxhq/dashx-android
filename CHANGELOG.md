@@ -21,9 +21,11 @@ host's backend creates the conversation and returns the
     suppression), `setOnTerminated(...)`, and idempotent `close()`. Leases on
     the same `(identity, conversation)` share one subscription and message
     list; shared state tears down when the last lease closes. After a
-    reconnect, missed messages are fetched forward from the newest known
-    message (`afterMessageId` cursor), preserving already-loaded history; live
-    frames are merged by server id, and read-marking is debounced. A
+    reconnect, missed messages are fetched forward from the newest
+    server-confirmed message (`afterMessageId` cursor — advanced only by fetch
+    results, never by live frames, which can arrive out of order), preserving
+    already-loaded history; live frames are merged by server id, and
+    read-marking is debounced. A
     subscription that is never acknowledged (invalid or unauthorized
     conversation) surfaces as `ConversationState.Error(SubscriptionFailed)`
     instead of loading forever.
