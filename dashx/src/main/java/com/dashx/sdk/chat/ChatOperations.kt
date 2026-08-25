@@ -15,9 +15,8 @@ import com.dashx.android.graphql.generated.SummarizeInAppChatUnreadQuery
 import kotlinx.coroutines.Job
 import kotlinx.serialization.json.JsonObject
 
-// The nine raw in-app chat operations, identity-scoped by explicit parameter. Every one is
-// owner-scoped to the visitor resolved from the identity token, so an identity must be set first.
-// `DashX.chat(identityId)` is the managed surface over these.
+// Raw in-app chat operations. Every one is owner-scoped to the visitor resolved from the identity
+// token, so an identity must be set first. `DashX.chat(identityId)` is the managed surface.
 
 private fun notIdentifiedJob(onError: (DashXError) -> Unit): Job =
     DashX.launchCallback { onError(DashXError.NotIdentified()) }

@@ -325,10 +325,8 @@ class DashX {
             init(context, publicKey, baseURI, targetEnvironment, callbackDispatcher)
         }
 
-        /**
-         * Overrides the realtime WebSocket base URI (e.g. staging). A separate setter, not a
-         * [configure] parameter, so the pre-1.4 JVM signature of [configure] stays intact.
-         */
+        /** Overrides the realtime WebSocket base URI (e.g. staging). Kept out of [configure] to
+         * preserve its pre-1.4 JVM signature. */
         fun setRealtimeBaseUri(baseUri: String?) {
             realtimeBaseURI = baseUri
         }
@@ -449,8 +447,7 @@ class DashX {
                 // clock on flaky networks. Apollo's defaults aren't documented.
                 .httpEngine(DefaultHttpEngine(15_000L, 30_000L))
                 .addCustomScalarAdapter(JSON.type, JsonObjectScalarAdapter)
-                // The identity token is read per request, so the client never needs rebuilding on
-                // identity change — and logout can never leave a stale token baked into it.
+                // Read per request: the client is never rebuilt on identity change.
                 .addHttpInterceptor(object : HttpInterceptor {
                     override suspend fun intercept(
                         request: HttpRequest,
@@ -505,8 +502,7 @@ class DashX {
                 try {
                     response = apolloClient.mutation(mutation).execute()
                 } catch (t: Throwable) {
-                    // Cancellation stays cancellation — mapping it to NetworkError both mislabels
-                    // it and then loses it in the withContext on the already-cancelled job.
+                    // Mapped to NetworkError, cancellation would be lost on the cancelled job.
                     if (t is CancellationException) throw t
                     // Non-cancellation failures surface as onError. Under
                     // shutdown's cancellation, withContext propagates
@@ -584,8 +580,7 @@ class DashX {
         /**
          * Bridges an internal Job-returning operation to a suspend caller with a single guard over
          * every completion path: success, error, caller cancellation, session-job cancellation, and
-         * a synchronous throw from [start]. tryResume returns a token — the continuation is not
-         * resumed until completeResume — and caller cancellation claims the guard BEFORE cancelling,
+         * a synchronous throw from [start]. Caller cancellation claims the guard BEFORE cancelling,
          * then cancels unconditionally so the network job can never leak.
          */
         internal suspend fun <T> awaitOperation(
@@ -679,7 +674,7 @@ class DashX {
         }
 
         /**
-         * Transitions (see the plan's §5 table):
+         * Transitions:
          *  - no current identity → T0: waiting subscriptions are preserved and connect now
          *  - same uid, same token → no-op
          *  - same uid, new token → T1: sessions preserved, socket recycled
@@ -698,8 +693,8 @@ class DashX {
                 account.updateAndGet {
                     it.copy(uid = uid, identityToken = token, tokenEpoch = it.tokenEpoch + 1)
                 }
-                // The explicit token supersedes any in-flight provider load: awaiting retries get
-                // this token, and the load's own result is stale under the new epoch.
+                // Supersede any in-flight provider load: awaiting retries get this token, and the
+                // load's own result is stale under the new epoch.
                 tokenLoadInFlight.getAndSet(null)?.complete(token)
             } else {
                 endIdentitySession() // T2
@@ -717,7 +712,7 @@ class DashX {
             realtimeRuntime?.onIdentityChanged() ?: run {
                 // T0 with waiting leases and no runtime yet: the coordinator connects on demand.
                 com.dashx.android.chat.ChatCoordinator.onIdentityAvailable()
-                publishDirect(ConnectionState.Idle) // §8: no runtime → Idle; clears a stale failure
+                publishDirect(ConnectionState.Idle) // nothing else clears a stale AuthenticationFailed
             }
         }
 
@@ -732,13 +727,12 @@ class DashX {
                     boundProvider = BoundProvider(uid, provider)
                     account.updateAndGet { it.copy(uid = uid, identityToken = null) }
                     saveToStorage()
-                    publishDirect(ConnectionState.Connecting) // §5 rule 1: loading → Connecting
+                    publishDirect(ConnectionState.Connecting)
                     requestTokenLoad(forceRefresh = false)
                 }
                 current.uid == uid -> { // attach/replace for the current uid — not a transition
                     boundProvider = BoundProvider(uid, provider)
-                    // A replaced provider invalidates its predecessor's in-flight load; the next
-                    // load below (or a later rejection) goes to the new provider.
+                    // Invalidate the predecessor's in-flight load.
                     tokenLoadInFlight.getAndSet(null)?.complete(null)
                     val authFailed = connectionState.value is ConnectionState.AuthenticationFailed
                     if (current.identityToken == null || authFailed) {
@@ -754,7 +748,7 @@ class DashX {
                         it.copy(uid = uid, identityToken = null, sessionGeneration = it.sessionGeneration + 1)
                     }
                     saveToStorage()
-                    publishDirect(ConnectionState.Connecting) // §5 rule 1: loading → Connecting
+                    publishDirect(ConnectionState.Connecting)
                     requestTokenLoad(forceRefresh = false)
                 }
             }
@@ -774,9 +768,10 @@ class DashX {
         }
 
         /**
-         * Single-flight provider load, stamped with the session generation: a token arriving after
-         * the identity moved on is discarded. Only the provider's first callback is accepted; a
-         * provider that never calls back times out to [ConnectionState.AuthenticationFailed].
+         * Single-flight provider load. A result is stale — and discarded — if the session
+         * generation or token epoch moved, or the provider was replaced, since the request. Only
+         * the provider's first callback is accepted; a provider that never calls back times out to
+         * [ConnectionState.AuthenticationFailed].
          *
          * The returned deferred completes AFTER the token is installed in the snapshot (or with
          * null on failure/staleness), so an awaiting retry never re-sends the rejected token.
@@ -842,7 +837,7 @@ class DashX {
                     saveToStorage()
                     realtimeRuntime?.onIdentityChanged(fromAuthRefresh = true) ?: run {
                         com.dashx.android.chat.ChatCoordinator.onIdentityAvailable()
-                        publishDirect(ConnectionState.Idle) // §8: no runtime → Idle after recovery
+                        publishDirect(ConnectionState.Idle) // nothing else clears a stale AuthenticationFailed
                     }
                     result.complete(token)
                 } else {
@@ -890,7 +885,7 @@ class DashX {
         /** Era stamp for the GraphQL auth retry: never resend an old-era request with a new-era token. */
         internal fun currentSessionGeneration(): Long = account.get().sessionGeneration
 
-        /** A terminal 44xx close: ask the bound provider for a fresh token, once. */
+        /** A terminal 4401 close: ask the bound provider for a fresh token, once. */
         private fun onRealtimeAuthRejected() {
             val bound = boundProvider
             if (bound == null || bound.uid != account.get().uid) {
@@ -934,15 +929,14 @@ class DashX {
         }
 
         /**
-         * Cancels all in-flight SDK operations and releases resources.
+         * Cancels all in-flight SDK operations and releases resources; identity, persisted token,
+         * anonymous uid, and the push subscription are all preserved — logout is [reset].
          * After calling this, [configure] must be called again before using the SDK.
          */
         fun shutdown() {
             // Flip first so a concurrent notification treats the SDK as unconfigured until configure() reruns.
             configured = false
 
-            // T4: resource release only — account identity, persisted token, anonymous uid and the
-            // push subscription are all preserved. A caller wanting logout calls reset() first.
             chatSessionJob.cancel()
             chatSessionJob = SupervisorJob()
             com.dashx.android.chat.ChatCoordinator.closeAllSessions()
