@@ -243,8 +243,11 @@ internal class ConversationSession(
     private var resyncPending = false
     private var rebuildUsed = false
     private var oldestFetchedPage = Int.MAX_VALUE
-    /** High-water mark: id of the greatest merged message under [ChatMessage.ORDER]. The reconnect
-     * cursor. Merges only add, so it never moves backward; only a rebuild replaces it. */
+    /** Server-confirmed reconnect cursor: the backend has confirmed that every visible message
+     * through this id is in [messages]. Advanced only by snapshot/cursor FETCH results, never by
+     * realtime frames — frames can arrive out of commit order (they are keyed per message, not per
+     * conversation), and a frame-advanced cursor would leap past a lost sibling that no
+     * `afterMessageId` walk could ever return. */
     private var lastKnownMessageId: String? = null
 
     // ---- read marking ----
@@ -357,7 +360,10 @@ internal class ConversationSession(
             messages = replacement
             snapshotDone = true
             oldestFetchedPage = lastPage
-            lastKnownMessageId = replacement.lastOrNull()?.id
+            // From the fetched candidate only: a buffered frame is not server-confirmed — its
+            // out-of-order sibling may be missing, and a cursor set past that gap could never
+            // recover it. The frames stay displayed and are re-fetched (deduped) on reconnect.
+            lastKnownMessageId = candidate.lastOrNull()?.id
             emitReady(replacement)
             maybeMarkRead()
             return
@@ -402,8 +408,12 @@ internal class ConversationSession(
                 continue
             }
             val (bufferSnapshot, overflowed) = drainBufferAndResumeLive()
-            if (overflowed) continue // restart from the unchanged high-water mark
+            if (overflowed) continue // restart from the unchanged cursor
             applyMerge(fetched + bufferSnapshot)
+            // Advance only to the walk's last FETCHED row — the server confirmed everything
+            // through it. Buffered frames don't move the cursor (see the field doc); an empty
+            // walk leaves it unchanged.
+            fetched.lastOrNull()?.let { lastKnownMessageId = it.id }
             maybeMarkRead()
             return
         }
@@ -427,13 +437,14 @@ internal class ConversationSession(
         return copy to overflowed
     }
 
-    /** Merges into the current list; emits only when something actually changed. */
+    /** Merges into the displayed list; emits only when something actually changed. Never touches
+     * [lastKnownMessageId] — live frames reach here, and they are display-only until a fetch
+     * confirms them. */
     private fun applyMerge(additions: List<ChatMessage>) {
         if (additions.isEmpty()) return
         val merged = mergeInto(messages, additions)
         if (merged == messages) return // duplicates only → no state churn
         messages = merged
-        lastKnownMessageId = merged.lastOrNull()?.id
         emitReady(merged)
     }
 
@@ -467,8 +478,6 @@ internal class ConversationSession(
             try {
                 val rows = backend.fetchPage(key.conversationId, PAGE_SIZE, page)
                 oldestFetchedPage = page
-                // Prepends older rows: the merge only adds, so the greatest element — the
-                // high-water mark — cannot move backward.
                 applyMerge(rows)
             } catch (t: Throwable) {
                 if (t is kotlinx.coroutines.CancellationException) throw t
