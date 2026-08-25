@@ -207,9 +207,9 @@ internal object DashXChatSessionBackend : ChatSessionBackend {
 
 /**
  * Shared state for one `(identity, conversation)`: the realtime subscription, the reconciliation
- * buffer, the synchronized message list, and read marking. See the plan's §6 — first open runs the
- * history snapshot; reconnect fetches forward from the high-water mark with the `afterMessageId`
- * cursor, preserving already-loaded history.
+ * buffer, the synchronized message list, and read marking. First open runs the history snapshot;
+ * reconnect fetches forward from the high-water mark with the `afterMessageId` cursor, preserving
+ * already-loaded history.
  *
  * Every synchronizer mutation runs on [syncLane], a single-parallelism dispatcher: frames, sync
  * cycles, paging, and read marking are serialized, so no two coroutines ever interleave writes to
@@ -323,8 +323,6 @@ internal class ConversationSession(
         try {
             do {
                 resyncPending = false
-                // No valid cursor (first open, or nothing merged yet) → history snapshot;
-                // otherwise fetch forward from the high-water mark.
                 if (!snapshotDone || lastKnownMessageId == null) snapshotAndReplace() else cursorReconcile()
             } while (resyncPending)
         } catch (t: Throwable) {

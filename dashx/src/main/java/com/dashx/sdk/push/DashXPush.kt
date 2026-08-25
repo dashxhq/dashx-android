@@ -124,7 +124,6 @@ object DashXPush {
         return displayDecider?.let { runCatching { it.shouldDisplay(payload) }.getOrDefault(true) } ?: true
     }
 
-    /** Identification key is the screen name — the tag is tray identity, never identification. */
     private fun chatConversationId(payload: DashXPayload): String? {
         if (payload.screenName != IN_APP_CHAT_SCREEN_NAME) return null
         return payload.screenData?.get("conversationId")
