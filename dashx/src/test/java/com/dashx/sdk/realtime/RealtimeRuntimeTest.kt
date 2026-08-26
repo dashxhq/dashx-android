@@ -308,4 +308,27 @@ class RealtimeRuntimeTest {
         Thread.sleep(200)
         assertEquals(1, harness.sockets.size)
     }
+
+    @Test
+    fun subscribeAfterTerminalAuthClose_surfacesSubscriptionErrorImmediately() {
+        val harness = Harness()
+        harness.subscribe("c1")
+        awaitUntil(what = "socket created") { harness.sockets.size == 1 }
+        harness.open()
+        harness.listeners[0].onClosed(harness.sockets[0], 4403, "forbidden")
+        awaitUntil(what = "AuthenticationFailed") {
+            harness.states.lastOrNull() is ConnectionState.AuthenticationFailed
+        }
+
+        // With connect() refusing to run, no SUBSCRIBE frame ever goes out for c2 — the error must
+        // surface now instead of leaving the conversation loading forever.
+        harness.subscribe("c2")
+        awaitUntil(what = "c2 surfaces a subscription error") {
+            harness.subscribeErrors.any {
+                it is com.dashx.android.DashXError.SubscriptionFailed &&
+                    it.message.contains("in_app_chat:conversation:c2")
+            }
+        }
+        assertEquals("no new socket while auth-failed", 1, harness.sockets.size)
+    }
 }

@@ -52,12 +52,15 @@ private class FakeBackend : ChatSessionBackend {
     val summarizeCalls = AtomicInteger(0)
     val fetchPageCalls = CopyOnWriteArrayList<Int>()
     val fetchAfterCursors = CopyOnWriteArrayList<String>()
+    val markReadIds = CopyOnWriteArrayList<String>()
 
     @Volatile var count = 0
     @Volatile var pages: Map<Int, List<ChatMessage>> = emptyMap()
     @Volatile var after: (String) -> List<ChatMessage> = { emptyList() }
     /** When set, fetchPage suspends until completed — frames arriving meanwhile must buffer. */
     @Volatile var pageGate: CompletableDeferred<Unit>? = null
+    /** When set, fetchAfter suspends until completed — the cursor walk stalls mid-flight. */
+    @Volatile var afterGate: CompletableDeferred<Unit>? = null
 
     override fun subscribe(handle: SubscriberHandle): DashXRealtimeSubscription {
         handles.add(handle)
@@ -79,6 +82,7 @@ private class FakeBackend : ChatSessionBackend {
 
     override suspend fun fetchAfter(conversationId: String, limit: Int, afterMessageId: String): List<ChatMessage> {
         fetchAfterCursors.add(afterMessageId)
+        afterGate?.await()
         return after(afterMessageId)
     }
 
@@ -88,7 +92,10 @@ private class FakeBackend : ChatSessionBackend {
         lastMessageId: String,
         onSuccess: (Boolean) -> Unit,
         onError: (DashXError) -> Unit
-    ) { onSuccess(true) }
+    ) {
+        markReadIds.add(lastMessageId)
+        onSuccess(true)
+    }
 
     override fun setConversationVisible(conversationId: String, visible: Boolean) {}
     override fun dismissConversationNotifications(conversationId: String) {}
@@ -364,5 +371,61 @@ class ConversationSessionTest {
 
         awaitUntil(what = "gap healed") { readyIds(lease) == listOf("m1", "m2", "m3") }
         assertEquals(listOf("m1"), backend.fetchAfterCursors)
+    }
+
+    @Test
+    fun stateListener_replaysCurrentStateOnAdd_andDiesWithItsLease() {
+        com.dashx.android.DashX.setCallbackDispatcher(kotlinx.coroutines.Dispatchers.Unconfined)
+        val backend = FakeBackend()
+        val (session, lease1) = openReady(backend, listOf(msg("m1", 1)))
+
+        // A second screen opens the already-loaded conversation: its listener must render NOW.
+        val lease2 = session.newLease()!!
+        val seen2 = CopyOnWriteArrayList<ConversationState>()
+        lease2.addStateListener { seen2.add(it) }
+        awaitUntil(what = "replayed current state") {
+            seen2.any { it is ConversationState.Ready && it.messages.map { m -> m.id } == listOf("m1") }
+        }
+
+        val seen1 = CopyOnWriteArrayList<ConversationState>()
+        lease1.addStateListener { seen1.add(it) }
+        lease2.close()
+
+        backend.handles[0].onFrame(frame("m2", 2))
+        awaitUntil(what = "open lease notified") {
+            seen1.any { it is ConversationState.Ready && it.messages.map { m -> m.id } == listOf("m1", "m2") }
+        }
+        assertTrue(
+            "a closed lease's listener must not keep receiving states",
+            seen2.none { it is ConversationState.Ready && it.messages.size == 2 }
+        )
+    }
+
+    @Test
+    fun readMark_neverAdvancesToAnUnconfirmedFrame_reconcilesFirst() {
+        val backend = FakeBackend()
+        val (_, lease) = openReady(backend, listOf(msg("m1", 1)))
+
+        lease.setVisible(true)
+        awaitUntil(what = "confirmed newest marked") { backend.markReadIds == listOf("m1") }
+
+        // m3's frame overtakes lost m2. m3 is displayed but unconfirmed: it must trigger a
+        // reconcile (stalled at the gate), and must NOT be marked read — marking it would mark
+        // the unseen m2 read server-side and kill its push.
+        val gate = CompletableDeferred<Unit>()
+        backend.afterGate = gate
+        backend.after = { cursor -> if (cursor == "m1") listOf(msg("m2", 2), msg("m3", 3)) else emptyList() }
+        backend.handles[0].onFrame(frame("m3", 3))
+
+        awaitUntil(what = "reconcile started from the confirmed cursor") {
+            backend.fetchAfterCursors == listOf("m1")
+        }
+        awaitUntil(what = "m3 displayed") { readyIds(lease) == listOf("m1", "m3") }
+        Thread.sleep(600) // > MARK_DEBOUNCE_MS: any premature mark of m3 would have fired by now
+        assertEquals(listOf("m1"), backend.markReadIds)
+
+        gate.complete(Unit)
+        awaitUntil(what = "gap healed") { readyIds(lease) == listOf("m1", "m2", "m3") }
+        awaitUntil(what = "confirmed tail marked") { backend.markReadIds == listOf("m1", "m3") }
     }
 }

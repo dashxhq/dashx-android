@@ -2,6 +2,7 @@ package com.dashx.android.chat
 
 import com.dashx.android.DashXError
 import com.dashx.android.graphql.generated.FetchInAppChatMessagesQuery
+import com.dashx.android.graphql.generated.fragment.ChatMessageFragment
 import com.dashx.android.realtime.DashXRealtimeChatMessage
 import kotlinx.serialization.json.JsonObject
 
@@ -36,20 +37,20 @@ data class ChatMessage(
             sentAt = frame.sentAt
         )
 
-        internal fun from(row: FetchInAppChatMessagesQuery.FetchInAppChatMessage): ChatMessage {
-            val f = row.chatMessageFragment
-            return ChatMessage(
-                id = f.id.toString(),
-                conversationId = f.conversationId?.toString() ?: "",
-                externalUid = f.externalUid,
-                senderId = f.senderId?.toString(),
-                aiRole = f.aiRole,
-                turnSeq = f.turnSeq?.toLong() ?: 0L,
-                renderedContent = f.renderedContent as? JsonObject ?: JsonObject(emptyMap()),
-                createdAt = f.createdAt.toString(),
-                sentAt = f.sentAt?.toString()
-            )
-        }
+        internal fun from(f: ChatMessageFragment): ChatMessage = ChatMessage(
+            id = f.id.toString(),
+            conversationId = f.conversationId?.toString() ?: "",
+            externalUid = f.externalUid,
+            senderId = f.senderId?.toString(),
+            aiRole = f.aiRole,
+            turnSeq = f.turnSeq?.toLong() ?: 0L,
+            renderedContent = f.renderedContent as? JsonObject ?: JsonObject(emptyMap()),
+            createdAt = f.createdAt.toString(),
+            sentAt = f.sentAt?.toString()
+        )
+
+        internal fun from(row: FetchInAppChatMessagesQuery.FetchInAppChatMessage): ChatMessage =
+            from(row.chatMessageFragment)
     }
 }
 

@@ -108,7 +108,10 @@ class DashX {
         /** Single-flight guard for provider loads; completes with the token or null. */
         private val tokenLoadInFlight = AtomicReference<CompletableDeferred<String?>?>(null)
 
-        /** Parent of every authenticated chat operation; cancelled on identity switch/reset/shutdown. */
+        /** Parent of managed conversation-session work; cancelled on identity switch/reset/shutdown.
+         * Raw chat operations are NOT children — they run on the global scope with their callbacks
+         * session-generation-gated instead (see `sessionBound` in ChatOperations), so a request
+         * begun under one identity can never deliver its data under the next. */
         internal var chatSessionJob = SupervisorJob()
             private set
 
@@ -135,7 +138,7 @@ class DashX {
             if (realtimeRuntime !== runtime) return // a detached runtime's late writes are ignored
             mutableConnectionState.value = state
             connectionStateListeners.forEach { l ->
-                coroutineScope.launch(callbackDispatcher) {
+                callbackScope.launch(callbackDispatcher) {
                     runCatching { l.onConnectionStateChanged(state) }
                 }
             }
@@ -225,6 +228,14 @@ class DashX {
          * Set via [configure] or [setCallbackDispatcher].
          */
         @Volatile private var callbackDispatcher: CoroutineDispatcher = Dispatchers.Main.immediate
+
+        /**
+         * Host-facing callback dispatch. Deliberately OUTSIDE [coroutineScope]: [shutdown] cancels
+         * in-flight SDK work, but callbacks already promised at that point — terminated leases,
+         * terminal states, connection-state listeners — must still deliver, not silently vanish
+         * with the cancelled scope.
+         */
+        private val callbackScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
         private val pollCounter = AtomicInteger(1)
 
@@ -872,7 +883,7 @@ class DashX {
             if (mutableConnectionState.value == state) return
             mutableConnectionState.value = state
             connectionStateListeners.forEach { l ->
-                coroutineScope.launch(callbackDispatcher) {
+                callbackScope.launch(callbackDispatcher) {
                     runCatching { l.onConnectionStateChanged(state) }
                 }
             }
@@ -925,7 +936,7 @@ class DashX {
 
             // The SDK stays configured: lifecycle observer registered, EventQueue running.
             realtimeRuntime?.onIdentityChanged()
-            mutableConnectionState.value = ConnectionState.Idle
+            publishDirect(ConnectionState.Idle) // listeners hear the transition too, runtime or not
         }
 
         /**
@@ -947,7 +958,7 @@ class DashX {
             // immediate configure() builds a fresh runtime this teardown cannot touch.
             realtimeRuntime?.endSession()
             realtimeRuntime = null
-            mutableConnectionState.value = ConnectionState.Idle
+            publishDirect(ConnectionState.Idle)
 
             // Mark in-flight subscribes stale before cancelling — late
             // responses landing in the new session would otherwise resurrect
@@ -2034,7 +2045,7 @@ class DashX {
         internal fun applicationContext(): Context? = context
 
         internal fun launchCallback(block: suspend () -> Unit): Job =
-            coroutineScope.launch(callbackDispatcher) { block() }
+            callbackScope.launch(callbackDispatcher) { block() }
 
         /** Final say on whether a DashX notification is displayed; defaults to display. */
         fun setNotificationDisplayDecider(decider: com.dashx.android.push.DashXNotificationDisplayDecider?) {

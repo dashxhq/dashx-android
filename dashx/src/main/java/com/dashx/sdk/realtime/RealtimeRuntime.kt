@@ -162,6 +162,14 @@ internal class RealtimeRuntime(
                     }
                     else -> Unit
                 }
+                // Terminal auth failure means connect() refused to run: no SUBSCRIBE frame will be
+                // sent, so no ack deadline exists to surface the problem — report it now. The
+                // handle stays registered; an identity change clears [authFailed] and the
+                // reconnect's re-subscribe can still recover it.
+                if (authFailed) {
+                    command.handle.onSubscribeError(DashXError.SubscriptionFailed(
+                        "Realtime authentication failed; channel ${command.handle.channelName} cannot subscribe"))
+                }
                 publishState()
             }
 
