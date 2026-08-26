@@ -21,6 +21,26 @@ import kotlinx.serialization.json.JsonObject
 private fun notIdentifiedJob(onError: (DashXError) -> Unit): Job =
     DashX.launchCallback { onError(DashXError.NotIdentified()) }
 
+/**
+ * Gates an operation's callbacks on the identity session it began under. These jobs run on the
+ * SDK's global scope — an identity switch or reset does NOT cancel them — so without the gate a
+ * request begun as user A would deliver A's data into whatever UI user B is looking at. A stale
+ * completion delivers [DashXError.SessionEnded] instead. Same-identity token refreshes leave the
+ * generation unchanged, so they never invalidate an in-flight operation.
+ */
+internal fun <T> sessionBound(
+    onSuccess: (T) -> Unit,
+    onError: (DashXError) -> Unit,
+    start: ((T) -> Unit, (DashXError) -> Unit) -> Job
+): Job {
+    val generation = DashX.currentSessionGeneration()
+    fun stale() = DashX.currentSessionGeneration() != generation
+    return start(
+        { result -> if (stale()) onError(DashXError.SessionEnded()) else onSuccess(result) },
+        { error -> if (stale()) onError(DashXError.SessionEnded()) else onError(error) }
+    )
+}
+
 fun DashX.Companion.sendInAppChatMessage(
     conversationId: String,
     identityId: String,
@@ -45,8 +65,10 @@ internal fun DashX.Companion.sendInAppChatMessageJob(
         content = content,
         clientMessageId = clientMessageId
     )
-    return executeMutation(mutation, onError) { result ->
-        result.data?.sendInAppChatMessage?.let(onSuccess)
+    return sessionBound(onSuccess, onError) { ok, err ->
+        executeMutation(mutation, err) { result ->
+            result.data?.sendInAppChatMessage?.let(ok)
+        }
     }
 }
 
@@ -75,8 +97,10 @@ internal fun DashX.Companion.fetchInAppChatMessagesJob(
         page = page?.let { Optional.Present(it) } ?: Optional.Absent,
         afterMessageId = afterMessageId?.let { Optional.Present(it) } ?: Optional.Absent
     )
-    return executeQuery(query, onError) { result ->
-        onSuccess(result.data?.fetchInAppChatMessages ?: listOf())
+    return sessionBound(onSuccess, onError) { ok, err ->
+        executeQuery(query, err) { result ->
+            ok(result.data?.fetchInAppChatMessages ?: listOf())
+        }
     }
 }
 
@@ -93,8 +117,10 @@ internal fun DashX.Companion.summarizeInAppChatMessagesJob(
 ): Job {
     if (account.get().identityToken == null) return notIdentifiedJob(onError)
     val query = SummarizeInAppChatMessagesQuery(conversationId = conversationId)
-    return executeQuery(query, onError) { result ->
-        result.data?.summarizeInAppChatMessages?.count?.let(onSuccess)
+    return sessionBound(onSuccess, onError) { ok, err ->
+        executeQuery(query, err) { result ->
+            result.data?.summarizeInAppChatMessages?.count?.let(ok)
+        }
     }
 }
 
@@ -115,8 +141,10 @@ fun DashX.Companion.fetchInAppChatConversations(
         statuses = statuses?.let { Optional.Present(it) } ?: Optional.Absent,
         properties = properties?.let { Optional.Present(it) } ?: Optional.Absent
     )
-    executeQuery(query, onError) { result ->
-        onSuccess(result.data?.fetchInAppChatConversations ?: listOf())
+    sessionBound(onSuccess, onError) { ok, err ->
+        executeQuery(query, err) { result ->
+            ok(result.data?.fetchInAppChatConversations ?: listOf())
+        }
     }
 }
 
@@ -128,8 +156,10 @@ fun DashX.Companion.fetchInAppChatConversation(
 ) {
     if (account.get().identityToken == null) { notIdentifiedJob(onError); return }
     val query = FetchInAppChatConversationQuery(identityId = identityId, conversationId = conversationId)
-    executeQuery(query, onError) { result ->
-        result.data?.fetchInAppChatConversation?.let(onSuccess)
+    sessionBound(onSuccess, onError) { ok, err ->
+        executeQuery(query, err) { result ->
+            result.data?.fetchInAppChatConversation?.let(ok)
+        }
     }
 }
 
@@ -146,8 +176,10 @@ fun DashX.Companion.summarizeInAppChatConversations(
         statuses = statuses?.let { Optional.Present(it) } ?: Optional.Absent,
         properties = properties?.let { Optional.Present(it) } ?: Optional.Absent
     )
-    executeQuery(query, onError) { result ->
-        result.data?.summarizeInAppChatConversations?.count?.let(onSuccess)
+    sessionBound(onSuccess, onError) { ok, err ->
+        executeQuery(query, err) { result ->
+            result.data?.summarizeInAppChatConversations?.count?.let(ok)
+        }
     }
 }
 
@@ -164,8 +196,10 @@ internal fun DashX.Companion.summarizeInAppChatUnreadJob(
 ): Job {
     if (account.get().identityToken == null) return notIdentifiedJob(onError)
     val query = SummarizeInAppChatUnreadQuery(identityId = identityId)
-    return executeQuery(query, onError) { result ->
-        result.data?.summarizeInAppChatUnread?.count?.let(onSuccess)
+    return sessionBound(onSuccess, onError) { ok, err ->
+        executeQuery(query, err) { result ->
+            result.data?.summarizeInAppChatUnread?.count?.let(ok)
+        }
     }
 }
 
@@ -190,8 +224,10 @@ internal fun DashX.Companion.markInAppChatConversationReadJob(
         conversationId = conversationId,
         lastMessageId = lastMessageId
     )
-    return executeMutation(mutation, onError) { result ->
-        result.data?.markInAppChatConversationRead?.success?.let(onSuccess)
+    return sessionBound(onSuccess, onError) { ok, err ->
+        executeMutation(mutation, err) { result ->
+            result.data?.markInAppChatConversationRead?.success?.let(ok)
+        }
     }
 }
 
@@ -203,7 +239,9 @@ fun DashX.Companion.resolveInAppChatConversation(
 ) {
     if (account.get().identityToken == null) { notIdentifiedJob(onError); return }
     val mutation = ResolveInAppChatConversationMutation(identityId = identityId, conversationId = conversationId)
-    executeMutation(mutation, onError) { result ->
-        result.data?.resolveInAppChatConversation?.let(onSuccess)
+    sessionBound(onSuccess, onError) { ok, err ->
+        executeMutation(mutation, err) { result ->
+            result.data?.resolveInAppChatConversation?.let(ok)
+        }
     }
 }

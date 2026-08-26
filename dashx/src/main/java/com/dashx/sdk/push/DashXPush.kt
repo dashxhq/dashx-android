@@ -80,12 +80,7 @@ object DashXPush {
         if (shouldDisplay(dashXData)) {
             NotificationRenderer.ensureDefaultNotificationChannelIfNeeded(context, dashXData)
 
-            // Android's tray identity is (tag, id): the int derives from the tag as well, so
-            // same-tag notifications REPLACE instead of stacking — chat pushes tag per
-            // conversation, so a burst of replies stays one tray entry. Untagged notifications
-            // are unaffected: the tag defaults to the message id, which is what the int was
-            // computed from before.
-            val notificationTag = dashXData.tag ?: dashXData.id
+            val (notificationTag, notificationId) = notificationIdentity(dashXData)
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
                 ContextCompat.checkSelfPermission(
                     context, Manifest.permission.POST_NOTIFICATIONS
@@ -93,7 +88,7 @@ object DashXPush {
             ) {
                 try {
                     NotificationManagerCompat.from(context)
-                        .notify(notificationTag, notificationTag.hashCode(),
+                        .notify(notificationTag, notificationId,
                             NotificationRenderer.createNotification(context, dashXData))
                 } catch (e: SecurityException) {
                     DashXLog.e(TAG, "Cannot post notification: ${e.message}")
@@ -127,6 +122,18 @@ object DashXPush {
     private fun chatConversationId(payload: DashXPayload): String? {
         if (payload.screenName != IN_APP_CHAT_SCREEN_NAME) return null
         return payload.screenData?.get("conversationId")
+    }
+
+    /**
+     * Android's tray identity is `(tag, id)`. Chat pushes derive the int from the tag too, so a
+     * burst of replies to one conversation REPLACES its tray entry instead of stacking. Every
+     * other payload keeps the pre-1.4 identity — `(tag ?: id, id.hashCode())` — so same-tag
+     * non-chat notifications still stack, one entry per message.
+     */
+    internal fun notificationIdentity(payload: DashXPayload): Pair<String, Int> {
+        val tag = payload.tag ?: payload.id
+        val id = if (chatConversationId(payload) != null) tag.hashCode() else payload.id.hashCode()
+        return tag to id
     }
 
     /** Removes a conversation's tray entry — called when its screen opens. */

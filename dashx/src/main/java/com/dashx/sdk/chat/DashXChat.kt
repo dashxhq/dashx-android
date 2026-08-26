@@ -7,7 +7,6 @@ import com.dashx.android.graphql.generated.FetchInAppChatConversationQuery
 import com.dashx.android.graphql.generated.FetchInAppChatConversationsQuery
 import com.dashx.android.graphql.generated.FetchInAppChatMessagesQuery
 import com.dashx.android.graphql.generated.ResolveInAppChatConversationMutation
-import com.dashx.android.graphql.generated.SendInAppChatMessageMutation
 import com.dashx.android.realtime.DashXRealtimeMessage
 import com.dashx.android.realtime.DashXRealtimeSubscription
 import com.dashx.android.realtime.RealtimeRuntime
@@ -83,6 +82,9 @@ interface DashXConversationLease {
     val conversationId: String
     val state: StateFlow<ConversationState>
 
+    /** Also delivers the current state immediately, so a listener added to an already-loaded
+     * conversation renders without waiting for the next change. Listeners are lease-owned:
+     * [close] drops them. */
     fun addStateListener(listener: ConversationStateListener)
     fun removeStateListener(listener: ConversationStateListener)
 
@@ -90,12 +92,13 @@ interface DashXConversationLease {
     fun setOnTerminated(callback: ((DashXSubscriptionEnd) -> Unit)?)
 
     /**
-     * Sends a visitor message. Returns the client message id SYNCHRONOUSLY — the idempotency key: a
+     * Sends a visitor message; [onSuccess] delivers the committed message as the SDK's own
+     * [ChatMessage]. Returns the client message id SYNCHRONOUSLY — the idempotency key: a
      * host-triggered retry of a failed send must reuse it via the raw operation.
      */
     fun sendMessage(
         content: JsonObject,
-        onSuccess: (SendInAppChatMessageMutation.SendInAppChatMessage) -> Unit,
+        onSuccess: (ChatMessage) -> Unit,
         onError: (DashXError) -> Unit
     ): String
 
@@ -227,8 +230,6 @@ internal class ConversationSession(
 
     private val mutableState = MutableStateFlow<ConversationState>(ConversationState.Loading)
     val state: StateFlow<ConversationState> get() = mutableState
-    private val listeners = CopyOnWriteArrayList<ConversationStateListener>()
-
     private val leases = CopyOnWriteArrayList<Lease>()
     private var ended = false
     private val lock = Any()
@@ -243,6 +244,8 @@ internal class ConversationSession(
     private var resyncPending = false
     private var rebuildUsed = false
     private var oldestFetchedPage = Int.MAX_VALUE
+    /** Newest unconfirmed tail id a resync was already requested for — one request per tail. */
+    private var resyncRequestedFor: String? = null
     /** Server-confirmed reconnect cursor: the backend has confirmed that every visible message
      * through this id is in [messages]. Advanced only by snapshot/cursor FETCH results, never by
      * realtime frames — frames can arrive out of commit order (they are keyed per message, not per
@@ -466,9 +469,7 @@ internal class ConversationSession(
     }
 
     private fun notifyListeners(state: ConversationState) {
-        listeners.forEach { l ->
-            DashX.launchCallback { runCatching { l.onConversationStateChanged(state) } }
-        }
+        leases.forEach { it.notifyStateListeners(state) }
     }
 
     private fun loadPreviousPageInternal(onError: ((DashXError) -> Unit)?) {
@@ -496,11 +497,32 @@ internal class ConversationSession(
         if (!anyLeaseVisible()) return
         val newest = messages.lastOrNull()?.id ?: return
         if (newest == markedMessageId) return
+        // Read-through is a server-side tuple comparison, so marking a live frame that overtook a
+        // lost sibling would mark the unseen sibling read and kill its push. Only the
+        // server-confirmed cursor is a safe boundary: an unconfirmed tail reconciles first — which
+        // also surfaces any gap on screen — and the completed cycle re-enters here. One resync per
+        // distinct tail id, or a row the server never returns would spin the lane hot.
+        if (newest != lastKnownMessageId) {
+            if (resyncRequestedFor != newest) {
+                resyncRequestedFor = newest
+                requestResync()
+            }
+            return
+        }
         pendingMarkJob?.cancel()
         pendingMarkJob = scope.launch(syncLane) {
             delay(MARK_DEBOUNCE_MS) // coalesce the burst a history load or rapid exchange produces
             markNow(newest)
         }
+    }
+
+    /** Lane-confined. Piggybacks on a running cycle; otherwise starts one. */
+    private fun requestResync() {
+        if (syncing) {
+            resyncPending = true
+            return
+        }
+        scope.launch(syncLane) { if (!syncing) runSync() }
     }
 
     private fun markNow(messageId: String) {
@@ -545,8 +567,9 @@ internal class ConversationSession(
         backend.setConversationVisible(key.conversationId, false)
         val terminal = ConversationState.Error(DashXError.SessionEnded())
         mutableState.value = terminal
-        notifyListeners(terminal)
+        // The leases list is already cleared; the captured list still gets the terminal state.
         toNotify.forEach { lease ->
+            lease.notifyStateListeners(terminal)
             lease.terminatedCallback?.let { cb -> DashX.launchCallback { cb(DashXSubscriptionEnd.SessionEnded) } }
         }
         ChatCoordinator.remove(key, this)
@@ -576,17 +599,30 @@ internal class ConversationSession(
         @Volatile var visibleNow = false
         @Volatile var terminatedCallback: ((DashXSubscriptionEnd) -> Unit)? = null
         private val closed = AtomicBoolean(false)
+        private val stateListeners = CopyOnWriteArrayList<ConversationStateListener>()
 
         override val conversationId: String get() = key.conversationId
         override val state: StateFlow<ConversationState> get() = this@ConversationSession.state
 
-        override fun addStateListener(listener: ConversationStateListener) { listeners.add(listener) }
-        override fun removeStateListener(listener: ConversationStateListener) { listeners.remove(listener) }
+        fun notifyStateListeners(state: ConversationState) {
+            stateListeners.forEach { l ->
+                DashX.launchCallback { runCatching { l.onConversationStateChanged(state) } }
+            }
+        }
+
+        override fun addStateListener(listener: ConversationStateListener) {
+            stateListeners.add(listener)
+            // Replay: a lease opened into an already-loaded conversation renders now, not on the
+            // next change. Reads the freshest state at delivery, on the callback dispatcher like
+            // every other notification — a duplicate render is harmless, a blank screen is not.
+            DashX.launchCallback { runCatching { listener.onConversationStateChanged(mutableState.value) } }
+        }
+        override fun removeStateListener(listener: ConversationStateListener) { stateListeners.remove(listener) }
         override fun setOnTerminated(callback: ((DashXSubscriptionEnd) -> Unit)?) { terminatedCallback = callback }
 
         override fun sendMessage(
             content: JsonObject,
-            onSuccess: (SendInAppChatMessageMutation.SendInAppChatMessage) -> Unit,
+            onSuccess: (ChatMessage) -> Unit,
             onError: (DashXError) -> Unit
         ): String {
             // Generated BEFORE the network attempt and returned synchronously: the idempotency key a
@@ -597,7 +633,7 @@ internal class ConversationSession(
                 identityId = key.chatIdentityId,
                 content = content,
                 clientMessageId = clientMessageId,
-                onSuccess = onSuccess,
+                onSuccess = { result -> onSuccess(ChatMessage.from(result.chatMessageFragment)) },
                 onError = onError
             )
             return clientMessageId
@@ -620,6 +656,7 @@ internal class ConversationSession(
 
         override fun close() {
             if (!closed.compareAndSet(false, true)) return
+            stateListeners.clear() // a closed screen must not keep painting from a live sibling lease
             closeLease(this)
         }
     }
