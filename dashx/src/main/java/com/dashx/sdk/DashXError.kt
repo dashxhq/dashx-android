@@ -21,6 +21,16 @@ sealed class DashXError(val message: String) {
         message: String
     ) : DashXError(message)
 
+    /** The identity session ended (identity switch, reset, or shutdown) while this operation ran. */
+    class SessionEnded(
+        message: String = "The identity session ended before the operation completed"
+    ) : DashXError(message)
+
+    /** A realtime channel subscription was never acknowledged — invalid or unauthorized. */
+    class SubscriptionFailed(
+        message: String = "The realtime subscription was not acknowledged"
+    ) : DashXError(message)
+
     /** Whether this error is transient and the operation can be retried. */
     val isRetryable: Boolean
         get() = when (this) {
@@ -29,6 +39,8 @@ sealed class DashXError(val message: String) {
             is NotConfigured -> false
             is NotIdentified -> false
             is AssetError -> false
+            is SessionEnded -> false
+            is SubscriptionFailed -> true
         }
 
     override fun toString(): String = "${this::class.simpleName}: $message"

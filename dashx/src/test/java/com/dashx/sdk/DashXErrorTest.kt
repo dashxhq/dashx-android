@@ -60,7 +60,9 @@ class DashXErrorTest {
             DashXError.NotIdentified(),
             DashXError.GraphQLError("err"),
             DashXError.NetworkError("err"),
-            DashXError.AssetError("err")
+            DashXError.AssetError("err"),
+            DashXError.SessionEnded(),
+            DashXError.SubscriptionFailed()
         )
 
         errors.forEach { error ->
@@ -70,6 +72,8 @@ class DashXErrorTest {
                 is DashXError.GraphQLError -> assertNotNull(error.message)
                 is DashXError.NetworkError -> assertNotNull(error.message)
                 is DashXError.AssetError -> assertNotNull(error.message)
+                is DashXError.SessionEnded -> assertNotNull(error.message)
+                is DashXError.SubscriptionFailed -> assertNotNull(error.message)
             }
         }
     }
@@ -81,7 +85,6 @@ class DashXErrorTest {
 
         assertSame(error, exception.error)
         assertEquals("connection lost", exception.message)
-        assertTrue(exception is Exception)
     }
 
     @Test

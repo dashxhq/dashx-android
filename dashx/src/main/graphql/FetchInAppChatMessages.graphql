@@ -1,0 +1,7 @@
+query FetchInAppChatMessages($conversationId: UUID!, $limit: Int, $page: Int, $afterMessageId: UUID) {
+  fetchInAppChatMessages(
+    input: { conversationId: $conversationId, limit: $limit, page: $page, afterMessageId: $afterMessageId }
+  ) {
+    ...ChatMessageFragment
+  }
+}

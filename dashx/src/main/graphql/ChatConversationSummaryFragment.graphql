@@ -1,0 +1,28 @@
+fragment ChatConversationSummaryFragment on ChatConversationSummary {
+  conversationId
+  category
+  context {
+    kind
+    subtype
+    id
+    reference
+    name
+  }
+  topic {
+    id
+    label
+  }
+  status
+  title
+  lastMessagePreview
+  lastMessageAt
+  lastSenderKind
+  activityAt
+  assignedGroups {
+    id
+    name
+  }
+  # Visitor-inbound unread: visible messages not sent by the visitor that sort
+  # after the conversation's read cursor. Cleared by MarkInAppChatConversationRead.
+  unreadCount
+}

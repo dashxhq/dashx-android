@@ -40,6 +40,20 @@ import com.dashx.android.graphql.generated.type.JSON
 import com.dashx.android.graphql.generated.type.UnsubscribeContactInput
 import com.dashx.android.data.PrepareAssetResponse
 import com.dashx.android.utils.*
+import com.dashx.android.realtime.ConnectionState
+import com.dashx.android.realtime.ConnectionStateListener
+import com.dashx.android.realtime.RealtimeRuntime
+import com.dashx.android.push.PushRuntimeState
+import com.apollographql.apollo.api.http.HttpRequest
+import com.apollographql.apollo.api.http.HttpResponse
+import com.apollographql.apollo.network.http.HttpInterceptor
+import com.apollographql.apollo.network.http.HttpInterceptorChain
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import java.util.concurrent.atomic.AtomicReference
 import com.google.android.gms.tasks.OnCompleteListener
 import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.*
@@ -69,10 +83,137 @@ class DashX {
         private var publicKey: String? = null
         private var targetEnvironment: String? = null
 
-        @Volatile private var accountAnonymousUid: String? = null
-        @Volatile private var accountUid: String? = null
-        internal val isIdentified get() = accountUid != null
-        @Volatile private var identityToken: String? = null
+        /**
+         * The one source of account state. Published atomically so no reader can pair a new uid
+         * with an old token; consumers needing several values take ONE [account] get() and read
+         * from it, never two property reads.
+         */
+        internal data class AccountSnapshot(
+            val uid: String?,
+            val anonymousUid: String?,
+            val identityToken: String?,
+            val sessionGeneration: Long,
+            /** Bumped by every explicit token write (setIdentity): a provider load requested under
+             * an older epoch is stale and must not overwrite the newer explicit token. */
+            val tokenEpoch: Long = 0
+        )
+
+        internal val account = AtomicReference(AccountSnapshot(null, null, null, 0L))
+
+        internal val isIdentified get() = account.get().uid != null
+
+        /** Identity token provider, bound to the uid it was registered for. */
+        private data class BoundProvider(val uid: String, val provider: DashXTokenProvider)
+        @Volatile private var boundProvider: BoundProvider? = null
+        /** Single-flight guard for provider loads; completes with the token or null. */
+        private val tokenLoadInFlight = AtomicReference<CompletableDeferred<String?>?>(null)
+
+        /** Parent of managed conversation-session work; cancelled on identity switch/reset/shutdown.
+         * Raw chat operations are NOT children — they run on the global scope with their callbacks
+         * session-generation-gated instead (see `sessionBound` in ChatOperations), so a request
+         * begun under one identity can never deliver its data under the next. */
+        internal var chatSessionJob = SupervisorJob()
+            private set
+
+        // ---- realtime runtime (per configure(); detached, self-tearing-down on shutdown) ----
+        private var realtimeBaseURI: String? = null
+        @Volatile internal var realtimeRuntime: RealtimeRuntime? = null
+            private set
+
+        internal val pushRuntime = PushRuntimeState()
+
+        private val mutableConnectionState = MutableStateFlow<ConnectionState>(ConnectionState.Idle)
+        val connectionState: StateFlow<ConnectionState> get() = mutableConnectionState
+        private val connectionStateListeners = CopyOnWriteArrayList<ConnectionStateListener>()
+
+        fun addConnectionStateListener(listener: ConnectionStateListener) {
+            connectionStateListeners.add(listener)
+        }
+
+        fun removeConnectionStateListener(listener: ConnectionStateListener) {
+            connectionStateListeners.remove(listener)
+        }
+
+        private fun publishConnectionState(runtime: RealtimeRuntime, state: ConnectionState) {
+            if (realtimeRuntime !== runtime) return // a detached runtime's late writes are ignored
+            mutableConnectionState.value = state
+            connectionStateListeners.forEach { l ->
+                callbackScope.launch(callbackDispatcher) {
+                    runCatching { l.onConnectionStateChanged(state) }
+                }
+            }
+        }
+
+        /** Lazily created: no chat subscribers → no runtime, no socket. */
+        internal fun requireRealtimeRuntime(): RealtimeRuntime {
+            realtimeRuntime?.let { return it }
+            synchronized(this) {
+                realtimeRuntime?.let { return it }
+                lateinit var created: RealtimeRuntime
+                created = RealtimeRuntime(
+                    urlProvider = { realtimeUrl() },
+                    onAnyFrame = { frame -> com.dashx.android.chat.ChatCoordinator.onGlobalFrame(frame) },
+                    onAuthRejected = { onRealtimeAuthRejected() },
+                    publishState = { state -> publishConnectionState(created, state) },
+                    initialForeground = lifecycleForeground
+                )
+                realtimeRuntime = created
+                return created
+            }
+        }
+
+        private fun realtimeUrl(): String? {
+            val key = publicKey ?: return null
+            // Chat is owner-scoped: without an identity token the socket would connect anonymously
+            // and the visitor's channels never deliver — so no identity means no connection.
+            val snapshot = account.get()
+            val token = snapshot.identityToken ?: return null
+            val base = realtimeBaseURI ?: DEFAULT_REALTIME_BASE_URI
+            val params = mutableListOf("publicKey=" + Uri.encode(key))
+            targetEnvironment?.let { params.add("targetEnvironment=" + Uri.encode(it)) }
+            params.add("identityToken=" + Uri.encode(token))
+            return base + "?" + params.joinToString("&")
+        }
+
+        private const val DEFAULT_REALTIME_BASE_URI = "wss://realtime.dashx.com"
+
+        // ---- process lifecycle (registered once per configure, main-thread-bound) ----
+        @Volatile private var lifecycleForeground = false
+        private var lifecycleObserver: DefaultLifecycleObserver? = null
+
+        private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+
+        private fun registerLifecycleObserver() {
+            mainHandler.post {
+                if (lifecycleObserver != null) return@post // idempotent across configure() calls
+                val owner = ProcessLifecycleOwner.get()
+                lifecycleForeground = owner.lifecycle.currentState
+                    .isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)
+                pushRuntime.setForeground(lifecycleForeground)
+                val observer = object : DefaultLifecycleObserver {
+                    override fun onStart(owner: LifecycleOwner) {
+                        lifecycleForeground = true
+                        pushRuntime.setForeground(true)
+                        realtimeRuntime?.onForeground()
+                        com.dashx.android.chat.ChatCoordinator.onAppForegrounded()
+                    }
+                    override fun onStop(owner: LifecycleOwner) {
+                        lifecycleForeground = false
+                        pushRuntime.setForeground(false)
+                        realtimeRuntime?.onBackground()
+                    }
+                }
+                lifecycleObserver = observer
+                owner.lifecycle.addObserver(observer)
+            }
+        }
+
+        private fun unregisterLifecycleObserver() {
+            mainHandler.post {
+                lifecycleObserver?.let { ProcessLifecycleOwner.get().lifecycle.removeObserver(it) }
+                lifecycleObserver = null
+            }
+        }
 
         @Volatile private var context: Context? = null
 
@@ -87,6 +228,14 @@ class DashX {
          * Set via [configure] or [setCallbackDispatcher].
          */
         @Volatile private var callbackDispatcher: CoroutineDispatcher = Dispatchers.Main.immediate
+
+        /**
+         * Host-facing callback dispatch. Deliberately OUTSIDE [coroutineScope]: [shutdown] cancels
+         * in-flight SDK work, but callbacks already promised at that point — terminated leases,
+         * terminal states, connection-state listeners — must still deliver, not silently vanish
+         * with the cancelled scope.
+         */
+        private val callbackScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
         private val pollCounter = AtomicInteger(1)
 
@@ -187,6 +336,12 @@ class DashX {
             init(context, publicKey, baseURI, targetEnvironment, callbackDispatcher)
         }
 
+        /** Overrides the realtime WebSocket base URI (e.g. staging). Kept out of [configure] to
+         * preserve its pre-1.4 JVM signature. */
+        fun setRealtimeBaseUri(baseUri: String?) {
+            realtimeBaseURI = baseUri
+        }
+
         /**
          * Sets the dispatcher used for success/error callbacks. Useful for tests or when
          * you prefer callbacks on a specific thread (e.g. a single-thread executor).
@@ -223,6 +378,8 @@ class DashX {
 
             // Replay notification tracking captured before configure() ran. See [PendingNotificationTracker].
             PendingNotificationTracker.flush(context)
+
+            registerLifecycleObserver()
         }
 
         private fun configureEventQueue(context: Context) {
@@ -230,6 +387,7 @@ class DashX {
             eventQueue.configure(context)
             eventQueue.trackFunction = { event, dataJson, queuedUid, queuedAnonymousUid ->
                 try {
+                    val snapshot = account.get()
                     val jsonData = dataJson?.let {
                         Json.parseToJsonElement(it).jsonObject
                     }
@@ -239,8 +397,8 @@ class DashX {
                     val mutation = TrackEventMutation(
                         input = TrackEventInput(
                             event = event,
-                            accountUid = (queuedUid ?: accountUid)?.let { Optional.Present(it) } ?: Optional.Absent,
-                            accountAnonymousUid = (queuedAnonymousUid ?: accountAnonymousUid)?.let { Optional.Present(it) } ?: Optional.Absent,
+                            accountUid = (queuedUid ?: snapshot.uid)?.let { Optional.Present(it) } ?: Optional.Absent,
+                            accountAnonymousUid = (queuedAnonymousUid ?: snapshot.anonymousUid)?.let { Optional.Present(it) } ?: Optional.Absent,
                             data = jsonData?.let { Optional.Present(it) } ?: Optional.Absent,
                             systemContext = Optional.Present(systemContext)
                         )
@@ -260,16 +418,16 @@ class DashX {
                 return
             }
             val dashXSharedPreferences = getDashXSharedPreferences(ctx)
-            accountUid = dashXSharedPreferences.getString(SHARED_PREFERENCES_KEY_ACCOUNT_UID, null)
-            accountAnonymousUid =
+            val uid = dashXSharedPreferences.getString(SHARED_PREFERENCES_KEY_ACCOUNT_UID, null)
+            var anonymousUid =
                 dashXSharedPreferences.getString(SHARED_PREFERENCES_KEY_ACCOUNT_ANONYMOUS_UID, null)
-            identityToken =
+            val token =
                 dashXSharedPreferences.getString(SHARED_PREFERENCES_KEY_IDENTITY_TOKEN, null)
 
-            if (accountAnonymousUid.isNullOrEmpty()) {
-                accountAnonymousUid = generateAccountAnonymousUid()
-                saveToStorage()
-            }
+            val regenerated = anonymousUid.isNullOrEmpty()
+            if (regenerated) anonymousUid = generateAccountAnonymousUid()
+            account.updateAndGet { it.copy(uid = uid, anonymousUid = anonymousUid, identityToken = token) }
+            if (regenerated) saveToStorage()
         }
 
         private fun saveToStorage() {
@@ -277,14 +435,15 @@ class DashX {
                 DashXLog.e(tag, "saveToStorage: context is null, configure() must be called first")
                 return
             }
+            val snapshot = account.get()
             getDashXSharedPreferences(ctx).edit().apply {
-                putString(SHARED_PREFERENCES_KEY_ACCOUNT_UID, accountUid)
-                putString(SHARED_PREFERENCES_KEY_ACCOUNT_ANONYMOUS_UID, accountAnonymousUid)
-                putString(SHARED_PREFERENCES_KEY_IDENTITY_TOKEN, identityToken)
+                putString(SHARED_PREFERENCES_KEY_ACCOUNT_UID, snapshot.uid)
+                putString(SHARED_PREFERENCES_KEY_ACCOUNT_ANONYMOUS_UID, snapshot.anonymousUid)
+                putString(SHARED_PREFERENCES_KEY_IDENTITY_TOKEN, snapshot.identityToken)
             }.apply()
         }
 
-        /** Recreated when identity/token changes (setIdentity, init). */
+        /** Built once per init(); the HTTP interceptor reads the identity token per request. */
         @Volatile private var apolloClient = createApolloClient()
 
         private fun createGraphqlClient() {
@@ -299,10 +458,23 @@ class DashX {
                 // clock on flaky networks. Apollo's defaults aren't documented.
                 .httpEngine(DefaultHttpEngine(15_000L, 30_000L))
                 .addCustomScalarAdapter(JSON.type, JsonObjectScalarAdapter)
+                // Read per request: the client is never rebuilt on identity change.
+                .addHttpInterceptor(object : HttpInterceptor {
+                    override suspend fun intercept(
+                        request: HttpRequest,
+                        chain: HttpInterceptorChain
+                    ): HttpResponse {
+                        val token = account.get().identityToken
+                        return chain.proceed(
+                            if (token == null) request
+                            else request.newBuilder().addHeader("X-Identity-Token", token).build()
+                        )
+                    }
+                })
+                .addInterceptor(AuthRetryInterceptor())
                 .apply {
                     publicKey?.let { addHttpHeader("X-Public-Key", it) }
                     targetEnvironment?.let { addHttpHeader("X-Target-Environment", it) }
-                    identityToken?.let { addHttpHeader("X-Identity-Token", it) }
                 }
                 .build()
         }
@@ -330,17 +502,19 @@ class DashX {
             return false
         }
 
-        private fun <D : Mutation.Data> executeMutation(
+        internal fun <D : Mutation.Data> executeMutation(
             mutation: Mutation<D>,
             onError: ((DashXError) -> Unit)? = null,
             onFinally: (() -> Unit)? = null,
             onSuccess: (ApolloResponse<D>) -> Unit
-        ) {
+        ): Job {
             val job = coroutineScope.launch {
                 val response: ApolloResponse<D>
                 try {
                     response = apolloClient.mutation(mutation).execute()
                 } catch (t: Throwable) {
+                    // Mapped to NetworkError, cancellation would be lost on the cancelled job.
+                    if (t is CancellationException) throw t
                     // Non-cancellation failures surface as onError. Under
                     // shutdown's cancellation, withContext propagates
                     // CancellationException out and the documented "no
@@ -373,19 +547,21 @@ class DashX {
                     }
                 }
             }
+            return job
         }
 
-        private fun <D : Query.Data> executeQuery(
+        internal fun <D : Query.Data> executeQuery(
             query: Query<D>,
             onError: ((DashXError) -> Unit)? = null,
             onFinally: (() -> Unit)? = null,
             onSuccess: (ApolloResponse<D>) -> Unit
-        ) {
+        ): Job {
             val job = coroutineScope.launch {
                 val response: ApolloResponse<D>
                 try {
                     response = apolloClient.query(query).execute()
                 } catch (t: Throwable) {
+                    if (t is CancellationException) throw t
                     // See [executeMutation]'s catch.
                     val errorMsg = "Query execute failed: ${t.message ?: t::class.java.simpleName}"
                     DashXLog.e(tag, errorMsg)
@@ -409,6 +585,49 @@ class DashX {
                     }
                 }
             }
+            return job
+        }
+
+        /**
+         * Bridges an internal Job-returning operation to a suspend caller with a single guard over
+         * every completion path: success, error, caller cancellation, session-job cancellation, and
+         * a synchronous throw from [start]. Caller cancellation claims the guard BEFORE cancelling,
+         * then cancels unconditionally so the network job can never leak.
+         */
+        internal suspend fun <T> awaitOperation(
+            start: (onSuccess: (T) -> Unit, onError: (DashXError) -> Unit) -> Job
+        ): T = suspendCancellableCoroutine { cont ->
+            val claimed = AtomicBoolean(false)
+
+            // Resuming a cancelled cancellable continuation is a documented no-op, so the guard
+            // (exactly one attempt) plus plain resume covers the resume/cancel race without
+            // internal coroutine APIs.
+            fun succeed(value: T) {
+                if (!claimed.compareAndSet(false, true)) return
+                cont.resumeWith(Result.success(value))
+            }
+
+            fun fail(error: Throwable) {
+                if (!claimed.compareAndSet(false, true)) return
+                cont.resumeWith(Result.failure(error))
+            }
+
+            val job = try {
+                start({ succeed(it) }, { fail(DashXException(it)) })
+            } catch (t: Throwable) {
+                fail(t)
+                return@suspendCancellableCoroutine
+            }
+
+            // Runs regardless of cancellation, so the continuation always terminates.
+            job.invokeOnCompletion { cause ->
+                if (cause != null) fail(DashXException(DashXError.SessionEnded()))
+            }
+
+            cont.invokeOnCancellation {
+                claimed.set(true)
+                job.cancel()
+            }
         }
 
         private fun generateAccountAnonymousUid(): String {
@@ -420,22 +639,31 @@ class DashX {
             onSuccess: (() -> Unit)? = null,
             onError: ((DashXError) -> Unit)? = null
         ) {
+            identifyJob(options, onSuccess, onError)
+        }
+
+        internal fun identifyJob(
+            options: HashMap<String, String>? = null,
+            onSuccess: (() -> Unit)? = null,
+            onError: ((DashXError) -> Unit)? = null
+        ): Job {
             if (options == null) {
                 DashXLog.e(tag, "Cannot be called with null, pass options: object")
-                onError?.let { coroutineScope.launch(callbackDispatcher) { it(DashXError.NetworkError("identify() requires a non-null options map")) } }
-                return
+                // A validation failure still yields a Job the suspend wrapper can observe.
+                return coroutineScope.launch(callbackDispatcher) { onError?.invoke(DashXError.NetworkError("identify() requires a non-null options map")) }
             }
 
+            val snapshot = account.get()
             val uid = if (options.containsKey(UserAttributes.UID)) {
                 options[UserAttributes.UID]
             } else {
-                this.accountUid
+                snapshot.uid
             }
 
             val anonymousUid = if (options.containsKey(UserAttributes.ANONYMOUS_UID)) {
                 options[UserAttributes.ANONYMOUS_UID]
             } else {
-                this.accountAnonymousUid
+                snapshot.anonymousUid
             }
 
             val mutation = IdentifyAccountMutation(
@@ -450,19 +678,235 @@ class DashX {
                 )
             )
 
-            executeMutation(mutation, onError) { result ->
+            return executeMutation(mutation, onError) { result ->
                 DashXLog.d(tag, result.data?.identifyAccount?.toString())
                 onSuccess?.invoke()
             }
         }
 
+        /**
+         * Transitions:
+         *  - no current identity → T0: waiting subscriptions are preserved and connect now
+         *  - same uid, same token → no-op
+         *  - same uid, new token → T1: sessions preserved, socket recycled
+         *  - different uid (incl. → null) → T2: previous identity's chat work is terminated
+         */
         fun setIdentity(uid: String?, token: String?) {
-            this.accountUid = uid
-            this.identityToken = token
-            saveToStorage()
+            val current = account.get()
+            if (current.uid == uid && current.identityToken == token) return // no-op, even with a provider
 
-            createGraphqlClient()
+            val isActivation = current.uid == null && current.identityToken == null && uid != null
+            val isRefresh = current.uid != null && current.uid == uid
+
+            if (isActivation || isRefresh) {
+                // T0 / T1: the session generation is unchanged — there is no prior authenticated
+                // work to invalidate (T0) or it must survive (T1).
+                account.updateAndGet {
+                    it.copy(uid = uid, identityToken = token, tokenEpoch = it.tokenEpoch + 1)
+                }
+                // Supersede any in-flight provider load: awaiting retries get this token, and the
+                // load's own result is stale under the new epoch.
+                tokenLoadInFlight.getAndSet(null)?.complete(token)
+            } else {
+                endIdentitySession() // T2
+                account.updateAndGet {
+                    it.copy(
+                        uid = uid,
+                        identityToken = token,
+                        sessionGeneration = it.sessionGeneration + 1,
+                        tokenEpoch = it.tokenEpoch + 1
+                    )
+                }
+            }
+
+            saveToStorage()
+            realtimeRuntime?.onIdentityChanged() ?: run {
+                // T0 with waiting leases and no runtime yet: the coordinator connects on demand.
+                com.dashx.android.chat.ChatCoordinator.onIdentityAvailable()
+                publishDirect(ConnectionState.Idle) // nothing else clears a stale AuthenticationFailed
+            }
         }
+
+        /**
+         * Registers a token provider for [uid]. Distinct from [setIdentity]: an overload taking a
+         * nullable second parameter would be ambiguous from Java.
+         */
+        fun setIdentityTokenProvider(uid: String, provider: DashXTokenProvider) {
+            val current = account.get()
+            when {
+                current.uid == null && current.identityToken == null -> { // T0
+                    boundProvider = BoundProvider(uid, provider)
+                    account.updateAndGet { it.copy(uid = uid, identityToken = null) }
+                    saveToStorage()
+                    publishDirect(ConnectionState.Connecting)
+                    requestTokenLoad(forceRefresh = false)
+                }
+                current.uid == uid -> { // attach/replace for the current uid — not a transition
+                    boundProvider = BoundProvider(uid, provider)
+                    // Invalidate the predecessor's in-flight load.
+                    tokenLoadInFlight.getAndSet(null)?.complete(null)
+                    val authFailed = connectionState.value is ConnectionState.AuthenticationFailed
+                    if (current.identityToken == null || authFailed) {
+                        // A cached token under AuthenticationFailed IS the rejected token.
+                        publishDirect(ConnectionState.Connecting)
+                        requestTokenLoad(forceRefresh = authFailed && current.identityToken != null)
+                    }
+                }
+                else -> { // T2 — switch
+                    endIdentitySession()
+                    boundProvider = BoundProvider(uid, provider)
+                    account.updateAndGet {
+                        it.copy(uid = uid, identityToken = null, sessionGeneration = it.sessionGeneration + 1)
+                    }
+                    saveToStorage()
+                    publishDirect(ConnectionState.Connecting)
+                    requestTokenLoad(forceRefresh = false)
+                }
+            }
+        }
+
+        /**
+         * T2's teardown: cancel the previous identity's chat work and close its sessions. Persisted
+         * identity and the push subscription are NOT touched — that is [reset].
+         */
+        private fun endIdentitySession() {
+            boundProvider = null
+            tokenLoadInFlight.getAndSet(null)?.complete(null)
+            chatSessionJob.cancel()
+            chatSessionJob = SupervisorJob()
+            com.dashx.android.chat.ChatCoordinator.closeAllSessions()
+            pushRuntime.clearVisible()
+        }
+
+        /**
+         * Single-flight provider load. A result is stale — and discarded — if the session
+         * generation or token epoch moved, or the provider was replaced, since the request. Only
+         * the provider's first callback is accepted; a provider that never calls back times out to
+         * [ConnectionState.AuthenticationFailed].
+         *
+         * The returned deferred completes AFTER the token is installed in the snapshot (or with
+         * null on failure/staleness), so an awaiting retry never re-sends the rejected token.
+         */
+        private fun startOrJoinTokenLoad(forceRefresh: Boolean): CompletableDeferred<String?>? {
+            val bound = boundProvider ?: return null
+            while (true) {
+                tokenLoadInFlight.get()?.let { return it } // join the in-flight load
+                val fresh = CompletableDeferred<String?>()
+                if (tokenLoadInFlight.compareAndSet(null, fresh)) {
+                    launchTokenLoad(bound, forceRefresh, fresh)
+                    return fresh
+                }
+            }
+        }
+
+        private fun launchTokenLoad(
+            bound: BoundProvider,
+            forceRefresh: Boolean,
+            result: CompletableDeferred<String?>
+        ) {
+            val requestSnapshot = account.get()
+            val accepted = AtomicBoolean(false)
+
+            val job = coroutineScope.launch {
+                var failureCause: Throwable? = null
+                val token = try {
+                    withTimeout(TOKEN_LOAD_TIMEOUT_MS) {
+                        val raw = CompletableDeferred<String?>()
+                        bound.provider.loadToken(forceRefresh, object : DashXTokenCallback {
+                            override fun onToken(token: String) {
+                                if (accepted.compareAndSet(false, true)) raw.complete(token)
+                            }
+                            override fun onUnavailable(cause: Throwable?) {
+                                if (accepted.compareAndSet(false, true)) {
+                                    failureCause = cause
+                                    raw.complete(null)
+                                }
+                            }
+                        })
+                        raw.await()
+                    }
+                } catch (t: TimeoutCancellationException) {
+                    accepted.set(true)
+                    failureCause = t
+                    null
+                } catch (t: CancellationException) {
+                    throw t // scope teardown; the completion handler below still cleans up
+                } catch (t: Throwable) { // a provider that throws instead of calling back
+                    accepted.set(true)
+                    failureCause = t
+                    DashXLog.e(tag, "Token provider threw: ${t.message}")
+                    null
+                }
+
+                val current = account.get()
+                val stale = current.sessionGeneration != requestSnapshot.sessionGeneration ||
+                    current.tokenEpoch != requestSnapshot.tokenEpoch ||
+                    boundProvider !== bound
+
+                if (!stale && token != null) {
+                    account.updateAndGet { it.copy(identityToken = token) } // T1: generation unchanged
+                    saveToStorage()
+                    realtimeRuntime?.onIdentityChanged(fromAuthRefresh = true) ?: run {
+                        com.dashx.android.chat.ChatCoordinator.onIdentityAvailable()
+                        publishDirect(ConnectionState.Idle) // nothing else clears a stale AuthenticationFailed
+                    }
+                    result.complete(token)
+                } else {
+                    if (!stale) publishAuthFailed(failureCause)
+                    result.complete(null)
+                }
+            }
+
+            // Runs on EVERY completion — normal, provider throw, scope cancellation, even a scope
+            // already dead when launch was called — so the single-flight slot can never leak.
+            job.invokeOnCompletion {
+                tokenLoadInFlight.compareAndSet(result, null)
+                result.complete(null) // no-op unless an earlier path failed to complete
+            }
+        }
+
+        private fun requestTokenLoad(forceRefresh: Boolean) {
+            startOrJoinTokenLoad(forceRefresh)
+        }
+
+        /**
+         * GraphQL retry hook: refresh the token and report whether a NEW token is installed. Joins
+         * any in-flight load rather than stacking a second provider call.
+         */
+        internal suspend fun awaitTokenRefresh(): Boolean {
+            val deferred = startOrJoinTokenLoad(forceRefresh = true) ?: return false
+            return deferred.await() != null
+        }
+
+        /** Direct publish for states DashX itself owns (no runtime yet, or auth failures). */
+        private fun publishDirect(state: ConnectionState) {
+            if (mutableConnectionState.value == state) return
+            mutableConnectionState.value = state
+            connectionStateListeners.forEach { l ->
+                callbackScope.launch(callbackDispatcher) {
+                    runCatching { l.onConnectionStateChanged(state) }
+                }
+            }
+        }
+
+        private fun publishAuthFailed(cause: Throwable?) {
+            publishDirect(ConnectionState.AuthenticationFailed(cause))
+        }
+
+        /** Era stamp for the GraphQL auth retry: never resend an old-era request with a new-era token. */
+        internal fun currentSessionGeneration(): Long = account.get().sessionGeneration
+
+        /** A terminal 4401 close: ask the bound provider for a fresh token, once. */
+        private fun onRealtimeAuthRejected() {
+            val bound = boundProvider
+            if (bound == null || bound.uid != account.get().uid) {
+                publishAuthFailed(null)
+                return
+            }
+            requestTokenLoad(forceRefresh = true)
+        }
+
+        private const val TOKEN_LOAD_TIMEOUT_MS = 30_000L
 
         fun reset() {
             // Bump here so a first-time subscribe in flight (no saved token
@@ -473,22 +917,48 @@ class DashX {
             subscribeGeneration.incrementAndGet()
             subscriptionDeviceInfoRefreshPending.set(false)
 
+            // T3: push unsubscribe FIRST — it captures the outgoing identity itself and
+            // authorizes on the public key, so clearing the snapshot next cannot break it.
             unsubscribe()
 
-            accountUid = null
-            identityToken = null
-            accountAnonymousUid = generateAccountAnonymousUid()
+            endIdentitySession()
+
+            account.updateAndGet {
+                it.copy(
+                    uid = null,
+                    identityToken = null,
+                    anonymousUid = generateAccountAnonymousUid(),
+                    sessionGeneration = it.sessionGeneration + 1
+                )
+            }
 
             saveToStorage()
+
+            // The SDK stays configured: lifecycle observer registered, EventQueue running.
+            realtimeRuntime?.onIdentityChanged()
+            publishDirect(ConnectionState.Idle) // listeners hear the transition too, runtime or not
         }
 
         /**
-         * Cancels all in-flight SDK operations and releases resources.
+         * Cancels all in-flight SDK operations and releases resources; identity, persisted token,
+         * anonymous uid, and the push subscription are all preserved — logout is [reset].
          * After calling this, [configure] must be called again before using the SDK.
          */
         fun shutdown() {
             // Flip first so a concurrent notification treats the SDK as unconfigured until configure() reruns.
             configured = false
+
+            chatSessionJob.cancel()
+            chatSessionJob = SupervisorJob()
+            com.dashx.android.chat.ChatCoordinator.closeAllSessions()
+            pushRuntime.reset()
+            unregisterLifecycleObserver()
+
+            // Detach: the runtime closes its own socket, channel, and scope as its last act, so an
+            // immediate configure() builds a fresh runtime this teardown cannot touch.
+            realtimeRuntime?.endSession()
+            realtimeRuntime = null
+            publishDirect(ConnectionState.Idle)
 
             // Mark in-flight subscribes stale before cancelling — late
             // responses landing in the new session would otherwise resurrect
@@ -538,6 +1008,39 @@ class DashX {
             }
             val resource = urnArray[0]
             val recordId = urnArray[1]
+            fetchRecordFromParts(resource, recordId, preview, language, fields, include, exclude, onSuccess, onError)
+        }
+
+        internal fun fetchRecordJob(
+            urn: String,
+            preview: Boolean? = null,
+            language: String? = null,
+            fields: List<JsonObject>? = null,
+            include: List<JsonObject>? = null,
+            exclude: List<JsonObject>? = null,
+            onSuccess: (result: JsonObject) -> Unit,
+            onError: (error: DashXError) -> Unit
+        ): Job {
+            val urnArray = urn.split('/')
+            if (urnArray.size < 2 || urnArray[0].isEmpty() || urnArray[1].isEmpty()) {
+                return coroutineScope.launch(callbackDispatcher) {
+                    onError(DashXError.NetworkError("URN must be of form: {resource}/{recordId}"))
+                }
+            }
+            return fetchRecordFromParts(urnArray[0], urnArray[1], preview, language, fields, include, exclude, onSuccess, onError)
+        }
+
+        private fun fetchRecordFromParts(
+            resource: String,
+            recordId: String,
+            preview: Boolean?,
+            language: String?,
+            fields: List<JsonObject>?,
+            include: List<JsonObject>?,
+            exclude: List<JsonObject>?,
+            onSuccess: (result: JsonObject) -> Unit,
+            onError: (error: DashXError) -> Unit
+        ): Job {
 
             val query = FetchRecordQuery(
                 input = FetchRecordInput(
@@ -551,7 +1054,7 @@ class DashX {
                 )
             )
 
-            executeQuery(query, onError) { result ->
+            return executeQuery(query, onError) { result ->
                 result.data?.fetchRecord?.let(onSuccess)
             }
         }
@@ -569,6 +1072,22 @@ class DashX {
             onSuccess: (result: List<JsonObject>) -> Unit,
             onError: (error: DashXError) -> Unit
         ) {
+            searchRecordsJob(resource, filter, order, limit, preview, language, fields, include, exclude, onSuccess, onError)
+        }
+
+        internal fun searchRecordsJob(
+            resource: String,
+            filter: JsonObject? = null,
+            order: List<JsonObject>? = null,
+            limit: Int? = null,
+            preview: Boolean? = null,
+            language: String? = null,
+            fields: List<JsonObject>? = null,
+            include: List<JsonObject>? = null,
+            exclude: List<JsonObject>? = null,
+            onSuccess: (result: List<JsonObject>) -> Unit,
+            onError: (error: DashXError) -> Unit
+        ): Job {
             val query = SearchRecordsQuery(
                 input = SearchRecordsInput(
                     resource = resource,
@@ -583,7 +1102,7 @@ class DashX {
                 )
             )
 
-            executeQuery(query, onError) { result ->
+            return executeQuery(query, onError) { result ->
                 val records = result.data?.searchRecords ?: listOf()
                 onSuccess(records)
             }
@@ -593,7 +1112,7 @@ class DashX {
             onSuccess: (result: FetchStoredPreferencesQuery.FetchStoredPreferences) -> Unit,
             onError: (error: DashXError) -> Unit
         ) {
-            val uid = accountUid ?: run {
+            val uid = account.get().uid ?: run {
                 coroutineScope.launch(callbackDispatcher) { onError(DashXError.NotIdentified()) }
                 return
             }
@@ -609,7 +1128,7 @@ class DashX {
             onSuccess: (result: SaveStoredPreferencesMutation.SaveStoredPreferences) -> Unit,
             onError: (error: DashXError) -> Unit
         ) {
-            val uid = accountUid ?: run {
+            val uid = account.get().uid ?: run {
                 coroutineScope.launch(callbackDispatcher) { onError(DashXError.NotIdentified()) }
                 return
             }
@@ -796,14 +1315,21 @@ class DashX {
             onSuccess: (() -> Unit)? = null,
             onError: ((DashXError) -> Unit)? = null
         ) {
+            trackJob(event, data, onSuccess, onError)
+        }
+
+        internal fun trackJob(
+            event: String,
+            data: HashMap<String, String>? = hashMapOf(),
+            onSuccess: (() -> Unit)? = null,
+            onError: ((DashXError) -> Unit)? = null
+        ): Job {
             if (!isConfigured()) {
                 DashXLog.e(tag, "track() called before configure(); dropping event '$event'")
                 // Signal onError or the trackAsync() suspend wrapper hangs forever awaiting a callback.
-                onError?.let { cb ->
-                    coroutineScope.launch(callbackDispatcher) { cb(DashXError.NotConfigured()) }
-                }
-                return
+                return coroutineScope.launch(callbackDispatcher) { onError?.invoke(DashXError.NotConfigured()) }
             }
+            val snapshot = account.get()
 
             val jsonData =
                 data?.toMap()?.let { Json.parseToJsonElement(JSONObject(it).toString()).jsonObject }
@@ -815,16 +1341,16 @@ class DashX {
             val mutation = TrackEventMutation(
                 input = TrackEventInput(
                     event = event,
-                    accountUid = accountUid?.let { Optional.Present(it) } ?: Optional.Absent,
-                    accountAnonymousUid = accountAnonymousUid?.let { Optional.Present(it) } ?: Optional.Absent,
+                    accountUid = snapshot.uid?.let { Optional.Present(it) } ?: Optional.Absent,
+                    accountAnonymousUid = snapshot.anonymousUid?.let { Optional.Present(it) } ?: Optional.Absent,
                     data = jsonData?.let { Optional.Present(it) } ?: Optional.Absent,
                     systemContext = Optional.Present(systemContext)
                 )
             )
 
-            executeMutation(mutation, onError = { error ->
+            return executeMutation(mutation, onError = { error ->
                 val dataJsonStr = jsonData?.toString()
-                EventQueue.shared().enqueue(event, dataJsonStr, accountUid, accountAnonymousUid)
+                EventQueue.shared().enqueue(event, dataJsonStr, snapshot.uid, snapshot.anonymousUid)
                 onError?.invoke(error)
             }) { result ->
                 DashXLog.d(tag, result.data?.trackEvent?.toString())
@@ -845,11 +1371,12 @@ class DashX {
                 SystemContext.getInstance().fetchSystemContext()
             )
 
+            val snapshot = account.get()
             val mutation = TrackEventMutation(
                 input = TrackEventInput(
                     event = event,
-                    accountUid = accountUid?.let { Optional.Present(it) } ?: Optional.Absent,
-                    accountAnonymousUid = accountAnonymousUid?.let { Optional.Present(it) } ?: Optional.Absent,
+                    accountUid = snapshot.uid?.let { Optional.Present(it) } ?: Optional.Absent,
+                    accountAnonymousUid = snapshot.anonymousUid?.let { Optional.Present(it) } ?: Optional.Absent,
                     data = jsonData?.let { Optional.Present(it) } ?: Optional.Absent,
                     systemContext = Optional.Present(systemContext)
                 )
@@ -941,13 +1468,13 @@ class DashX {
             trackMessageInternal(id, status, timestamp, null, null)
         }
 
-        private fun trackMessageInternal(
+        internal fun trackMessageInternal(
             id: String,
             status: TrackMessageStatus,
             timestamp: String,
             onSuccess: (() -> Unit)?,
             onError: ((DashXError) -> Unit)?
-        ) {
+        ): Job {
             val mutation = TrackMessageMutation(
                 input = TrackMessageInput(
                     id = id,
@@ -956,7 +1483,7 @@ class DashX {
                 )
             )
 
-            executeMutation(mutation, onError) { result ->
+            return executeMutation(mutation, onError) { result ->
                 DashXLog.d(tag, result.data?.trackMessage?.toString())
                 onSuccess?.invoke()
             }
@@ -1251,6 +1778,9 @@ class DashX {
             // before the Job is launched — otherwise the in-flight count would
             // stay incremented and the next unsubscribe would hang.
             try {
+                // One snapshot for the uid/anonymousUid pair, so a concurrent identity swap cannot
+                // pair a new uid with an old anonymous uid inside a single mutation.
+                val subscribeSnapshot = account.get()
                 val name = Settings.Global.getString(
                     ctx.contentResolver, Settings.Global.DEVICE_NAME
                 ) ?: runCatching {
@@ -1278,8 +1808,8 @@ class DashX {
 
                 val mutation = SubscribeContactMutation(
                     input = SubscribeContactInput(
-                        accountUid = accountUid?.let { Optional.Present(it) } ?: Optional.Absent,
-                        accountAnonymousUid = accountAnonymousUid?.let { Optional.Present(it) } ?: Optional.Absent,
+                        accountUid = subscribeSnapshot.uid?.let { Optional.Present(it) } ?: Optional.Absent,
+                        accountAnonymousUid = subscribeSnapshot.anonymousUid?.let { Optional.Present(it) } ?: Optional.Absent,
                         name = name?.let { Optional.Present(it) } ?: Optional.Absent,
                         kind = ContactKind.ANDROID,
                         value = token,
@@ -1425,8 +1955,9 @@ class DashX {
                 remove(SHARED_PREFERENCES_KEY_SUBSCRIBED_AD_INFO_VERSION)
             }.apply()
 
-            val uid = accountUid
-            val anonymousUid = accountAnonymousUid
+            val outgoing = account.get()
+            val uid = outgoing.uid
+            val anonymousUid = outgoing.anonymousUid
 
             // Sends the unsubscribe mutation after waiting for in-flight
             // subscribes to drain — required so the backend sees
@@ -1511,6 +2042,16 @@ class DashX {
                 })
         }
 
+        internal fun applicationContext(): Context? = context
+
+        internal fun launchCallback(block: suspend () -> Unit): Job =
+            callbackScope.launch(callbackDispatcher) { block() }
+
+        /** Final say on whether a DashX notification is displayed; defaults to display. */
+        fun setNotificationDisplayDecider(decider: com.dashx.android.push.DashXNotificationDisplayDecider?) {
+            com.dashx.android.push.DashXPush.displayDecider = decider
+        }
+
         /** Manually flush the offline event queue. */
         fun flushEventQueue() {
             EventQueue.shared().flush()
@@ -1529,32 +2070,22 @@ class DashX {
         }
 
         fun getIdentityToken(): String? {
-            return identityToken
+            return account.get().identityToken
         }
 
         // ---- Suspend wrappers ----
 
-        suspend fun identifyAsync(options: HashMap<String, String>? = null) =
-            suspendCancellableCoroutine<Unit> { cont ->
-                identify(options,
-                    onSuccess = { cont.resumeWith(Result.success(Unit)) },
-                    onError = { cont.resumeWith(Result.failure(DashXException(it))) }
-                )
-            }
+        suspend fun identifyAsync(options: HashMap<String, String>? = null): Unit =
+            awaitOperation { ok, err -> identifyJob(options, onSuccess = { ok(Unit) }, onError = err) }
 
-        suspend fun trackAsync(event: String, data: HashMap<String, String>? = hashMapOf()) =
-            suspendCancellableCoroutine<Unit> { cont ->
-                track(event, data,
-                    onSuccess = { cont.resumeWith(Result.success(Unit)) },
-                    onError = { cont.resumeWith(Result.failure(DashXException(it))) }
-                )
-            }
+        suspend fun trackAsync(event: String, data: HashMap<String, String>? = hashMapOf()): Unit =
+            awaitOperation { ok, err -> trackJob(event, data, onSuccess = { ok(Unit) }, onError = err) }
 
-        suspend fun trackMessageAsync(id: String, status: TrackMessageStatus) =
-            suspendCancellableCoroutine<Unit> { cont ->
-                trackMessage(id, status,
-                    onSuccess = { cont.resumeWith(Result.success(Unit)) },
-                    onError = { cont.resumeWith(Result.failure(DashXException(it))) }
+        suspend fun trackMessageAsync(id: String, status: TrackMessageStatus): Unit =
+            awaitOperation { ok, err ->
+                trackMessageInternal(
+                    id, status, DateTimeFormatter.ISO_INSTANT.format(Instant.now()),
+                    onSuccess = { ok(Unit) }, onError = err
                 )
             }
 
@@ -1565,11 +2096,8 @@ class DashX {
             fields: List<JsonObject>? = null,
             include: List<JsonObject>? = null,
             exclude: List<JsonObject>? = null
-        ) = suspendCancellableCoroutine<JsonObject> { cont ->
-            fetchRecord(urn, preview, language, fields, include, exclude,
-                onSuccess = { cont.resumeWith(Result.success(it)) },
-                onError = { cont.resumeWith(Result.failure(DashXException(it))) }
-            )
+        ): JsonObject = awaitOperation { ok, err ->
+            fetchRecordJob(urn, preview, language, fields, include, exclude, onSuccess = ok, onError = err)
         }
 
         suspend fun searchRecordsAsync(
@@ -1582,11 +2110,8 @@ class DashX {
             fields: List<JsonObject>? = null,
             include: List<JsonObject>? = null,
             exclude: List<JsonObject>? = null
-        ) = suspendCancellableCoroutine<List<JsonObject>> { cont ->
-            searchRecords(resource, filter, order, limit, preview, language, fields, include, exclude,
-                onSuccess = { cont.resumeWith(Result.success(it)) },
-                onError = { cont.resumeWith(Result.failure(DashXException(it))) }
-            )
+        ): List<JsonObject> = awaitOperation { ok, err ->
+            searchRecordsJob(resource, filter, order, limit, preview, language, fields, include, exclude, onSuccess = ok, onError = err)
         }
     }
 }

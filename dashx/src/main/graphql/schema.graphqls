@@ -1,0 +1,11655 @@
+type Account {
+  id: UUID!
+
+  environmentId: UUID!
+
+  email: String
+
+  phone: String
+
+  fullName: String
+
+  name: String
+
+  firstName: String
+
+  lastName: String
+
+  avatar: String
+
+  gender: AccountGender
+
+  dateOfBirth: NaiveDate
+
+  timeZone: String
+
+  uid: String
+
+  anonymousUid: String
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  hasApiAccess: Boolean!
+
+  hasGuiAccess: Boolean!
+
+  custom: JSON
+
+  status: AccountStatus!
+
+  unconfirmedEmail: String
+
+  confirmationDigest: String
+
+  confirmationExpiresAt: Timestamp
+
+  regularAccountId: UUID
+
+  kind: AccountKind!
+
+  tours: JSON!
+
+  billingExternalUid: String
+
+  isMfaEnabled: Boolean!
+
+  workspaceId: UUID!
+
+  purpose: AccountPurpose
+
+  defaultGroupId: UUID
+
+  externalUid: String
+
+  externalMetadata: JSON
+
+  identityToken: String
+
+  workStatusIcon: String
+
+  workStatusMessage: String
+
+  computedWorkStatusPresence: AccountWorkStatusPresence!
+
+  effectivePolicyAttachments: [PolicyAttachment!]!
+
+  workStatusReadyForWork: Boolean!
+
+  groupMemberships(filter: JSON, order: [JSON!], limit: Int): [GroupMembership!]!
+
+  addresses(filter: JSON, order: [JSON!], limit: Int): [Address!]!
+
+  taxRegistrations(filter: JSON, order: [JSON!], limit: Int): [TaxRegistration!]!
+}
+
+enum AccountGender {
+  MALE
+
+  FEMALE
+
+  OTHER
+}
+
+enum AccountIdentityKind {
+  USER
+
+  VISITOR
+}
+
+enum AccountKind {
+  MEMBER
+
+  SERVICE
+
+  USER
+
+  VISITOR
+}
+
+enum AccountPurpose {
+  API
+
+  AGENT
+}
+
+enum AccountStatus {
+  NOT_INVITED
+
+  INVITED
+
+  ONBOARDING
+
+  ENABLED
+
+  DISABLED
+}
+
+enum AccountTourStatus {
+  PENDING
+
+  COMPLETED
+
+  SKIPPED
+}
+
+enum AccountTourType {
+  WELCOME_OWNER_TOUR
+
+  WELCOME_MEMBER_TOUR
+}
+
+enum AccountWorkStatusPresence {
+  ONLINE
+
+  AWAY
+
+  BUSY
+
+  INVISIBLE
+
+  OFFLINE
+}
+
+type Activity {
+  id: UUID!
+
+  actorType: String!
+
+  actorId: UUID!
+
+  verb: String!
+
+  objectType: String!
+
+  objectId: UUID!
+
+  field: String
+
+  metadata: JSON
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  workspaceId: UUID!
+
+  feedId: UUID
+
+  feedResourceId: UUID
+
+  feedRecordId: UUID
+}
+
+input AddDatabaseRecordInput {
+  databaseTableId: UUID!
+
+  data: JSON!
+
+  targetEnvironment: String
+
+  installationId: UUID!
+}
+
+input AddItemToCartInput {
+  accountUid: String
+
+  accountAnonymousUid: String
+
+  itemId: UUID!
+
+  pricingId: UUID!
+
+  quantity: Decimal!
+
+  reset: Boolean!
+
+  custom: JSON
+
+  targetEnvironment: String
+}
+
+input AddProductVariantReleaseInput {
+  targetProduct: String!
+
+  versionName: String!
+
+  releaseNotes: String
+
+  targetEnvironment: String
+}
+
+type Address {
+  id: UUID!
+
+  addressableId: UUID!
+
+  addressableType: String!
+
+  kind: AddressKind!
+
+  line1: String!
+
+  line2: String
+
+  city: String!
+
+  state: String!
+
+  zip: String!
+
+  countryCode: String!
+
+  deletedAt: Timestamp
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+}
+
+enum AddressKind {
+  BILLING
+
+  SHIPPING
+}
+
+type AddressStub {
+  kind: AddressKind!
+
+  line1: String!
+
+  line2: String
+
+  city: String!
+
+  state: String!
+
+  zip: String!
+
+  countryCode: String!
+}
+
+input AddressStubInput {
+  kind: AddressKind!
+
+  line1: String!
+
+  line2: String
+
+  city: String!
+
+  state: String!
+
+  zip: String!
+
+  countryCode: String!
+}
+
+type AggregateResponse {
+  count: Int
+}
+
+type AiAgent {
+  id: UUID!
+
+  workspaceId: UUID
+
+  name: String!
+
+  identifier: String!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  avatar: String
+
+  serviceAccountId: UUID
+
+  archivedAt: Timestamp
+
+  serviceAccount: Account
+
+  aiAgentVersions(filter: JSON, order: [JSON!], limit: Int): [AiAgentVersion!]!
+}
+
+type AiAgentDeployment {
+  id: UUID!
+
+  aiAgentId: UUID!
+
+  settings: JSON!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  kind: AiAgentDeploymentKind!
+
+  workspaceId: UUID!
+
+  publicEmbedKey: String
+
+  aiAgent: AiAgent!
+}
+
+enum AiAgentDeploymentKind {
+  IN_APP
+
+  WHATSAPP
+
+  CALL
+
+  SLACK
+
+  EMAIL
+
+  PLANNER
+}
+
+enum AiAgentInteractionMode {
+  CONVERSATIONAL
+
+  REALTIME
+}
+
+type AiAgentKnowledgeSource {
+  id: UUID!
+
+  aiAgentId: UUID!
+
+  name: String!
+
+  kind: AiAgentKnowledgeSourceKind!
+
+  status: AiAgentKnowledgeSourceStatus!
+
+  statusReason: String
+
+  url: String
+
+  assetId: UUID
+
+  textSnippet: String
+
+  lastProcessedAt: Timestamp
+
+  lastFailedAt: Timestamp
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  embeddingsUid: String
+
+  aiAgent: AiAgent!
+
+  asset: Asset
+}
+
+enum AiAgentKnowledgeSourceKind {
+  WEBSITE
+
+  FILE
+
+  TEXT_SNIPPET
+}
+
+enum AiAgentKnowledgeSourceStatus {
+  PENDING
+
+  PROCESSING
+
+  PROCESSED
+
+  FAILED
+}
+
+type AiAgentLog {
+  id: UUID!
+
+  conversationId: UUID
+
+  environmentId: UUID!
+
+  aiAgentId: UUID!
+
+  aiAgentVersionId: UUID!
+
+  messages: JSON
+
+  llmInput: JSON
+
+  llmOutput: JSON
+
+  status: String!
+
+  statusReason: String
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  sessionId: UUID
+
+  toolTraces: JSON
+
+  aiAgentVersionRevision: Int
+
+  revisionContentHash: String
+
+  effectivePromptHash: String
+
+  effectiveRuntimeConfigHash: String
+
+  effectiveModel: String
+
+  effectiveModelParameters: JSON
+
+  systemInstructionsProvenance: AiAgentPromptProvenance
+
+  runtimeConfigProvenance: AiAgentRuntimeConfigProvenance
+}
+
+enum AiAgentPromptProvenance {
+  VERSION_SNAPSHOT
+
+  VERSION_SNAPSHOT_WITH_PREPENDED_CONTEXT
+
+  CALLER_SUPPLIED
+}
+
+enum AiAgentRuntimeConfigProvenance {
+  VERSION_SNAPSHOT
+
+  INSTALLATION_SYSTEM_AGENT_CONFIG
+
+  CALLER_SUPPLIED
+}
+
+type AiAgentTool {
+  id: UUID!
+
+  workspaceId: UUID
+
+  aiAgentId: UUID
+
+  operationId: UUID!
+
+  identity: AiAgentToolIdentity!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  name: String!
+
+  identifier: String!
+
+  description: String
+
+  parameters: [JSON!]
+
+  cachedSchema: JSON
+
+  sourceToolId: UUID
+
+  hooks: [JSON!]
+
+  aiAgent: AiAgent
+
+  operation: Operation!
+}
+
+enum AiAgentToolIdentity {
+  USER
+
+  AGENT
+}
+
+type AiAgentVersion {
+  id: UUID!
+
+  aiAgentId: UUID!
+
+  createdById: UUID!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  updatedById: UUID
+
+  status: AiAgentVersionStatus!
+
+  systemInstructions: String
+
+  interactionMode: AiAgentInteractionMode!
+
+  llmProviderId: UUID
+
+  llmSettings: JSON!
+
+  ttsProviderId: UUID
+
+  ttsSettings: JSON!
+
+  sttProviderId: UUID
+
+  sttSettings: JSON!
+
+  stsProviderId: UUID
+
+  stsSettings: JSON!
+
+  memoryConfigurations: JSON!
+
+  starterMessages: [JSON!]
+
+  starterSuggestions: [JSON!]
+
+  showStarterSuggestionLabel: Boolean!
+
+  state: [JSON!]
+
+  hooks: [JSON!]
+
+  tools: [JSON!]
+
+  revision: Int!
+
+  skills: [JSON!]
+
+  notes: String
+
+  aiAgent: AiAgent!
+
+  createdBy: Account!
+}
+
+type AiAgentVersionLintFinding {
+  id: UUID!
+
+  lintRunId: UUID!
+
+  ruleId: String!
+
+  ruleVersion: Int!
+
+  severity: String!
+
+  findingKey: String!
+
+  message: String!
+
+  baseExcerpt: String
+
+  skillIdentifier: String
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  confidence: String!
+
+  excerptField: String
+
+  excerptOffset: Int
+
+  excerptLength: Int
+
+  suggestedRewrite: String
+
+  sourceModel: String
+
+  lintRun: AiAgentVersionLintRun!
+}
+
+type AiAgentVersionLintRun {
+  id: UUID!
+
+  aiAgentVersionId: UUID!
+
+  revision: Int!
+
+  revisionContentHash: String!
+
+  source: String!
+
+  attempt: Int!
+
+  status: String!
+
+  error: String
+
+  startedAt: Timestamp
+
+  finishedAt: Timestamp
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  aiAgentVersion: AiAgentVersion!
+}
+
+type AiAgentVersionRevision {
+  id: UUID!
+
+  aiAgentVersionId: UUID!
+
+  revision: Int!
+
+  snapshot: JSON!
+
+  revisionContentHash: String!
+
+  hashAlgorithm: String!
+
+  canonicalSchemaVersion: Int!
+
+  sourceOperation: String!
+
+  createdById: UUID
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  aiAgentVersion: AiAgentVersion!
+
+  createdBy: Account
+}
+
+enum AiAgentVersionStatus {
+  DRAFT
+
+  PUBLISHED
+
+  UNPUBLISHING
+
+  UNPUBLISHED
+}
+
+type AiModel {
+  id: UUID!
+
+  vendorId: UUID!
+
+  name: String!
+
+  identifier: String!
+
+  capabilities: [AiModelCapability!]!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  interactionMode: AiAgentInteractionMode!
+}
+
+enum AiModelCapability {
+  LLM
+
+  TTS
+
+  STT
+
+  STS
+}
+
+type AiSession {
+  id: UUID!
+
+  workspaceId: UUID!
+
+  accountId: UUID!
+
+  parentSessionId: UUID
+
+  title: String
+
+  summary: String
+
+  state: JSON
+
+  scratchpad: JSON
+
+  isTest: Boolean!
+
+  testSettings: JSON
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  aiTurns(filter: JSON, order: [JSON!], limit: Int): [AiTurn!]!
+}
+
+type AiTurn {
+  id: UUID!
+
+  workspaceId: UUID!
+
+  sessionId: UUID!
+
+  accountId: UUID!
+
+  role: AiTurnRole!
+
+  content: [JSON!]!
+
+  contentSummary: String
+
+  metadata: JSON
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+}
+
+enum AiTurnRole {
+  USER
+
+  ASSISTANT
+
+  SYSTEM
+}
+
+input AnalyzeCampaignInput {
+  campaignId: UUID!
+
+  from: Timestamp!
+
+  to: Timestamp!
+
+  targetEnvironment: String
+}
+
+type AnalyzeCampaignResponse {
+  data: [JSON!]!
+}
+
+input AnalyzeCampaignsInput {
+  campaignIds: [UUID!]!
+
+  from: Timestamp
+
+  to: Timestamp
+
+  targetEnvironment: String
+}
+
+type AnalyzeCampaignsResponse {
+  data: [JSON!]!
+}
+
+input AnalyzeIssuesInput {
+  filter: JSON!
+
+  reportType: IssueReportType
+
+  targetEnvironment: String
+}
+
+type AnalyzeIssuesResponse {
+  url: String!
+}
+
+type ApiImport {
+  id: UUID!
+
+  workspaceId: UUID!
+
+  integrationId: UUID
+
+  name: String
+
+  kind: ApiImportKind
+
+  status: ApiImportStatus!
+
+  statusReason: String
+
+  url: String
+
+  assetId: UUID
+
+  data: String
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+}
+
+enum ApiImportKind {
+  OPEN_API
+
+  POSTMAN
+
+  INSOMNIA
+
+  CURL
+}
+
+enum ApiImportStatus {
+  PENDING
+
+  COMPLETED
+
+  FAILED
+}
+
+type ApiRequest {
+  id: UUID!
+
+  workspaceId: UUID!
+
+  integrationId: UUID!
+
+  name: String!
+
+  description: String
+
+  parentId: UUID
+
+  position: Int
+
+  method: String
+
+  path: String
+
+  urlFragment: String
+
+  body: String
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  queryParams: [JSON!]
+
+  headers: [JSON!]
+
+  kind: ApiRequestKind!
+
+  authStrategy: ApiRequestAuthStrategy!
+
+  authStrategySettings: JSON
+
+  pathParams: [JSON!]
+}
+
+enum ApiRequestAuthStrategy {
+  INHERIT
+
+  NONE
+
+  BASIC
+
+  BEARER_TOKEN
+
+  OAUTH
+}
+
+enum ApiRequestKind {
+  FOLDER
+
+  HTTP
+
+  GRPC
+
+  WS
+}
+
+type App {
+  id: UUID!
+
+  workspaceId: UUID
+
+  name: String!
+
+  identifier: String!
+
+  summary: String
+
+  fields: [JSON!]!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  appCategoryId: UUID
+
+  kind: AppKind!
+
+  icon: String
+
+  meta: AppMeta!
+
+  tags: [String!]
+
+  appCategory: AppCategory
+}
+
+type AppCategory {
+  id: UUID!
+
+  name: String!
+
+  description: String
+
+  position: Int!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  kind: AppKind!
+}
+
+enum AppKind {
+  PROJECT
+
+  EXTENSION
+
+  INTEGRATION
+}
+
+type AppMeta {
+  isTestable: Boolean!
+
+  isSyncable: Boolean!
+
+  hasWebhooks: Boolean!
+
+  hasInstallationFields: Boolean!
+
+  integrationCategoryIds: [UUID!]!
+}
+
+input ApplyCouponToCartInput {
+  accountUid: String
+
+  accountAnonymousUid: String
+
+  couponCode: String!
+
+  targetEnvironment: String
+}
+
+input ArchiveAiAgentInput {
+  id: UUID!
+}
+
+input ArchiveInstallationInput {
+  id: UUID!
+}
+
+type Asset {
+  id: UUID!
+
+  workspaceId: UUID!
+
+  resourceId: UUID
+
+  attributeId: UUID
+
+  storageProviderId: UUID
+
+  uploaderId: UUID
+
+  data: JSON!
+
+  uploadStatus: AssetUploadStatus!
+
+  processingStatus: AssetProcessingStatus!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  name: String
+
+  size: Int
+
+  mimeType: String
+
+  uploadStatusReason: String
+
+  processingStatusReason: String
+
+  url: String
+
+  staticVideoUrls: JSON
+
+  staticAudioUrl: String
+
+  externalUid: String
+
+  externalMetadata: JSON
+}
+
+enum AssetProcessingStatus {
+  PENDING
+
+  COMPLETED
+
+  FAILED
+}
+
+enum AssetUploadStatus {
+  PENDING
+
+  UPLOADED
+
+  FAILED
+
+  CANCELED
+
+  TIMED_OUT
+}
+
+input AssignGroupsInput {
+  accountIds: [UUID!]!
+
+  groupIds: [UUID!]!
+}
+
+type AssignGroupsResponse {
+  groupMemberships: [GroupMembership!]!
+}
+
+type AssignedGroupSummary {
+  id: String!
+
+  name: String!
+}
+
+input AttachPoliciesInput {
+  accountIds: [UUID!]!
+
+  groupIds: [UUID!]!
+
+  policies: [PolicyStubInput!]!
+}
+
+type AttachPoliciesResponse {
+  policyAttachments: [PolicyAttachment!]!
+}
+
+type Attribute {
+  id: UUID!
+
+  workspaceId: UUID
+
+  resourceId: UUID!
+
+  name: String!
+
+  identifier: String!
+
+  isNullable: Boolean!
+
+  isArray: Boolean!
+
+  isTranslatable: Boolean!
+
+  isFilterable: Boolean!
+
+  isOrderable: Boolean!
+
+  validations: [JSON!]!
+
+  settings: JSON!
+
+  defaultValue: JSON
+
+  position: Int!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  resolution: JSON
+
+  isPrimary: Boolean!
+
+  dataTypeId: UUID!
+
+  fieldTypeSettings: JSON!
+
+  dataTypeSettings: JSON!
+
+  resolutionKind: AttributeResolutionKind!
+
+  resolutionSettings: JSON!
+
+  displayType: DisplayType!
+
+  displayTypeSettings: JSON!
+
+  fieldType: String
+
+  isDeprecated: Boolean!
+
+  resource: Resource!
+
+  dataType: DataType!
+}
+
+enum AttributeResolutionKind {
+  LOCAL
+
+  REMOTE
+
+  COMPUTED
+}
+
+"""
+The `Boolean` scalar type represents `true` or `false`.
+"""
+scalar Boolean
+
+type Broadcast {
+  id: UUID!
+
+  content: JSON
+
+  data: JSON
+
+  status: BroadcastStatus!
+
+  queuedMessagesCount: Int!
+
+  deliveredMessagesCount: Int!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  name: String
+
+  failureReason: String
+
+  isTest: Boolean!
+
+  scheduledAt: Timestamp
+
+  environmentId: UUID!
+
+  failedMessagesCount: Int!
+
+  sentMessagesCount: Int!
+
+  templateId: UUID
+
+  templateSubkind: TemplateSubkind!
+
+  custom: JSON!
+
+  openedMessagesCount: Int!
+
+  clickedMessagesCount: Int!
+
+  integrationId: UUID
+
+  campaignId: UUID
+
+  recipientsAssetId: UUID
+
+  deferredMessagesCount: Int!
+
+  environment: Environment!
+
+  campaign: Campaign
+
+  integration: Installation
+
+  recipients(filter: JSON, order: [JSON!], limit: Int): [Recipient!]!
+
+  recipientsAsset: Asset
+}
+
+type BroadcastExclusionList {
+  id: UUID!
+
+  broadcastId: UUID!
+
+  exclusionListId: UUID!
+
+  createdAt: Timestamp!
+
+  broadcast: Broadcast!
+
+  exclusionList: ExclusionList!
+}
+
+enum BroadcastStatus {
+  DRAFT
+
+  SCHEDULED
+
+  PENDING
+
+  QUEUED
+
+  PROCESSED
+
+  FAILED
+
+  STOPPED
+}
+
+input BulkEditRecordStubInput {
+  versionId: UUID
+
+  arguments: JSON!
+}
+
+type Campaign {
+  id: UUID!
+
+  environmentId: UUID!
+
+  name: String
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  environment: Environment!
+}
+
+input CancelFlowExecutionInput {
+  id: UUID!
+}
+
+input CapturePaymentInput {
+  accountUid: String
+
+  accountAnonymousUid: String
+
+  gatewayResponse: JSON
+
+  orderId: UUID
+
+  targetEnvironment: String
+}
+
+type Card {
+  id: UUID!
+
+  paymentMethodId: UUID!
+
+  last4: String!
+
+  brand: String!
+
+  expiryMonth: Int!
+
+  expiryYear: Int!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  paymentMethod: PaymentMethod!
+}
+
+input ChangeEmailInput {
+  password: String!
+
+  email: String!
+}
+
+type ChangeEmailResponse {
+  success: Boolean!
+}
+
+input ChangePasswordInput {
+  id: UUID
+
+  currentPassword: String!
+
+  password: String!
+
+  passwordConfirmation: String!
+}
+
+type ChatConversationContext {
+  kind: String!
+
+  subtype: String
+
+  id: String!
+
+  reference: String
+
+  name: String
+}
+
+type ChatConversationSummary {
+  conversationId: UUID!
+
+  category: String!
+
+  context: ChatConversationContext
+
+  topic: ChatConversationTopic
+
+  status: String!
+
+  title: String!
+
+  lastMessagePreview: String
+
+  lastMessageAt: String
+
+  lastSenderKind: String
+
+  activityAt: String!
+
+  assignedGroups: [AssignedGroupSummary!]!
+
+  unreadCount: Int!
+}
+
+type ChatConversationTopic {
+  id: String!
+
+  label: String!
+}
+
+input CheckoutCartInput {
+  accountUid: String
+
+  accountAnonymousUid: String
+
+  gatewayOptions: JSON
+
+  gatewayIdentifier: String
+
+  orderId: UUID
+
+  targetEnvironment: String
+}
+
+type Comment {
+  id: UUID!
+
+  authorId: UUID!
+
+  commentableType: String!
+
+  commentableId: UUID!
+
+  body: String!
+
+  parentId: UUID
+
+  isEdited: Boolean!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  deletedAt: Timestamp
+
+  workspaceId: UUID!
+
+  attachments: [JSON!]
+
+  externalUid: String
+
+  externalMetadata: JSON
+
+  author: Account!
+}
+
+input CompleteOnboardingInput {
+  firstName: String
+
+  lastName: String
+
+  gender: AccountGender
+
+  dateOfBirth: NaiveDate
+
+  custom: JSON
+
+  timeZone: String
+
+  phone: String
+}
+
+type Configuration {
+  id: UUID!
+
+  installationId: UUID!
+
+  environmentId: UUID!
+
+  digest: String!
+
+  settings: JSON!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  status: ConfigurationStatus!
+
+  statusMessage: String
+
+  installation: Installation!
+
+  environment: Environment!
+}
+
+enum ConfigurationStatus {
+  PENDING
+
+  COMPLETED
+
+  FAILED
+}
+
+input ConfigurationStubInput {
+  environmentId: UUID!
+
+  settings: JSON!
+}
+
+input ConfigureInstallationInput {
+  id: UUID!
+}
+
+type ConfigureMfaResponse {
+  qrCode: String!
+}
+
+type Contact {
+  id: UUID!
+
+  accountId: UUID!
+
+  environmentId: UUID!
+
+  name: String
+
+  kind: ContactKind!
+
+  value: String!
+
+  unverifiedValue: String
+
+  verifiedAt: Timestamp
+
+  verificationDigest: String
+
+  verificationExpiresAt: Timestamp
+
+  status: ContactStatus!
+
+  userAgent: String
+
+  osName: String
+
+  osVersion: String
+
+  deviceModel: String
+
+  deviceManufacturer: String
+
+  deviceUid: String
+
+  deviceAdvertisingUid: String
+
+  isDeviceAdTrackingEnabled: Boolean!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  tag: String
+
+  accountKind: AccountKind!
+
+  metadata: JSON
+}
+
+enum ContactKind {
+  EMAIL
+
+  PHONE
+
+  IOS
+
+  ANDROID
+
+  WEB
+
+  WHATSAPP
+}
+
+enum ContactStatus {
+  SUBSCRIBED
+
+  NOT_SUBSCRIBED
+
+  UNSUBSCRIBED
+
+  BLACKLISTED
+
+  REVOKED
+}
+
+input ContactStubInput {
+  kind: ContactKind!
+
+  value: String!
+
+  tag: String
+
+  status: ContactStatus
+
+  shouldDestroy: Boolean
+}
+
+type Conversation {
+  id: UUID!
+
+  workspaceId: UUID!
+
+  kind: ConversationKind!
+
+  name: String
+
+  channel: ConversationChannel!
+
+  subChannel: ConversationSubChannel
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  idempotencyKey: String
+
+  environmentId: UUID!
+
+  lastMessageAt: Timestamp
+
+  aiSummary: String
+
+  agentState: JSON
+
+  readAt: Timestamp
+
+  lastInternalMessageAt: Timestamp
+
+  lastExternalMessageAt: Timestamp
+
+  isTest: Boolean!
+
+  testSettings: JSON
+
+  messages(filter: JSON, order: [JSON!], limit: Int, targetEnvironment: String): [Message!]!
+}
+
+enum ConversationChannel {
+  EMAIL
+
+  SMS
+
+  PUSH
+
+  CHAT
+
+  IN_APP
+}
+
+enum ConversationKind {
+  DIRECT
+
+  NAMED_GROUP
+
+  ANONYMOUS_GROUP
+}
+
+enum ConversationSubChannel {
+  IOS
+
+  ANDROID
+
+  WEB
+
+  WHATSAPP
+
+  SIGNAL
+
+  TELEGRAM
+
+  SLACK
+
+  MICROSOFT_TEAMS
+
+  DASHX
+}
+
+type Coupon {
+  id: UUID!
+
+  name: String!
+
+  identifier: String!
+
+  discountType: CouponDiscountType!
+
+  discountAmount: Decimal!
+
+  currencyCode: String
+
+  expiresAt: Timestamp
+
+  redemptionsLimit: Int
+
+  redemptionsCount: Int!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  environmentId: UUID!
+}
+
+type CouponCode {
+  id: UUID!
+
+  name: String!
+
+  accountId: UUID
+
+  couponId: UUID!
+
+  redemptionsLimit: Int
+
+  redemptionsCount: Int!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+}
+
+enum CouponDiscountType {
+  FIXED
+
+  PERCENTAGE
+}
+
+type CouponRedemption {
+  id: UUID!
+
+  couponId: UUID!
+
+  orderId: UUID!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  coupon: Coupon!
+
+  order: Order!
+}
+
+type CouponRestriction {
+  id: UUID!
+
+  couponId: UUID!
+
+  itemId: UUID
+
+  itemCategoryId: UUID
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  item: Item
+
+  itemCategory: ItemCategory
+}
+
+input CreateAccountInput {
+  kind: AccountKind!
+
+  email: String
+
+  custom: JSON!
+
+  hasGuiAccess: Boolean!
+
+  hasApiAccess: Boolean!
+
+  fullName: String
+
+  name: String
+
+  firstName: String
+
+  lastName: String
+
+  avatar: String
+
+  dateOfBirth: NaiveDate
+
+  timeZone: String
+
+  gender: AccountGender
+
+  phone: String
+
+  groupIds: [UUID!]!
+
+  policies: [PolicyStubInput!]!
+
+  defaultGroupId: UUID
+}
+
+input CreateAiAgentDeploymentInput {
+  aiAgentId: UUID!
+
+  kind: AiAgentDeploymentKind!
+
+  settings: JSON!
+}
+
+input CreateAiAgentInput {
+  name: String!
+
+  identifier: String!
+}
+
+input CreateAiAgentKnowledgeSourceInput {
+  aiAgentId: UUID!
+
+  name: String!
+
+  kind: AiAgentKnowledgeSourceKind!
+
+  url: String
+
+  assetId: UUID
+
+  textSnippet: String
+}
+
+input CreateAiAgentVersionInput {
+  aiAgentId: UUID!
+
+  systemInstructions: String
+
+  interactionMode: AiAgentInteractionMode!
+
+  llmProviderId: UUID
+
+  llmSettings: JSON!
+
+  ttsProviderId: UUID
+
+  ttsSettings: JSON!
+
+  sttProviderId: UUID
+
+  sttSettings: JSON!
+
+  stsProviderId: UUID
+
+  stsSettings: JSON!
+
+  starterMessages: [JSON!]
+
+  starterSuggestions: [JSON!]
+
+  showStarterSuggestionLabel: Boolean
+
+  state: [JSON!]
+
+  hooks: [JSON!]
+
+  tools: [JSON!]
+
+  skills: [JSON!]
+}
+
+input CreateApiImportInput {
+  integrationId: UUID
+
+  name: String
+
+  kind: ApiImportKind
+
+  url: String
+
+  assetId: UUID
+
+  data: String
+}
+
+input CreateApiRequestInput {
+  integrationId: UUID!
+
+  kind: ApiRequestKind!
+
+  name: String
+
+  description: String
+
+  authStrategy: ApiRequestAuthStrategy
+
+  authStrategySettings: JSON
+
+  parentId: UUID
+
+  position: Int
+
+  method: String
+
+  path: String
+
+  urlFragment: String
+
+  body: String
+
+  queryParams: [JSON!]
+
+  headers: [JSON!]
+
+  pathParams: [JSON!]
+}
+
+input CreateAppInput {
+  name: String!
+
+  identifier: String!
+
+  icon: String
+
+  summary: String
+
+  kind: AppKind!
+}
+
+input CreateAttributeInput {
+  resourceId: UUID!
+
+  name: String!
+
+  identifier: String!
+
+  dataTypeId: UUID!
+
+  fieldType: String
+
+  fieldTypeSettings: JSON!
+
+  displayType: DisplayType!
+
+  displayTypeSettings: JSON!
+
+  isPrimary: Boolean
+
+  isNullable: Boolean
+
+  isArray: Boolean
+
+  isTranslatable: Boolean
+
+  isFilterable: Boolean
+
+  isOrderable: Boolean
+
+  isDeprecated: Boolean
+
+  validations: [ValidationInput!]!
+
+  settings: JSON!
+
+  defaultValue: JSON
+
+  position: Int!
+
+  originId: UUID
+
+  dataTypeSettings: JSON!
+
+  resolutionKind: AttributeResolutionKind!
+
+  resolutionSettings: JSON!
+}
+
+input CreateBroadcastInput {
+  integrationId: UUID
+
+  templateSubkind: TemplateSubkind!
+
+  templateIdentifier: String
+
+  templateId: UUID
+
+  content: JSON
+
+  name: String
+
+  data: JSON
+
+  isDraft: Boolean
+
+  isTest: Boolean
+
+  scheduledAt: Timestamp
+
+  recipients: [RecipientStubInput!]
+
+  custom: JSON
+
+  campaignId: UUID
+
+  exclusionListIds: [UUID!]
+
+  targetEnvironment: String
+}
+
+input CreateCampaignInput {
+  name: String
+
+  targetEnvironment: String
+}
+
+input CreateCommentInput {
+  body: String!
+
+  commentableType: String!
+
+  commentableId: UUID!
+
+  parentId: UUID
+
+  attachments: [UUID!]
+}
+
+input CreateConfigurationInput {
+  installationId: UUID!
+
+  environmentId: UUID!
+
+  settings: JSON!
+}
+
+input CreateContactInput {
+  accountId: UUID!
+
+  name: String
+
+  kind: ContactKind!
+
+  value: String!
+
+  status: ContactStatus!
+
+  userAgent: String
+
+  osName: String
+
+  osVersion: String
+
+  deviceModel: String
+
+  deviceManufacturer: String
+
+  deviceUid: String
+
+  deviceAdvertisingUid: String
+
+  isDeviceAdTrackingEnabled: Boolean
+
+  tag: String
+
+  targetEnvironment: String
+}
+
+input CreateConversationInput {
+  sender: UUID!
+
+  recipient: UUID!
+
+  kind: ConversationKind!
+
+  name: String
+
+  channel: ConversationChannel!
+
+  subChannel: ConversationSubChannel
+
+  sendMessageStub: SendMessageStubInput
+}
+
+input CreateCouponCodeInput {
+  name: String!
+
+  accountId: UUID
+
+  redemptionsLimit: Int
+
+  couponId: UUID!
+}
+
+input CreateCouponInput {
+  name: String!
+
+  identifier: String!
+
+  discountType: CouponDiscountType!
+
+  discountAmount: Decimal!
+
+  currencyCode: String
+
+  expiresAt: Timestamp
+
+  redemptionsLimit: Int
+
+  targetEnvironment: String
+}
+
+input CreateCouponRedemptionInput {
+  couponId: UUID!
+
+  orderId: UUID!
+}
+
+input CreateCouponRestrictionInput {
+  couponId: UUID!
+
+  itemId: UUID
+
+  itemCategoryId: UUID
+}
+
+input CreateDashboardInput {
+  name: String!
+
+  position: Int!
+}
+
+input CreateDataTypeInput {
+  appId: UUID
+
+  name: String!
+
+  identifier: String!
+
+  kind: DataTypeKind!
+
+  position: Int!
+
+  description: String
+
+  icon: String
+
+  defaultValue: JSON
+
+  validations: [JSON!]
+
+  settings: JSON
+}
+
+input CreateDatabaseScratchpadInput {
+  integrationId: UUID!
+
+  title: String!
+
+  body: String!
+}
+
+input CreateDeliveryInput {
+  integrationId: UUID
+
+  templateSubkind: TemplateSubkind!
+
+  templateIdentifier: String
+
+  templateId: UUID
+
+  content: JSON
+
+  name: String
+
+  data: JSON
+
+  isDraft: Boolean
+
+  isTest: Boolean
+
+  scheduledAt: Timestamp
+
+  recipients: [RecipientStubInput!]
+
+  custom: JSON
+
+  campaignId: UUID
+
+  targetEnvironment: String
+}
+
+input CreateEnvironmentInput {
+  name: String!
+
+  identifier: String!
+}
+
+input CreateEventReportInput {
+  name: String!
+
+  description: String
+}
+
+input CreateEventTypeInput {
+  name: String!
+}
+
+input CreateExclusionListImportInput {
+  exclusionListId: UUID!
+
+  assetId: UUID!
+
+  targetEnvironment: String
+}
+
+input CreateExclusionListInput {
+  name: String!
+
+  description: String
+
+  isGlobal: Boolean
+
+  isEnabled: Boolean
+
+  segmentFilter: JSON
+
+  targetEnvironment: String
+}
+
+input CreateExclusionListMemberInput {
+  exclusionListId: UUID!
+
+  accountId: UUID
+
+  contactKind: ContactKind
+
+  contactValue: String
+
+  targetEnvironment: String
+}
+
+input CreateFlowInput {
+  name: String!
+
+  identifier: String!
+}
+
+input CreateFlowVersionInput {
+  flowId: UUID!
+}
+
+input CreateGroupInput {
+  parentId: UUID
+
+  accountKind: AccountKind!
+
+  name: String!
+
+  position: Int
+}
+
+input CreateGroupMembershipInput {
+  groupId: UUID!
+
+  accountId: UUID!
+}
+
+input CreateIdentityInput {
+  integrationId: UUID!
+
+  kind: IdentityKind!
+
+  name: String
+
+  value: String!
+
+  status: IdentityStatus!
+
+  externalUid: String
+
+  externalMetadata: JSON
+}
+
+input CreateInstallationInput {
+  appId: UUID!
+
+  name: String!
+
+  identifier: String!
+
+  configurations: [ConfigurationStubInput!]
+}
+
+input CreateIssueFilterInput {
+  name: String!
+
+  filter: JSON!
+
+  position: Int
+
+  group: [JSON!]!
+
+  order: [JSON!]!
+
+  cols: [JSON!]!
+
+  restrictedGroupIds: [UUID!]!
+
+  issueTypeId: UUID
+
+  externalUid: String!
+
+  externalMetadata: JSON!
+}
+
+input CreateIssueInput {
+  issueType: String
+
+  issueStatus: String
+
+  space: String
+
+  parent: String
+
+  assigneeId: UUID
+
+  priority: IssuePriority
+
+  title: String!
+
+  description: String
+
+  position: Int
+
+  properties: JSON
+
+  labels: [String!]
+
+  dueAt: Timestamp
+
+  idempotencyKey: String
+
+  requestedById: UUID
+
+  requestedBy: JSON
+
+  groupId: UUID
+
+  group: String
+
+  conversationId: UUID
+
+  relations: [IssueRelationStubInput!]
+
+  isTest: Boolean
+
+  targetEnvironment: String
+}
+
+input CreateIssueLabelInput {
+  spaceId: UUID
+
+  name: String!
+
+  color: String
+
+  position: Int!
+}
+
+input CreateIssueRelationInput {
+  kind: IssueRelationKind!
+
+  issueId: UUID!
+
+  relatedIssueId: UUID!
+}
+
+input CreateIssueStatusInput {
+  issueTypeId: UUID!
+
+  kind: IssueStatusKind!
+
+  name: String!
+
+  identifier: String!
+
+  color: String
+
+  position: Int!
+
+  isDefault: Boolean
+}
+
+input CreateIssueTemplateInput {
+  spaceId: UUID
+
+  issueTypeId: UUID
+
+  issueStatusId: UUID
+
+  assigneeId: UUID
+
+  parentId: UUID
+
+  name: String!
+
+  title: String
+
+  description: String
+
+  priority: IssuePriority
+
+  position: Int
+
+  properties: JSON!
+}
+
+input CreateIssueTypeActionInput {
+  issueTypeId: UUID!
+
+  operationId: UUID
+
+  name: String!
+
+  identifier: String!
+
+  icon: String
+
+  position: Int!
+
+  arguments: JSON!
+
+  target: IssueTypeActionTarget!
+
+  url: String
+}
+
+input CreateIssueTypeInput {
+  spaceId: UUID
+
+  name: String!
+
+  identifier: String!
+
+  position: Int!
+
+  fields: [JSON!]!
+
+  conditions: [JSON!]!
+
+  childrenKind: IssueTypeChildrenKind
+
+  allowedChildren: [UUID!]
+
+  statuses: [IssueStatusInputInput!]!
+
+  isDefault: Boolean
+
+  isPublicReplyAllowed: Boolean
+
+  isAutosaved: Boolean
+
+  isHistoryEnabled: Boolean
+}
+
+input CreateIssueTypeRelationshipInput {
+  issueTypeId: UUID!
+
+  name: String!
+
+  identifier: String!
+
+  position: Int!
+
+  sourceFieldId: UUID!
+
+  targetAttributeId: UUID!
+
+  kind: RelationshipKind!
+
+  filter: JSON
+
+  displayAttributes: [JSON!]!
+}
+
+input CreateItemCategoryInput {
+  name: String!
+
+  identifier: String!
+
+  description: String
+}
+
+input CreateItemCategoryMembershipInput {
+  itemId: UUID!
+
+  itemCategoryId: UUID!
+}
+
+input CreateItemInput {
+  kind: ItemKind!
+
+  name: String!
+
+  identifier: String!
+
+  description: String
+}
+
+input CreateKeyPairInput {
+  accountId: UUID!
+}
+
+input CreateMenuElementInput {
+  dashboardId: UUID!
+
+  kind: MenuElementKind!
+
+  parentId: UUID
+
+  name: String
+
+  icon: String
+
+  position: Int!
+
+  placement: MenuElementPlacement!
+
+  target: MenuElementTarget
+
+  viewStyle: ViewStyle
+
+  viewUrn: String
+
+  url: String
+
+  query: String
+
+  actions: [MenuElementActionInput!]
+
+  separatorStyle: MenuElementSeparatorStyle
+
+  isRepeated: Boolean
+
+  isSticky: Boolean
+}
+
+input CreateMessageInput {
+  id: UUID!
+
+  to: [String!]!
+
+  cc: [String!]
+
+  bcc: [String!]
+
+  body: String!
+
+  attachments: [UUID!]
+}
+
+input CreateOperationInput {
+  resourceId: UUID
+
+  appId: UUID
+
+  name: String!
+
+  identifier: String!
+
+  description: String
+
+  icon: String
+
+  position: Int!
+
+  graphqlKind: OperationGraphqlKind
+
+  behaviorKind: OperationBehaviorKind!
+
+  method: OperationMethod!
+
+  behaviorSettings: JSON!
+
+  actsOn: OperationActsOn
+
+  parameters: [ParameterStubInput!]!
+
+  responseMapper: JSON
+
+  paginationSettings: JSON
+
+  responseTransformerKind: OperationTransformerKind
+
+  responseTransformer: String
+}
+
+input CreateOrderInput {
+  accountId: UUID
+
+  status: OrderStatus!
+
+  targetEnvironment: String
+}
+
+input CreateOrderItemInput {
+  orderId: UUID!
+
+  itemId: UUID!
+
+  pricingId: UUID!
+
+  quantity: Decimal!
+
+  discount: Decimal!
+
+  custom: JSON
+}
+
+input CreateParameterInput {
+  operationId: UUID!
+
+  attributeId: UUID
+
+  relationshipId: UUID
+
+  name: String!
+
+  identifier: String!
+
+  dataTypeId: UUID
+
+  dataTypeSettings: JSON
+
+  fieldType: String
+
+  fieldTypeSettings: JSON
+
+  displayType: DisplayType
+
+  displayTypeSettings: JSON
+
+  isNullable: Boolean
+
+  isArray: Boolean
+
+  isDeprecated: Boolean
+
+  validations: [ValidationInput!]
+
+  defaultValue: JSON
+
+  position: Int
+}
+
+input CreatePolicyInput {
+  name: String!
+
+  description: String
+
+  statements: JSON!
+}
+
+input CreatePreferenceInput {
+  name: String!
+
+  identifier: String!
+
+  restrictions: [UUID!]
+
+  isEnabledByDefault: Boolean!
+}
+
+input CreatePricingInput {
+  itemId: UUID!
+
+  amount: Decimal!
+
+  currencyCode: String!
+
+  originalAmount: Decimal
+
+  isRecurring: Boolean!
+
+  recurringInterval: Int!
+
+  recurringIntervalUnit: PricingRecurringIntervalUnit!
+
+  kind: PricingKind!
+
+  appleProductIdentifier: String
+
+  googleProductIdentifier: String
+}
+
+input CreateProductInput {
+  name: String!
+
+  identifier: String!
+
+  icon: String
+
+  summary: String
+
+  platforms: [ProductPlatform!]!
+
+  technology: ProductTechnology
+
+  dimensions: [JSON!]!
+}
+
+input CreateProductVariantInput {
+  productId: UUID!
+
+  environmentId: UUID!
+
+  name: String!
+
+  dimensionValues: [JSON!]!
+}
+
+input CreateProductVariantReleaseInput {
+  productVariantId: UUID!
+
+  versionName: String!
+
+  releaseNotes: String
+}
+
+input CreatePublicReplyInput {
+  issue: String!
+
+  space: String
+
+  to: [String!]
+
+  cc: [String!]
+
+  bcc: [String!]
+
+  body: String!
+
+  attachments: [UUID!]
+}
+
+input CreateRecipientInput {
+  broadcastId: UUID!
+
+  kind: RecipientKind!
+
+  accountId: UUID
+
+  groupId: UUID
+
+  target: RecipientTarget!
+
+  data: JSON
+
+  custom: JSON
+}
+
+input CreateRecordInput {
+  resourceId: UUID!
+
+  data: JSON!
+
+  targetEnvironment: String
+}
+
+input CreateRelationshipInput {
+  name: String!
+
+  identifier: String!
+
+  sourceAttributeId: UUID!
+
+  targetAttributeId: UUID!
+
+  kind: RelationshipKind!
+
+  filter: JSON
+
+  position: Int!
+
+  deleteBehavior: RelationshipDeleteBehavior
+}
+
+input CreateResourceInput {
+  appId: UUID
+
+  name: String!
+
+  identifier: String!
+
+  description: String
+
+  icon: String
+
+  position: Int!
+
+  environmentBehavior: ResourceEnvironmentBehavior!
+
+  isPublishingEnabled: Boolean
+
+  isPrivate: Boolean
+}
+
+input CreateSegmentInput {
+  resourceId: UUID!
+
+  name: String!
+
+  identifier: String!
+
+  filter: JSON!
+}
+
+input CreateSessionInput {
+  workspaceId: UUID!
+
+  email: String!
+
+  password: String!
+
+  userAgent: String
+}
+
+input CreateShortcutInput {
+  parentId: UUID
+
+  kind: ShortcutKind!
+
+  name: String!
+
+  description: String
+
+  color: String
+
+  icon: String
+
+  position: Int!
+
+  startingViewUrn: String
+
+  steps: [JSON!]
+}
+
+input CreateSpaceConfigurationInput {
+  appId: UUID!
+
+  spaceId: UUID!
+
+  settings: JSON!
+}
+
+input CreateSpaceInput {
+  name: String!
+
+  identifier: String!
+
+  icon: String
+}
+
+input CreateStoredPreferenceInput {
+  accountId: UUID!
+
+  preferenceId: UUID
+
+  isEnabled: Boolean!
+
+  channels: [DeliveryChannel!]!
+}
+
+input CreateTemplateInput {
+  projectId: UUID
+
+  integrationId: UUID
+
+  kind: TemplateKind!
+
+  subkind: TemplateSubkind!
+
+  name: String!
+
+  identifier: String!
+
+  settings: JSON
+}
+
+input CreateThemeInput {
+  name: String!
+
+  palette: ThemePaletteInput!
+}
+
+input CreateTransactionInput {
+  orderId: UUID!
+
+  accountId: UUID!
+
+  amount: Decimal!
+
+  status: TransactionStatus!
+}
+
+input CreateViewInput {
+  dashboardId: UUID!
+
+  name: String!
+
+  defaultStyle: ViewStyle
+}
+
+input CreateWorkspacePaymentMethodInput {
+  token: String!
+}
+
+type Currency {
+  code: String!
+
+  name: String!
+
+  symbol: String!
+}
+
+type CustomItem {
+  id: UUID!
+
+  name: String!
+
+  identifier: String!
+}
+
+type CustomOrder {
+  id: UUID!
+
+  subtotal: Decimal!
+
+  discount: Decimal!
+
+  tax: Decimal!
+
+  total: Decimal!
+
+  currencyCode: String!
+
+  status: OrderStatus!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  orderItems: [CustomOrderItem!]!
+}
+
+type CustomOrderItem {
+  id: UUID!
+
+  itemId: UUID!
+
+  pricingId: UUID!
+
+  quantity: Decimal!
+
+  unitPrice: Decimal!
+
+  subtotal: Decimal!
+
+  discount: Decimal!
+
+  tax: Decimal!
+
+  total: Decimal!
+
+  currencyCode: String!
+
+  item: CustomItem!
+}
+
+type CustomPolicy {
+  id: UUID!
+
+  workspaceId: UUID
+
+  name: String!
+
+  description: String
+
+  statements: JSON!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  scopeResourceId: UUID
+
+  policyAttachments(filter: JSON, order: [JSON!], limit: Int): [PolicyAttachment!]!
+}
+
+type CustomRecord {
+  id: UUID!
+
+  workspaceId: UUID!
+
+  environmentId: UUID
+
+  resourceId: UUID!
+
+  data: JSON!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  publishedId: UUID
+
+  latestId: UUID
+
+  resource: Resource!
+}
+
+type Dashboard {
+  id: UUID!
+
+  workspaceId: UUID!
+
+  name: String!
+
+  identifier: String!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  position: Int!
+
+  menuElements(filter: JSON, order: [JSON!], limit: Int): [MenuElement!]!
+}
+
+type DataType {
+  id: UUID!
+
+  workspaceId: UUID
+
+  name: String!
+
+  identifier: String!
+
+  kind: DataTypeKind!
+
+  settings: JSON!
+
+  defaultValue: JSON
+
+  validations: [JSON!]!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  description: String
+
+  icon: String
+
+  isPrimitive: Boolean!
+
+  allowableFieldTypes: [String!]!
+
+  appId: UUID
+
+  category: DataTypeCategory!
+
+  position: Int!
+}
+
+enum DataTypeCategory {
+  BASIC
+
+  NUMBER
+
+  DATE_TIME
+
+  FILE
+
+  OTHER
+
+  ADVANCED
+}
+
+enum DataTypeKind {
+  ID
+
+  UUID
+
+  STRING
+
+  BOOLEAN
+
+  INT
+
+  BIGINT
+
+  FLOAT
+
+  BIGDECIMAL
+
+  DATE
+
+  TIME
+
+  TIMESTAMP
+
+  DURATION
+
+  BINARY
+
+  IMAGE
+
+  VIDEO
+
+  AUDIO
+
+  DOCUMENT
+
+  SPREADSHEET
+
+  PRESENTATION
+
+  FILE
+
+  JSON
+
+  ENUM
+
+  OBJECT
+
+  UNION
+}
+
+type DatabaseColumn {
+  id: UUID!
+
+  databaseTableId: UUID!
+
+  name: String!
+
+  dbMeta: JSON!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  position: Int!
+
+  syncStatus: DatabaseEntitySyncStatus!
+
+  syncStatusReason: String
+
+  databaseTable: DatabaseTable!
+}
+
+enum DatabaseEntitySyncStatus {
+  PENDING
+
+  COMPLETED
+
+  PARTIAL
+
+  FAILED
+}
+
+type DatabaseSchema {
+  id: UUID!
+
+  integrationId: UUID!
+
+  environmentId: UUID!
+
+  name: String!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  syncStatus: DatabaseEntitySyncStatus!
+
+  syncStatusReason: String
+
+  integration: Installation!
+
+  environment: Environment!
+}
+
+type DatabaseScratchpad {
+  id: UUID!
+
+  workspaceId: UUID!
+
+  integrationId: UUID!
+
+  accountId: UUID!
+
+  body: String!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  title: String!
+
+  integration: Installation!
+
+  account: Account!
+}
+
+type DatabaseTable {
+  id: UUID!
+
+  integrationId: UUID!
+
+  environmentId: UUID!
+
+  databaseSchemaId: UUID
+
+  name: String!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  syncStatus: DatabaseEntitySyncStatus!
+
+  syncStatusReason: String
+
+  integration: Installation!
+
+  environment: Environment!
+
+  databaseSchema: DatabaseSchema
+
+  databaseColumns(filter: JSON, order: [JSON!], limit: Int): [DatabaseColumn!]!
+}
+
+type DatabaseTableExecuteQueryResult {
+  message: String
+
+  success: Boolean!
+
+  rowsAffected: Int!
+
+  rows: [JSON!]!
+
+  columns: [String!]!
+}
+
+scalar Decimal
+
+input DeleteDatabaseRecordInput {
+  databaseTableId: UUID!
+
+  id: String!
+
+  targetEnvironment: String
+
+  installationId: UUID!
+}
+
+type Delivery {
+  id: UUID!
+
+  content: JSON
+
+  data: JSON
+
+  status: DeliveryStatus!
+
+  queuedMessagesCount: Int!
+
+  deliveredMessagesCount: Int!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  name: String
+
+  failureReason: String
+
+  isTest: Boolean!
+
+  scheduledAt: Timestamp
+
+  environmentId: UUID!
+
+  failedMessagesCount: Int!
+
+  sentMessagesCount: Int!
+
+  templateId: UUID
+
+  templateSubkind: TemplateSubkind!
+
+  custom: JSON!
+
+  openedMessagesCount: Int!
+
+  clickedMessagesCount: Int!
+
+  integrationId: UUID
+
+  deferredMessagesCount: Int!
+
+  environment: Environment!
+
+  integration: Installation
+
+  recipients(filter: JSON, order: [JSON!], limit: Int): [Recipient!]!
+}
+
+enum DeliveryChannel {
+  EMAIL
+
+  SMS
+
+  PUSH
+
+  WHATSAPP
+
+  IN_APP
+}
+
+enum DeliveryStatus {
+  DRAFT
+
+  SCHEDULED
+
+  PENDING
+
+  QUEUED
+
+  PROCESSED
+
+  FAILED
+
+  STOPPED
+}
+
+input DestroyAiAgentDeploymentInput {
+  id: UUID!
+}
+
+input DestroyAiAgentKnowledgeSourceInput {
+  id: UUID!
+}
+
+input DestroyApiRequestInput {
+  id: UUID!
+}
+
+input DestroyAssetInput {
+  id: UUID!
+}
+
+input DestroyAttributeInput {
+  id: UUID!
+}
+
+input DestroyBroadcastInput {
+  id: UUID!
+}
+
+input DestroyCampaignInput {
+  id: UUID!
+}
+
+input DestroyCommentInput {
+  id: UUID!
+}
+
+input DestroyConfigurationInput {
+  id: UUID!
+}
+
+input DestroyContactInput {
+  id: UUID!
+
+  targetEnvironment: String
+}
+
+input DestroyCouponCodeInput {
+  id: UUID!
+}
+
+input DestroyCouponInput {
+  id: UUID!
+}
+
+input DestroyCouponRedemptionInput {
+  id: UUID!
+}
+
+input DestroyCouponRestrictionInput {
+  id: UUID!
+}
+
+input DestroyDashboardInput {
+  id: UUID!
+}
+
+input DestroyDataTypeInput {
+  id: UUID!
+}
+
+input DestroyDatabaseScratchpadInput {
+  id: UUID!
+}
+
+input DestroyEventTypeInput {
+  id: UUID!
+}
+
+input DestroyExclusionListInput {
+  id: UUID!
+
+  targetEnvironment: String
+}
+
+input DestroyExclusionListMemberInput {
+  id: UUID!
+
+  targetEnvironment: String
+}
+
+input DestroyGroupInput {
+  id: UUID!
+}
+
+input DestroyGroupMembershipInput {
+  id: UUID!
+}
+
+input DestroyIdentityInput {
+  id: UUID!
+}
+
+input DestroyIssueFilterInput {
+  id: UUID!
+}
+
+input DestroyIssueInput {
+  id: UUID!
+}
+
+input DestroyIssueLabelInput {
+  id: UUID!
+}
+
+input DestroyIssueRelationInput {
+  id: UUID!
+}
+
+input DestroyIssueStatusInput {
+  id: UUID!
+}
+
+input DestroyIssueTemplateInput {
+  id: UUID!
+}
+
+input DestroyIssueTypeActionInput {
+  id: UUID!
+}
+
+input DestroyIssueTypeInput {
+  id: UUID!
+}
+
+input DestroyIssueTypeRelationshipInput {
+  id: UUID!
+}
+
+input DestroyItemCategoryInput {
+  id: UUID!
+}
+
+input DestroyItemCategoryMembershipInput {
+  id: UUID!
+}
+
+input DestroyItemInput {
+  id: UUID!
+}
+
+input DestroyMenuElementInput {
+  id: UUID!
+}
+
+input DestroyOrderInput {
+  id: UUID!
+}
+
+input DestroyOrderItemInput {
+  id: UUID!
+}
+
+input DestroyParameterInput {
+  id: UUID!
+}
+
+input DestroyPolicyAttachmentInput {
+  id: UUID!
+}
+
+input DestroyPolicyInput {
+  id: UUID!
+}
+
+input DestroyPreferenceInput {
+  id: UUID!
+}
+
+input DestroyPricingInput {
+  id: UUID!
+}
+
+input DestroyProductInput {
+  id: UUID!
+}
+
+input DestroyProductVariantInput {
+  id: UUID!
+}
+
+input DestroyRecipientInput {
+  id: UUID!
+}
+
+input DestroyRecordInput {
+  id: UUID!
+
+  resourceId: UUID!
+
+  targetEnvironment: String
+}
+
+input DestroyRelationshipInput {
+  id: UUID!
+}
+
+input DestroyResourceInput {
+  id: UUID!
+}
+
+input DestroySegmentInput {
+  id: UUID!
+}
+
+input DestroyShortcutInput {
+  id: UUID!
+}
+
+input DestroySpaceConfigurationInput {
+  id: UUID!
+}
+
+input DestroySpaceInput {
+  id: UUID!
+}
+
+input DestroyStoredPreferenceInput {
+  id: UUID!
+}
+
+input DestroyTemplateInput {
+  id: UUID!
+}
+
+input DestroyThemeInput {
+  id: UUID!
+}
+
+input DestroyTransactionInput {
+  id: UUID!
+}
+
+input DestroyWorkspacePaymentMethodInput {
+  id: UUID!
+}
+
+input DisableMfaInput {
+  code: String!
+}
+
+enum DisplayType {
+  PLAIN_TEXT
+
+  NUMERIC
+
+  SENSITIVE_TEXT
+
+  LINK
+
+  RENDERED_HTML
+
+  RENDERED_MARKDOWN
+
+  CODE
+
+  PHONE_NUMBER
+
+  SWITCH
+
+  CHIP
+
+  DATE_TIME
+
+  DURATION
+
+  EMBEDDED
+
+  REFERENCE
+
+  IMAGE
+
+  CURRENCY
+
+  FILE
+
+  DOCUMENT
+
+  AUDIO
+
+  VIDEO
+}
+
+input DownloadExportInput {
+  id: UUID!
+}
+
+type DownloadExportResponse {
+  url: String!
+}
+
+input DownloadFilesInput {
+  files: [JSON!]!
+}
+
+type DownloadFilesResponse {
+  files: [DownloadedFile!]!
+}
+
+type DownloadedFile {
+  assetId: UUID!
+
+  name: String!
+
+  url: String!
+
+  mimeType: String!
+
+  size: Int!
+}
+
+input DuplicateAiAgentVersionInput {
+  id: UUID!
+}
+
+input DuplicateBroadcastInput {
+  id: UUID!
+}
+
+input DuplicateFlowVersionInput {
+  id: UUID!
+}
+
+input DuplicateMenuElementInput {
+  id: UUID!
+}
+
+input EditAccountTourInput {
+  id: UUID!
+
+  tourName: AccountTourType!
+
+  step: Int!
+
+  status: AccountTourStatus!
+}
+
+input EditCurrentAccountWorkStatusInput {
+  workStatusPresence: AccountWorkStatusPresence
+
+  workStatusReadyForWork: Boolean
+}
+
+input EditDatabaseRecordInput {
+  databaseTableId: UUID!
+
+  data: JSON!
+
+  targetEnvironment: String
+
+  installationId: UUID!
+}
+
+input EditItemInCartInput {
+  accountUid: String
+
+  accountAnonymousUid: String
+
+  id: UUID!
+
+  pricingId: UUID
+
+  quantity: Decimal
+}
+
+input EnableMfaInput {
+  code: String!
+}
+
+type EnableMfaResponse {
+  mfaBackupCodes: [String!]!
+}
+
+type Environment {
+  id: UUID!
+
+  workspaceId: UUID!
+
+  name: String!
+
+  identifier: String!
+
+  isLive: Boolean!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+}
+
+type Event {
+  id: UUID!
+
+  eventTypeId: UUID!
+
+  accountId: UUID!
+
+  data: JSON!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  timestamp: Timestamp!
+
+  environmentId: UUID!
+
+  deletedAt: Timestamp
+
+  eventType: EventType!
+
+  account: Account!
+
+  operationLog: OperationLog
+}
+
+type EventReport {
+  id: UUID!
+
+  workspaceId: UUID!
+
+  name: String!
+
+  description: String
+
+  criteria: JSON!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+}
+
+type EventReportBehavior {
+  series: [EventReportSeries!]!
+
+  dateRange: EventReportDateRange!
+}
+
+input EventReportCriteriaInput {
+  kind: EventReportKind!
+
+  period: EventReportPeriodInput!
+
+  scale: EventReportScale!
+
+  sections: [EventReportSectionInput!]
+
+  steps: [EventReportStepInput!]
+
+  startEventTypeId: UUID
+
+  retentionEvents: [UUID!]
+}
+
+type EventReportDateRange {
+  from: Timestamp!
+
+  to: Timestamp!
+}
+
+type EventReportFunnel {
+  steps: [EventReportFunnelStep!]!
+}
+
+type EventReportFunnelStep {
+  count: Int!
+
+  label: String!
+
+  overallConvRatio: Float!
+
+  stepConvRatio: Float!
+}
+
+enum EventReportKind {
+  BEHAVIOR
+
+  FUNNEL
+}
+
+enum EventReportMeasure {
+  TOTAL
+
+  UNIQUE
+}
+
+input EventReportPeriodInput {
+  kind: EventReportPeriodKind!
+
+  from: String
+
+  to: String
+
+  window: EventReportPeriodWindowInput
+}
+
+enum EventReportPeriodKind {
+  FIXED
+
+  LAST
+}
+
+input EventReportPeriodWindowInput {
+  unit: EventReportPeriodWindowUnit!
+
+  value: Int!
+}
+
+enum EventReportPeriodWindowUnit {
+  DAY
+
+  HOUR
+
+  WEEK
+
+  MONTH
+}
+
+enum EventReportScale {
+  DAY
+
+  HOUR
+
+  WEEK
+
+  MONTH
+}
+
+input EventReportSectionInput {
+  eventTypeId: UUID!
+
+  measure: EventReportMeasure!
+
+  label: String!
+}
+
+type EventReportSeries {
+  label: String!
+
+  values: [JSON!]!
+}
+
+input EventReportStepInput {
+  eventTypeId: UUID!
+
+  label: String
+
+  next: Int
+
+  previous: Int
+}
+
+type EventType {
+  id: UUID!
+
+  name: String!
+
+  lastReceivedAt: Timestamp
+
+  archivedAt: Timestamp
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  operationId: UUID
+
+  workspaceId: UUID
+
+  dataSchema: JSON
+
+  deletedAt: Timestamp
+}
+
+type ExclusionList {
+  id: UUID!
+
+  environmentId: UUID!
+
+  name: String!
+
+  description: String
+
+  isGlobal: Boolean!
+
+  isEnabled: Boolean!
+
+  segmentFilter: JSON
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  environment: Environment!
+
+  exclusionListMembers(filter: JSON, order: [JSON!], limit: Int): [ExclusionListMember!]!
+}
+
+type ExclusionListImport {
+  id: UUID!
+
+  environmentId: UUID!
+
+  exclusionListId: UUID!
+
+  accountId: UUID
+
+  assetId: UUID!
+
+  status: ExclusionListImportStatus!
+
+  statusMessage: String
+
+  totalRows: Int!
+
+  importedRows: Int!
+
+  failedRows: Int!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  environment: Environment!
+
+  exclusionList: ExclusionList!
+
+  asset: Asset!
+
+  account: Account
+}
+
+enum ExclusionListImportStatus {
+  QUEUED
+
+  PROCESSING
+
+  COMPLETED
+
+  FAILED
+}
+
+type ExclusionListMember {
+  id: UUID!
+
+  exclusionListId: UUID!
+
+  accountId: UUID
+
+  contactKind: ContactKind
+
+  contactValue: String
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  exclusionList: ExclusionList!
+
+  account: Account
+}
+
+input ExecuteApiRequestInput {
+  id: UUID
+
+  integrationId: UUID!
+
+  path: String!
+
+  method: String!
+
+  headers: [JSON!]
+
+  pathParams: [JSON!]
+
+  queryParams: [JSON!]
+
+  body: String
+
+  authStrategy: ApiRequestAuthStrategy!
+
+  authStrategySettings: JSON
+
+  targetEnvironment: String
+}
+
+type ExecuteApiRequestResponse {
+  time: Float!
+
+  statusCode: Int!
+
+  headers: [JSON!]!
+
+  body: String!
+}
+
+input ExecuteCodeInput {
+  code: String!
+
+  arguments: JSON!
+}
+
+type ExecuteCodeResponse {
+  time: Float!
+
+  result: JSON!
+}
+
+input ExecuteDatabaseQueryInput {
+  integrationId: UUID!
+
+  query: String!
+}
+
+type ExecuteDatabaseQueryResponse {
+  time: Float!
+
+  results: [DatabaseTableExecuteQueryResult!]!
+}
+
+input ExecuteEventReportInput {
+  criteria: EventReportCriteriaInput!
+
+  targetEnvironment: String
+}
+
+type ExecuteEventReportResponse {
+  behaviorReport: EventReportBehavior
+
+  funnelReport: EventReportFunnel
+
+  flowReport: EventReportFunnel
+
+  retentionReport: JSON
+}
+
+input ExecuteFlowInput {
+  flow: String!
+
+  flowVersionId: UUID
+
+  arguments: JSON!
+
+  scheduledAt: Timestamp
+
+  targetEnvironment: String
+}
+
+input ExecuteIssueTypeActionInput {
+  issueActionId: UUID!
+
+  issueId: UUID!
+
+  arguments: JSON!
+
+  targetEnvironment: String
+}
+
+input ExecuteMutationOperationInput {
+  operationId: UUID!
+
+  arguments: JSON!
+
+  targetEnvironment: String
+}
+
+input ExecuteOperationInput {
+  operationId: UUID!
+
+  arguments: JSON!
+
+  targetEnvironment: String
+}
+
+input ExecuteQueryOperationInput {
+  operationId: UUID!
+
+  arguments: JSON!
+
+  targetEnvironment: String
+}
+
+enum ExplainAccessDecision {
+  ALLOW
+
+  DENY
+}
+
+enum ExplainAccessDenyReason {
+  NO_ATTACHMENTS
+
+  ALL_ATTACHMENTS_EXCLUDED_BY_ENVIRONMENT
+
+  ALL_ATTACHMENTS_EXCLUDED_BY_OBJECT_ID
+
+  NO_STATEMENT_GRANTS_RESOURCE
+
+  NO_STATEMENT_GRANTS_OPERATION
+
+  SCOPE_REJECTS_INSTANCE
+}
+
+type ExplainAccessGrant {
+  attachmentId: UUID!
+
+  policyId: UUID!
+
+  statementIndex: Int!
+}
+
+input ExplainAccessInput {
+  accountId: UUID
+
+  groupId: UUID
+
+  resourceId: UUID!
+
+  operationId: UUID!
+
+  instanceId: UUID
+}
+
+type ExplainAccessResponse {
+  decision: ExplainAccessDecision!
+
+  denyReason: ExplainAccessDenyReason
+
+  grantedBy: ExplainAccessGrant
+}
+
+type Export {
+  id: UUID!
+
+  workspaceId: UUID!
+
+  environmentId: UUID!
+
+  accountId: UUID!
+
+  resourceId: UUID!
+
+  status: ExportStatus!
+
+  statusMessage: String
+
+  name: String
+
+  filter: JSON
+
+  assetId: UUID
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  expiresAt: Timestamp
+}
+
+input ExportBlockInput {
+  viewId: UUID!
+
+  blockId: UUID!
+
+  arguments: JSON
+
+  targetEnvironment: String
+}
+
+type ExportBlockResponse {
+  url: String!
+}
+
+input ExportCampaignsInput {
+  filter: JSON
+
+  from: Timestamp
+
+  to: Timestamp
+
+  targetEnvironment: String
+}
+
+input ExportDatabaseRecordsInput {
+  databaseTableId: UUID!
+
+  filter: JSON
+
+  order: [JSON!]
+
+  limit: Int
+
+  page: Int
+
+  targetEnvironment: String
+
+  installationId: UUID!
+}
+
+type ExportDatabaseRecordsResponse {
+  success: Boolean!
+}
+
+input ExportIssuesInput {
+  filter: JSON
+
+  targetEnvironment: String
+}
+
+input ExportMessagesListInput {
+  broadcastId: UUID
+
+  campaignId: UUID
+
+  from: Timestamp
+
+  to: Timestamp
+}
+
+type ExportMessagesListResponse {
+  url: String!
+}
+
+input ExportRecipientsListInput {
+  broadcastId: UUID!
+}
+
+type ExportRecipientsListResponse {
+  url: String!
+}
+
+enum ExportStatus {
+  QUEUED
+
+  PROCESSING
+
+  COMPLETED
+
+  FAILED
+}
+
+type ExternalLog {
+  id: UUID!
+
+  installationId: UUID!
+
+  kind: ExternalLogKind!
+
+  timeTaken: Int
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  requestUid: String
+
+  requestParts: JSON
+
+  requestBody: [Int!]
+
+  responseParts: JSON
+
+  responseBody: [Int!]
+
+  status: ExternalLogStatus!
+
+  statusReason: String
+
+  environmentId: UUID!
+
+  requestBodyParsed: JSON
+
+  responseBodyParsed: JSON
+}
+
+enum ExternalLogKind {
+  INBOUND
+
+  OUTBOUND
+}
+
+enum ExternalLogStatus {
+  PENDING
+
+  PROCESSING
+
+  COMPLETED
+
+  FAILED
+
+  DROPPED
+}
+
+type Feed {
+  id: UUID!
+
+  workspaceId: UUID!
+
+  resourceId: UUID
+
+  name: String!
+
+  identifier: String!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+}
+
+type FeedSubscriber {
+  id: UUID!
+
+  workspaceId: UUID!
+
+  accountId: UUID!
+
+  feedId: UUID!
+
+  feedResourceId: UUID!
+
+  feedRecordId: UUID!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  account: Account!
+}
+
+input FetchCartInput {
+  accountUid: String
+
+  accountAnonymousUid: String
+
+  orderId: UUID
+
+  targetEnvironment: String
+}
+
+input FetchContactsInput {
+  uid: String!
+
+  targetEnvironment: String
+}
+
+type FetchContactsResponse {
+  contacts: [Contact!]!
+}
+
+input FetchInAppChatConversationInput {
+  identityId: UUID!
+
+  conversationId: UUID!
+}
+
+input FetchInAppChatConversationsInput {
+  identityId: UUID!
+
+  limit: Int
+
+  page: Int
+
+  statuses: [String!]
+
+  properties: JSON
+}
+
+input FetchInAppChatMessagesInput {
+  conversationId: UUID
+
+  limit: Int
+
+  page: Int
+
+  # Anticipates the dashx-backend cursor argument (blueprint/schema/core.yaml); port this line
+  # over after a schema re-download until the backend ships it.
+  afterMessageId: UUID
+}
+
+input FetchInAppMessagesAggregateInput {
+  filter: JSON
+
+  accountUid: String!
+
+  targetEnvironment: String
+}
+
+type FetchInAppMessagesAggregateResponse {
+  count: Int
+}
+
+input FetchInAppMessagesInput {
+  filter: JSON
+
+  limit: Int
+
+  page: Int
+
+  accountUid: String!
+
+  targetEnvironment: String
+}
+
+input FetchInAppNotificationsAggregateInput {
+  filter: JSON
+
+  accountUid: String!
+
+  targetEnvironment: String
+}
+
+type FetchInAppNotificationsAggregateResponse {
+  count: Int
+}
+
+input FetchInAppNotificationsInput {
+  filter: JSON
+
+  limit: Int
+
+  page: Int
+
+  accountUid: String!
+
+  targetEnvironment: String
+}
+
+input FetchItemInput {
+  identifier: String!
+}
+
+input FetchProductVariantReleaseInput {
+  targetVersion: String!
+
+  targetEnvironment: String
+}
+
+input FetchProductVariantReleaseRuleInput {
+  targetProduct: String!
+
+  targetEnvironment: String
+}
+
+input FetchRecordInput {
+  recordId: UUID!
+
+  resource: String
+
+  preview: Boolean
+
+  language: String
+
+  fields: [JSON!]
+
+  include: [JSON!]
+
+  exclude: [JSON!]
+}
+
+input FetchStoredPreferencesInput {
+  accountUid: String!
+
+  targetEnvironment: String
+}
+
+type FetchStoredPreferencesResponse {
+  preferenceData: JSON!
+}
+
+type FieldType {
+  name: String!
+
+  identifier: String!
+
+  icon: String!
+
+  position: Int!
+
+  category: FieldTypeCategory!
+
+  dataType: FieldTypeDataType!
+
+  defaultValue: String
+
+  placeholder: String
+
+  helpText: String
+
+  configuration: JSON!
+
+  settings: JSON!
+}
+
+enum FieldTypeCategory {
+  BASIC
+
+  ADVANCED
+
+  OTHER
+}
+
+enum FieldTypeDataType {
+  STRING
+
+  NUMBER
+
+  BOOLEAN
+
+  JSON
+}
+
+input FindOrCreateRequesterInput {
+  issueId: UUID!
+
+  email: String
+
+  phone: String
+
+  name: String
+
+  targetEnvironment: String
+}
+
+"""
+The `Float` scalar type represents signed double-precision fractional values as specified by [IEEE 754](https://en.wikipedia.org/wiki/IEEE_floating_point).
+"""
+scalar Float
+
+type Flow {
+  id: UUID!
+
+  name: String!
+
+  identifier: String!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  status: FlowVersionStatus!
+
+  runCount: Int!
+
+  lastRunAt: Timestamp
+
+  workspaceId: UUID!
+
+  flowVersions(filter: JSON, order: [JSON!], limit: Int): [FlowVersion!]!
+}
+
+type FlowExecution {
+  id: UUID!
+
+  flowVersionId: UUID!
+
+  failureReason: String
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  enteredAt: Timestamp
+
+  exitedAt: Timestamp
+
+  accountId: UUID
+
+  status: FlowExecutionStatus!
+
+  environmentId: UUID!
+
+  scheduledAt: Timestamp
+
+  isTest: Boolean!
+
+  workspaceId: UUID!
+
+  flowId: UUID!
+
+  flowVersion: FlowVersion!
+
+  environment: Environment!
+
+  account: Account
+}
+
+type FlowExecutionNode {
+  id: UUID!
+
+  flowExecutionId: UUID!
+
+  flowNodeId: UUID!
+
+  data: JSON!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  status: FlowExecutionNodeStatus!
+
+  enteredAt: Timestamp
+
+  exitedAt: Timestamp
+
+  failureReason: String
+
+  scheduledAt: Timestamp
+
+  timeoutAt: Timestamp
+
+  workspaceId: UUID!
+
+  flowId: UUID!
+
+  flowVersionId: UUID!
+
+  environmentId: UUID!
+
+  flowExecution: FlowExecution!
+
+  flowNode: FlowNode!
+}
+
+enum FlowExecutionNodeStatus {
+  PENDING
+
+  RUNNING
+
+  COMPLETED
+
+  FAILED
+}
+
+enum FlowExecutionStatus {
+  RUNNING
+
+  PAUSED
+
+  SCHEDULED
+
+  COMPLETED
+
+  FAILED
+
+  CANCELED
+}
+
+type FlowNode {
+  id: UUID!
+
+  flowVersionId: UUID!
+
+  identifier: String!
+
+  kind: FlowNodeKind!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  eventTypeId: UUID
+
+  settings: JSON!
+
+  description: String
+
+  summary: String
+
+  occurrenceKind: FlowNodeOccurrenceKind!
+
+  occurrenceCount: Int!
+
+  occurrenceWindowPeriod: FlowNodeOccurrenceWindowPeriod!
+
+  occurrenceWindowAmount: Int!
+
+  waitBehavior: FlowNodeWaitBehavior!
+
+  waitForPeriod: FlowNodeWaitForPeriod!
+
+  waitForAmount: String!
+
+  waitUntilPeriod: FlowNodeWaitUntilPeriod!
+
+  waitUntilMinute: String
+
+  waitUntilHour: String
+
+  waitUntilDay: String
+
+  operationId: UUID
+
+  occurrenceScope: FlowNodeOccurrenceScope!
+
+  repeatability: FlowNodeRepeatability!
+
+  waitUntilWeekday: FlowNodeWaitUntilWeekday
+
+  occurrenceBehavior: FlowNodeOccurrenceBehavior!
+
+  arguments: JSON
+
+  dataFilter: JSON
+
+  isConcurrent: Boolean!
+
+  workspaceId: UUID!
+
+  flowId: UUID!
+
+  flowVersion: FlowVersion!
+}
+
+enum FlowNodeKind {
+  MANUAL_TRIGGER
+
+  TIME_TRIGGER
+
+  EVENT_TRIGGER
+
+  TIME_STEP
+
+  EVENT_STEP
+
+  ACTION_STEP
+
+  BRANCH_STEP
+
+  OUTPUT_STEP
+
+  ITERATOR_START_STEP
+
+  ITERATOR_END_STEP
+
+  EXIT_STEP
+}
+
+enum FlowNodeOccurrenceBehavior {
+  MUST
+
+  MUST_NOT
+}
+
+enum FlowNodeOccurrenceKind {
+  EXACTLY
+
+  AT_LEAST
+}
+
+enum FlowNodeOccurrenceScope {
+  TRIGGER_ACCOUNT
+
+  ANY_ACCOUNT
+
+  CUSTOM
+}
+
+enum FlowNodeOccurrenceWindowPeriod {
+  LIFETIME
+
+  YEAR
+
+  MONTH
+
+  WEEK
+
+  DAY
+
+  HOUR
+
+  MINUTE
+
+  SECOND
+}
+
+enum FlowNodeRepeatability {
+  ONE
+
+  MANY
+}
+
+enum FlowNodeWaitBehavior {
+  WAIT_FOR
+
+  WAIT_UNTIL
+}
+
+enum FlowNodeWaitForPeriod {
+  DAY
+
+  YEAR
+
+  MONTH
+
+  WEEK
+
+  HOUR
+
+  MINUTE
+
+  SECOND
+}
+
+enum FlowNodeWaitUntilPeriod {
+  HOUR
+
+  DAY
+
+  WEEK
+
+  MONTH
+}
+
+enum FlowNodeWaitUntilWeekday {
+  MO
+
+  TU
+
+  WE
+
+  TH
+
+  FR
+
+  SA
+
+  SU
+}
+
+type FlowVersion {
+  id: UUID!
+
+  flowId: UUID!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  status: FlowVersionStatus!
+
+  version: Timestamp!
+
+  snapshot: JSON!
+
+  runCount: Int!
+
+  lastRunAt: Timestamp
+
+  snapshotHash: String
+
+  workspaceId: UUID!
+
+  flow: Flow!
+}
+
+enum FlowVersionStatus {
+  DRAFT
+
+  PUBLISHED
+
+  UNPUBLISHING
+
+  UNPUBLISHED
+}
+
+input ForgotPasswordInput {
+  workspaceId: UUID!
+
+  email: String!
+}
+
+type ForgotPasswordResponse {
+  success: Boolean!
+}
+
+input GenerateGraphInput {
+  originKind: String!
+
+  originIds: [UUID!]!
+
+  appId: UUID
+
+  settings: JSON
+
+  targetEnvironment: String
+
+  installationId: UUID!
+}
+
+type GenerateGraphResponse {
+  resources: [Resource!]!
+
+  operations: [Operation!]!
+}
+
+input GenerateIdentityTokenInput {
+  publicKey: String!
+
+  privateKey: String!
+
+  kind: AccountIdentityKind!
+
+  uid: String!
+}
+
+type GenerateIdentityTokenResponse {
+  token: String!
+}
+
+input GenerateMenuElementsInput {
+  dashboardId: UUID!
+
+  parentId: UUID
+
+  placement: MenuElementPlacement
+
+  appId: UUID
+
+  resourceMenuStubs: [ResourceMenuStubInput!]
+
+  position: Int
+}
+
+type Group {
+  id: UUID!
+
+  environmentId: UUID!
+
+  parentId: UUID
+
+  name: String!
+
+  position: Int!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  accountKind: AccountKind!
+
+  workspaceId: UUID!
+
+  effectivePolicyAttachments: [PolicyAttachment!]!
+
+  groupMemberships(filter: JSON, order: [JSON!], limit: Int): [GroupMembership!]!
+}
+
+type GroupMembership {
+  id: UUID!
+
+  accountId: UUID!
+
+  groupId: UUID!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  account: Account!
+
+  group: Group!
+}
+
+scalar ID
+
+input IdentifyAccountInput {
+  uid: String
+
+  anonymousUid: String
+
+  email: String
+
+  phone: String
+
+  name: String
+
+  firstName: String
+
+  lastName: String
+
+  systemContext: SystemContextInput
+
+  targetEnvironment: String
+}
+
+input IdentifyProspectInput {
+  email: String!
+}
+
+type IdentifyProspectResponse {
+  success: Boolean!
+}
+
+type Identity {
+  id: UUID!
+
+  integrationId: UUID!
+
+  kind: IdentityKind!
+
+  name: String
+
+  value: String!
+
+  status: IdentityStatus!
+
+  externalUid: String
+
+  externalMetadata: JSON
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  integration: Installation!
+}
+
+enum IdentityKind {
+  DOMAIN
+
+  EMAIL
+
+  PHONE_NUMBER
+
+  DASHX
+}
+
+enum IdentityStatus {
+  PENDING
+
+  ENABLED
+
+  DISABLED
+
+  UNKNOWN
+}
+
+input ImportAccountInput {
+  kind: AccountKind!
+
+  email: String
+
+  custom: JSON
+
+  hasGuiAccess: Boolean!
+
+  hasApiAccess: Boolean!
+
+  fullName: String
+
+  name: String
+
+  firstName: String
+
+  lastName: String
+
+  avatar: String
+
+  dateOfBirth: NaiveDate
+
+  timeZone: String
+
+  gender: AccountGender
+
+  phone: String
+
+  groupIds: [UUID!]!
+
+  defaultGroupId: UUID
+
+  externalUid: String
+
+  externalMetadata: JSON
+
+  createdAt: Timestamp
+
+  updatedAt: Timestamp
+}
+
+input ImportCommentInput {
+  externalUid: String
+
+  externalMetadata: JSON
+
+  body: String!
+
+  authorId: UUID!
+
+  commentableType: String!
+
+  commentableId: UUID!
+
+  parentId: UUID
+
+  attachments: [JSON!]
+
+  createdAt: Timestamp
+
+  updatedAt: Timestamp
+}
+
+input ImportIssueInput {
+  number: Int!
+
+  issueType: String
+
+  issueStatus: String
+
+  space: String
+
+  parent: String
+
+  assigneeId: UUID
+
+  priority: IssuePriority
+
+  title: String!
+
+  description: String
+
+  position: Int
+
+  properties: JSON
+
+  labels: [String!]
+
+  dueAt: Timestamp
+
+  externalUid: String
+
+  externalMetadata: JSON
+
+  requestedById: UUID
+
+  createdById: UUID
+
+  groupId: UUID
+
+  createdAt: Timestamp
+
+  updatedAt: Timestamp
+
+  targetEnvironment: String
+}
+
+input ImportMessageInput {
+  issueId: UUID
+
+  actorId: UUID
+
+  from: String
+
+  to: [JSON!]!
+
+  cc: [JSON!]
+
+  bcc: [JSON!]
+
+  replyTo: String
+
+  subject: String
+
+  htmlBody: String
+
+  plainBody: String
+
+  attachments: [JSON!]
+
+  inReplyTo: String
+
+  references: [String!]
+
+  importUid: String
+
+  importMetadata: JSON
+
+  createdAt: Timestamp
+
+  updatedAt: Timestamp
+}
+
+input ImportRecipientsListInput {
+  broadcastId: UUID!
+
+  headers: [String!]!
+
+  rows: [JSON!]!
+}
+
+type ImportRecipientsListResponse {
+  recipients: [Recipient!]!
+}
+
+type Installation {
+  id: UUID!
+
+  appId: UUID!
+
+  name: String!
+
+  identifier: String!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  archivedAt: Timestamp
+
+  workspaceId: UUID!
+
+  appKind: AppKind!
+
+  fields: [JSON!]!
+
+  settings: JSON!
+
+  app: App!
+}
+
+"""
+The `Int` scalar type represents non-fractional whole numeric values.
+"""
+scalar Int
+
+input InternalAddRecordInput {
+  resourceId: UUID!
+
+  arguments: JSON!
+
+  targetEnvironment: String
+}
+
+input InternalBulkEditRecordsInput {
+  resourceId: UUID!
+
+  records: [BulkEditRecordStubInput!]!
+
+  targetEnvironment: String
+}
+
+input InternalDeleteRecordInput {
+  resourceId: UUID!
+
+  arguments: JSON!
+
+  targetEnvironment: String
+}
+
+input InternalEditRecordInput {
+  resourceId: UUID!
+
+  versionId: UUID
+
+  arguments: JSON!
+
+  targetEnvironment: String
+}
+
+input InternalExportRecordsInput {
+  resourceId: UUID!
+
+  filter: JSON
+
+  order: [JSON!]
+
+  limit: Int
+
+  page: Int
+
+  preview: Boolean
+
+  language: String
+
+  fields: [JSON!]
+
+  targetEnvironment: String
+}
+
+type InternalExportRecordsResponse {
+  url: String!
+}
+
+input InternalFetchRecordInput {
+  resourceId: UUID!
+
+  arguments: JSON!
+
+  preview: Boolean
+
+  targetEnvironment: String
+}
+
+input InternalImportRecordsInput {
+  resourceId: UUID!
+
+  headers: [String!]!
+
+  rows: [JSON!]!
+
+  targetEnvironment: String
+}
+
+input InternalInvokeAiAgentInput {
+  id: UUID!
+
+  prompt: String!
+
+  attachments: [UUID!]
+
+  versionId: UUID
+
+  conversationId: UUID
+
+  test: Boolean
+
+  testSettings: JSON
+
+  targetEnvironment: String
+}
+
+type InternalInvokeAiAgentResponse {
+  messages: [Message!]!
+}
+
+input InternalSearchRecordsInput {
+  resourceId: UUID!
+
+  filter: JSON
+
+  order: [JSON!]
+
+  limit: Int
+
+  page: Int
+
+  preview: Boolean
+
+  language: String
+
+  fields: [JSON!]
+
+  targetEnvironment: String
+}
+
+input InternalSummarizeRecordsInput {
+  resourceId: UUID!
+
+  filter: JSON
+
+  targetEnvironment: String
+}
+
+type InternalSummarizeRecordsResponse {
+  count: Int!
+}
+
+input InvokeAiAgentInput {
+  prompt: String!
+
+  publicEmbedKey: String!
+
+  conversationId: UUID
+
+  targetEnvironment: String
+}
+
+type InvokeAiAgentResponse {
+  messages: [Message!]!
+}
+
+type Issue {
+  id: UUID!
+
+  workspaceId: UUID!
+
+  issueStatusId: UUID!
+
+  createdById: UUID!
+
+  environmentId: UUID!
+
+  spaceId: UUID
+
+  parentId: UUID
+
+  assigneeId: UUID
+
+  priority: IssuePriority!
+
+  title: String!
+
+  description: String
+
+  position: Int!
+
+  properties: JSON!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  issueTypeId: UUID!
+
+  dueAt: Timestamp
+
+  number: Int!
+
+  idempotencyKey: String
+
+  requestedById: UUID!
+
+  conversationId: UUID
+
+  groupId: UUID
+
+  externalUid: String
+
+  externalMetadata: JSON
+
+  followUpAt: Timestamp
+
+  followUpCurrentStepIdx: Int
+
+  followUpStepsSnapshot: [JSON!]
+
+  followUpStatus: IssueFollowUpStatus
+
+  isTest: Boolean!
+
+  createdBy: Account!
+
+  requestedBy: Account!
+
+  assignee: Account
+
+  issues(filter: JSON, order: [JSON!], limit: Int, targetEnvironment: String): [Issue!]!
+
+  issueStatus: IssueStatus!
+
+  issueLabelings(filter: JSON, order: [JSON!], limit: Int): [IssueLabeling!]!
+
+  activities(filter: JSON, order: [JSON!], limit: Int): [Activity!]!
+
+  comments(filter: JSON, order: [JSON!], limit: Int): [Comment!]!
+
+  issueRecords(filter: JSON, order: [JSON!], limit: Int): [CustomRecord!]!
+
+  conversation: Conversation
+
+  group: Group
+
+  space: Space
+
+  issueRelations(filter: JSON, order: [JSON!], limit: Int): [IssueRelation!]!
+}
+
+type IssueFilter {
+  id: UUID!
+
+  workspaceId: UUID!
+
+  name: String!
+
+  filter: JSON!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  externalUid: String!
+
+  externalMetadata: JSON!
+
+  position: Int
+
+  group: [JSON!]!
+
+  order: [JSON!]!
+
+  cols: [JSON!]!
+
+  restrictedGroupIds: [UUID!]!
+
+  issueTypeId: UUID
+
+  issueType: IssueType
+}
+
+enum IssueFollowUpStatus {
+  SCHEDULED
+
+  SUSPENDED
+
+  FAILED
+}
+
+type IssueLabel {
+  id: UUID!
+
+  workspaceId: UUID!
+
+  spaceId: UUID
+
+  name: String!
+
+  color: String
+
+  position: Int!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+}
+
+type IssueLabeling {
+  id: UUID!
+
+  workspaceId: UUID!
+
+  issueId: UUID!
+
+  labelId: UUID!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  issueLabel: IssueLabel!
+}
+
+enum IssuePriority {
+  NONE
+
+  LOW
+
+  MEDIUM
+
+  HIGH
+
+  URGENT
+}
+
+type IssueRelation {
+  id: UUID!
+
+  kind: IssueRelationKind!
+
+  issueId: UUID!
+
+  relatedIssueId: UUID!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  issue: Issue!
+
+  relatedIssue: Issue!
+}
+
+enum IssueRelationKind {
+  RELATED
+
+  BLOCKED
+
+  DUPLICATED
+}
+
+input IssueRelationStubInput {
+  kind: IssueRelationKind!
+
+  relatedIssueId: UUID!
+}
+
+enum IssueReportType {
+  ISSUE_ANALYSIS
+
+  AGENT_ACTIVITY
+
+  ISSUE_ACTIVITY_AUDIT
+
+  AGENT_ASSIGNMENT_ANALYSIS
+
+  AI_AGENT_ACTIVITY
+}
+
+input IssueReportsByAssigneeInput {
+  filter: JSON
+
+  targetEnvironment: String
+}
+
+type IssueStatus {
+  id: UUID!
+
+  workspaceId: UUID!
+
+  issueTypeId: UUID!
+
+  kind: IssueStatusKind!
+
+  name: String!
+
+  identifier: String!
+
+  color: String
+
+  position: Int!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  isDefault: Boolean!
+
+  issueType: IssueType!
+}
+
+input IssueStatusInputInput {
+  id: UUID!
+
+  kind: IssueStatusKind!
+
+  name: String!
+
+  identifier: String!
+
+  color: String
+
+  position: Int!
+
+  isDefault: Boolean
+}
+
+enum IssueStatusKind {
+  BACKLOG
+
+  NOT_STARTED
+
+  STARTED
+
+  COMPLETED
+
+  CANCELED
+}
+
+type IssueTemplate {
+  id: UUID!
+
+  workspaceId: UUID!
+
+  spaceId: UUID
+
+  issueTypeId: UUID
+
+  issueStatusId: UUID
+
+  assigneeId: UUID
+
+  parentId: UUID
+
+  name: String!
+
+  title: String
+
+  description: String
+
+  priority: IssuePriority
+
+  position: Int
+
+  properties: JSON!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+}
+
+type IssueType {
+  id: UUID!
+
+  workspaceId: UUID!
+
+  spaceId: UUID
+
+  name: String!
+
+  identifier: String!
+
+  fields: [JSON!]!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  childrenKind: IssueTypeChildrenKind!
+
+  allowedChildren: [UUID!]!
+
+  isDefault: Boolean!
+
+  isPublicReplyAllowed: Boolean!
+
+  isAutosaved: Boolean!
+
+  isHistoryEnabled: Boolean!
+
+  conditions: [JSON!]!
+
+  position: Int!
+
+  space: Space
+
+  issueStatuses(filter: JSON, order: [JSON!], limit: Int): [IssueStatus!]!
+
+  issueTypeRelationships(filter: JSON, order: [JSON!], limit: Int): [IssueTypeRelationship!]!
+
+  issueTypeActions(filter: JSON, order: [JSON!], limit: Int): [IssueTypeAction!]!
+}
+
+type IssueTypeAction {
+  id: UUID!
+
+  issueTypeId: UUID!
+
+  operationId: UUID
+
+  name: String!
+
+  identifier: String!
+
+  icon: String
+
+  position: Int!
+
+  arguments: JSON!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  target: IssueTypeActionTarget!
+
+  url: String
+
+  operation: Operation
+}
+
+enum IssueTypeActionTarget {
+  URL
+
+  OPERATION
+}
+
+enum IssueTypeChildrenKind {
+  ANY
+
+  NONE
+
+  SPECIFIC
+}
+
+type IssueTypeRelationship {
+  id: UUID!
+
+  issueTypeId: UUID!
+
+  name: String!
+
+  identifier: String!
+
+  position: Int!
+
+  sourceFieldId: UUID!
+
+  targetId: UUID!
+
+  targetAttributeId: UUID!
+
+  kind: RelationshipKind!
+
+  filter: JSON
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  displayAttributes: [JSON!]!
+
+  target: Resource!
+
+  targetAttribute: Attribute!
+}
+
+type Item {
+  id: UUID!
+
+  kind: ItemKind!
+
+  name: String!
+
+  identifier: String!
+
+  description: String
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  workspaceId: UUID!
+
+  itemCategoryMemberships(filter: JSON, order: [JSON!], limit: Int): [ItemCategoryMembership!]!
+
+  pricings(filter: JSON, order: [JSON!], limit: Int): [Pricing!]!
+}
+
+type ItemCategory {
+  id: UUID!
+
+  name: String!
+
+  identifier: String!
+
+  description: String
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  workspaceId: UUID!
+}
+
+type ItemCategoryMembership {
+  id: UUID!
+
+  itemId: UUID!
+
+  itemCategoryId: UUID!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  item: Item!
+
+  itemCategory: ItemCategory!
+}
+
+enum ItemKind {
+  GOODS
+
+  SERVICES
+}
+
+"""
+A scalar that can represent any JSON value.
+"""
+scalar JSON
+
+type KeyPair {
+  id: UUID!
+
+  accountId: UUID!
+
+  publicKey: String!
+
+  privateKey: String!
+
+  expiresAt: Timestamp
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+}
+
+input LoadAiAgentInput {
+  publicEmbedKey: String!
+
+  targetEnvironment: String
+}
+
+type LoadAiAgentResponse {
+  id: UUID!
+
+  name: String!
+
+  identifier: String!
+
+  avatar: String
+
+  versionId: UUID!
+
+  starterMessages: [JSON!]
+
+  starterSuggestions: [JSON!]
+
+  status: AiAgentVersionStatus!
+
+  interactionMode: AiAgentInteractionMode!
+}
+
+type Locale {
+  name: String!
+
+  identifier: String!
+}
+
+input MarkInAppChatConversationReadInput {
+  identityId: UUID!
+
+  conversationId: UUID!
+
+  lastMessageId: UUID!
+}
+
+type MarkInAppChatConversationReadResponse {
+  success: Boolean!
+}
+
+type MenuElement {
+  id: UUID!
+
+  dashboardId: UUID!
+
+  parentId: UUID
+
+  viewStyle: ViewStyle
+
+  name: String
+
+  path: String
+
+  icon: String
+
+  kind: MenuElementKind!
+
+  separatorStyle: MenuElementSeparatorStyle
+
+  placement: MenuElementPlacement!
+
+  target: MenuElementTarget
+
+  url: String
+
+  position: Int!
+
+  query: String
+
+  actions: [MenuElementAction!]!
+
+  isRepeated: Boolean!
+
+  isSticky: Boolean!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  viewUrn: String
+
+  accessCriteria: [JSON!]!
+}
+
+type MenuElementAction {
+  icon: String!
+
+  name: String!
+
+  action: String!
+}
+
+input MenuElementActionInput {
+  icon: String!
+
+  name: String!
+
+  action: String!
+}
+
+enum MenuElementKind {
+  ITEM
+
+  GROUP
+
+  SEPARATOR
+}
+
+enum MenuElementPlacement {
+  SIDE
+
+  TOP
+}
+
+enum MenuElementSeparatorStyle {
+  RULER
+
+  WHITESPACE
+}
+
+enum MenuElementTarget {
+  VIEW
+
+  SUBMENU
+
+  URL
+}
+
+type MenuElementTemplate {
+  id: UUID!
+
+  workspaceId: UUID
+
+  appId: UUID!
+
+  parentId: UUID
+
+  kind: MenuElementKind!
+
+  name: String
+
+  icon: String
+
+  componentPath: String
+
+  placement: MenuElementPlacement!
+
+  target: MenuElementTarget
+
+  position: Int!
+
+  actions: [JSON!]!
+
+  viewStyle: ViewStyle
+
+  separatorStyle: MenuElementSeparatorStyle
+
+  isRepeated: Boolean!
+
+  isSticky: Boolean!
+
+  url: String
+
+  query: String
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  app: App!
+}
+
+type Message {
+  id: UUID!
+
+  # Anticipates the dashx-backend turn_seq exposure on the GraphQL Message struct; port this
+  # line over after a schema re-download until the backend ships it.
+  turnSeq: Int
+
+  broadcastId: UUID
+
+  integrationId: UUID
+
+  data: JSON
+
+  renderedContent: JSON!
+
+  report: JSON
+
+  failedSendAttempts: Int!
+
+  lastSendFailureAt: Timestamp
+
+  sentAt: Timestamp
+
+  deliveredAt: Timestamp
+
+  firstOpenedAt: Timestamp
+
+  externalUid: String
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  queuedAt: Timestamp
+
+  lastDeliveryFailureAt: Timestamp
+
+  failedDeliveryAttempts: Int
+
+  failedAt: Timestamp
+
+  failureReason: String
+
+  firstClickedAt: Timestamp
+
+  complainedAt: Timestamp
+
+  unsubscribedAt: Timestamp
+
+  dismissedAt: Timestamp
+
+  readAt: Timestamp
+
+  senderId: UUID
+
+  conversationId: UUID
+
+  channel: ConversationChannel
+
+  subChannel: ConversationSubChannel
+
+  attachments: [JSON!]
+
+  importUid: String
+
+  importMetadata: JSON
+
+  aiRole: String
+
+  metadata: JSON
+
+  aiGeneratedMessage: JSON
+
+  campaignId: UUID
+
+  broadcast: Broadcast
+
+  campaign: Campaign
+
+  messageRecipients(filter: JSON, order: [JSON!], limit: Int): [MessageRecipient!]!
+
+  sender: Account
+}
+
+type MessageLog {
+  id: UUID!
+
+  messageId: UUID!
+
+  integrationId: UUID!
+
+  category: MessageLogCategory!
+
+  subcategory: MessageLogSubcategory!
+
+  data: JSON!
+
+  timestamp: Timestamp!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  contact: String
+
+  messageRecipientId: UUID
+
+  message: Message!
+
+  messageRecipient: MessageRecipient
+
+  integration: Installation!
+}
+
+enum MessageLogCategory {
+  SEND_FAILED
+
+  SENT
+
+  REJECTED
+
+  BOUNCED
+
+  DELIVERY_FAILED
+
+  DELIVERED
+
+  OPENED
+
+  CLICKED
+
+  COMPLAINED
+
+  SUBSCRIPTION_CHANGED
+
+  UNKNOWN
+}
+
+enum MessageLogSubcategory {
+  NONE
+
+  HARD_BOUNCED
+
+  SOFT_BOUNCED
+
+  OTHER_BOUNCED
+
+  UNSUBSCRIBED
+
+  SUBSCRIBED
+
+  GROUP_UNSUBSCRIBED
+
+  GROUP_SUBSCRIBED
+
+  FAILED_DND
+}
+
+type MessageRecipient {
+  id: UUID!
+
+  messageId: UUID!
+
+  recipientId: UUID!
+
+  contactId: UUID
+
+  contact: String!
+
+  readAt: Timestamp
+
+  externalUid: String
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  lastDeliveryFailureAt: Timestamp
+
+  failedDeliveryAttempts: Int
+
+  deliveredAt: Timestamp
+
+  failedAt: Timestamp
+
+  failureReason: String
+
+  complainedAt: Timestamp
+
+  firstOpenedAt: Timestamp
+
+  firstClickedAt: Timestamp
+
+  unsubscribedAt: Timestamp
+
+  dismissedAt: Timestamp
+
+  recipient: Recipient!
+}
+
+type Mutation {
+  identifyProspect(input: IdentifyProspectInput!): IdentifyProspectResponse!
+
+  verifyProspect(input: VerifyProspectInput!): Prospect!
+
+  registerWorkspace(input: RegisterWorkspaceInput!): RegisterWorkspaceResponse!
+
+  refreshWorkspaceSchema: Workspace!
+
+  updateWorkspaceTheme(input: UpdateWorkspaceThemeInput!): Workspace!
+
+  updateWorkspaceBranding(input: UpdateWorkspaceBrandingInput!): Workspace!
+
+  updateWorkspaceDomain(input: UpdateWorkspaceDomainInput!): Workspace!
+
+  saveWorkspaceLocale(input: SaveWorkspaceLocaleInput!): Workspace!
+
+  removeWorkspaceLocale(input: RemoveWorkspaceLocaleInput!): Workspace!
+
+  updateWorkspaceOnboarding(input: UpdateWorkspaceOnboardingInput!): Workspace!
+
+  saveWorkspaceBillingEmails(input: SaveWorkspaceBillingEmailsInput!): [String!]!
+
+  createApp(input: CreateAppInput!): App!
+
+  updateApp(input: UpdateAppInput!): App!
+
+  createEnvironment(input: CreateEnvironmentInput!): Environment!
+
+  updateEnvironment(input: UpdateEnvironmentInput!): Environment!
+
+  createInstallation(input: CreateInstallationInput!): Installation!
+
+  updateInstallation(input: UpdateInstallationInput!): Installation!
+
+  archiveInstallation(input: ArchiveInstallationInput!): Installation!
+
+  unarchiveInstallation(input: UnarchiveInstallationInput!): Installation!
+
+  createConfiguration(input: CreateConfigurationInput!): Configuration!
+
+  updateConfiguration(input: UpdateConfigurationInput!): Configuration!
+
+  destroyConfiguration(input: DestroyConfigurationInput!): Configuration!
+
+  configureInstallation(input: ConfigureInstallationInput!): Configuration!
+
+  createDashboard(input: CreateDashboardInput!): Dashboard!
+
+  updateDashboard(input: UpdateDashboardInput!): Dashboard!
+
+  destroyDashboard(input: DestroyDashboardInput!): Dashboard!
+
+  createView(input: CreateViewInput!): View!
+
+  upsertView(input: UpsertViewInput!): View!
+
+  createMenuElement(input: CreateMenuElementInput!): MenuElement!
+
+  updateMenuElement(input: UpdateMenuElementInput!): MenuElement!
+
+  destroyMenuElement(input: DestroyMenuElementInput!): MenuElement!
+
+  generateMenuElements(input: GenerateMenuElementsInput!): [MenuElement!]!
+
+  duplicateMenuElement(input: DuplicateMenuElementInput!): MenuElement!
+
+  createTheme(input: CreateThemeInput!): Theme!
+
+  updateTheme(input: UpdateThemeInput!): Theme!
+
+  destroyTheme(input: DestroyThemeInput!): Theme!
+
+  createGroup(input: CreateGroupInput!): Group!
+
+  updateGroup(input: UpdateGroupInput!): Group!
+
+  destroyGroup(input: DestroyGroupInput!): Group!
+
+  forgotPassword(input: ForgotPasswordInput!): ForgotPasswordResponse!
+
+  editCurrentAccountWorkStatus(input: EditCurrentAccountWorkStatusInput!): Account!
+
+  updateAccount(input: UpdateAccountInput!): Account!
+
+  identifyAccount(input: IdentifyAccountInput!): Account!
+
+  changePassword(input: ChangePasswordInput!): Account!
+
+  changeEmail(input: ChangeEmailInput!): ChangeEmailResponse!
+
+  verifyEmailChange(input: VerifyEmailChangeInput!): Account!
+
+  createAccount(input: CreateAccountInput!): Account!
+
+  upsertAccount(input: UpsertAccountInput!): Account!
+
+  importAccount(input: ImportAccountInput!): Account!
+
+  completeOnboarding(input: CompleteOnboardingInput!): Account!
+
+  updateAccountAvatar(input: UpdateAccountAvatarInput!): Account!
+
+  submitContactForm(input: SubmitContactFormInput!): SubmitContactFormResponse!
+
+  editAccountTour(input: EditAccountTourInput!): Account!
+
+  saveWorkspaceBillingAccount(input: SaveWorkspaceBillingAccountInput!): SaveWorkspaceBillingAccountResponse!
+
+  configureMfa: ConfigureMfaResponse!
+
+  enableMfa(input: EnableMfaInput!): EnableMfaResponse!
+
+  disableMfa(input: DisableMfaInput!): Account!
+
+  createGroupMembership(input: CreateGroupMembershipInput!): GroupMembership!
+
+  destroyGroupMembership(input: DestroyGroupMembershipInput!): GroupMembership!
+
+  assignGroups(input: AssignGroupsInput!): AssignGroupsResponse!
+
+  createSession(input: CreateSessionInput!): Session!
+
+  verifySession(input: VerifySessionInput!): Session!
+
+  revokeOtherSessions: RevokeOtherSessionsResponse!
+
+  revokeSession(input: RevokeSessionInput!): Session!
+
+  resetPassword(input: ResetPasswordInput!): Session!
+
+  startOnboarding(input: StartOnboardingInput!): Session!
+
+  updateSession(input: UpdateSessionInput!): Session!
+
+  createKeyPair(input: CreateKeyPairInput!): KeyPair!
+
+  revokeKeyPair(input: RevokeKeyPairInput!): KeyPair!
+
+  createContact(input: CreateContactInput!): Contact!
+
+  updateContact(input: UpdateContactInput!): Contact!
+
+  destroyContact(input: DestroyContactInput!): Contact!
+
+  saveContacts(input: SaveContactsInput!): SaveContactsResponse!
+
+  subscribeContact(input: SubscribeContactInput!): Contact!
+
+  unsubscribeContact(input: UnsubscribeContactInput!): UnsubscribeContactResponse!
+
+  destroyAsset(input: DestroyAssetInput!): Asset!
+
+  prepareAsset(input: PrepareAssetInput!): Asset!
+
+  updateEventType(input: UpdateEventTypeInput!): EventType!
+
+  destroyEventType(input: DestroyEventTypeInput!): EventType!
+
+  createEventType(input: CreateEventTypeInput!): EventType!
+
+  trackEvent(input: TrackEventInput!): TrackEventResponse!
+
+  createEventReport(input: CreateEventReportInput!): EventReport!
+
+  updateEventReport(input: UpdateEventReportInput!): EventReport!
+
+  createResource(input: CreateResourceInput!): Resource!
+
+  updateResource(input: UpdateResourceInput!): Resource!
+
+  destroyResource(input: DestroyResourceInput!): Resource!
+
+  generateGraph(input: GenerateGraphInput!): GenerateGraphResponse!
+
+  createOperation(input: CreateOperationInput!): Operation!
+
+  updateOperation(input: UpdateOperationInput!): Operation!
+
+  executeMutationOperation(input: ExecuteMutationOperationInput!): JSON!
+
+  writeCsv(input: WriteCsvInput!): WriteCsvResponse!
+
+  downloadFiles(input: DownloadFilesInput!): DownloadFilesResponse!
+
+  executeCode(input: ExecuteCodeInput!): ExecuteCodeResponse!
+
+  createAttribute(input: CreateAttributeInput!): Attribute!
+
+  updateAttribute(input: UpdateAttributeInput!): Attribute!
+
+  destroyAttribute(input: DestroyAttributeInput!): Attribute!
+
+  createParameter(input: CreateParameterInput!): Parameter!
+
+  updateParameter(input: UpdateParameterInput!): Parameter!
+
+  destroyParameter(input: DestroyParameterInput!): Parameter!
+
+  createRelationship(input: CreateRelationshipInput!): Relationship!
+
+  updateRelationship(input: UpdateRelationshipInput!): Relationship!
+
+  destroyRelationship(input: DestroyRelationshipInput!): Relationship!
+
+  createRecord(input: CreateRecordInput!): CustomRecord!
+
+  updateRecord(input: UpdateRecordInput!): Record!
+
+  destroyRecord(input: DestroyRecordInput!): Record!
+
+  internalAddRecord(input: InternalAddRecordInput!): CustomRecord!
+
+  internalEditRecord(input: InternalEditRecordInput!): CustomRecord!
+
+  internalBulkEditRecords(input: InternalBulkEditRecordsInput!): [CustomRecord!]!
+
+  internalDeleteRecord(input: InternalDeleteRecordInput!): CustomRecord!
+
+  internalImportRecords(input: InternalImportRecordsInput!): [CustomRecord!]!
+
+  publishRecordVersion(input: PublishRecordVersionInput!): CustomRecord!
+
+  unpublishRecordVersion(input: UnpublishRecordVersionInput!): CustomRecord!
+
+  restoreRecordVersion(input: RestoreRecordVersionInput!): CustomRecord!
+
+  updateFlow(input: UpdateFlowInput!): Flow!
+
+  createFlow(input: CreateFlowInput!): Flow!
+
+  executeFlow(input: ExecuteFlowInput!): FlowExecution!
+
+  createFlowVersion(input: CreateFlowVersionInput!): FlowVersion!
+
+  updateFlowVersion(input: UpdateFlowVersionInput!): FlowVersion!
+
+  publishFlowVersion(input: PublishFlowVersionInput!): FlowVersion!
+
+  unpublishFlowVersion(input: UnpublishFlowVersionInput!): FlowVersion!
+
+  duplicateFlowVersion(input: DuplicateFlowVersionInput!): FlowVersion!
+
+  pauseFlowExecution(input: PauseFlowExecutionInput!): FlowExecution!
+
+  resumeFlowExecution(input: ResumeFlowExecutionInput!): FlowExecution!
+
+  cancelFlowExecution(input: CancelFlowExecutionInput!): FlowExecution!
+
+  createIdentity(input: CreateIdentityInput!): Identity!
+
+  updateIdentity(input: UpdateIdentityInput!): Identity!
+
+  destroyIdentity(input: DestroyIdentityInput!): Identity!
+
+  createCampaign(input: CreateCampaignInput!): Campaign!
+
+  updateCampaign(input: UpdateCampaignInput!): Campaign!
+
+  destroyCampaign(input: DestroyCampaignInput!): Campaign!
+
+  createDelivery(input: CreateDeliveryInput!): Delivery!
+
+  createBroadcast(input: CreateBroadcastInput!): Broadcast!
+
+  updateBroadcast(input: UpdateBroadcastInput!): Broadcast!
+
+  startBroadcast(input: StartBroadcastInput!): Broadcast!
+
+  retryBroadcast(input: RetryBroadcastInput!): Broadcast!
+
+  stopBroadcast(input: StopBroadcastInput!): Broadcast!
+
+  destroyBroadcast(input: DestroyBroadcastInput!): Broadcast!
+
+  testBroadcast(input: TestBroadcastInput!): Broadcast!
+
+  duplicateBroadcast(input: DuplicateBroadcastInput!): Broadcast!
+
+  createRecipient(input: CreateRecipientInput!): Recipient!
+
+  updateRecipient(input: UpdateRecipientInput!): Recipient!
+
+  destroyRecipient(input: DestroyRecipientInput!): Recipient!
+
+  importRecipientsList(input: ImportRecipientsListInput!): ImportRecipientsListResponse!
+
+  createConversation(input: CreateConversationInput!): Conversation!
+
+  updateConversation(input: UpdateConversationInput!): Conversation!
+
+  sendMessage(input: SendMessageInput!): Message!
+
+  startInAppChatConversation(input: StartInAppChatConversationInput!): Conversation!
+
+  sendInAppChatMessage(input: SendInAppChatMessageInput!): Message!
+
+  markInAppChatConversationRead(input: MarkInAppChatConversationReadInput!): MarkInAppChatConversationReadResponse!
+
+  resolveInAppChatConversation(input: ResolveInAppChatConversationInput!): ChatConversationSummary!
+
+  trackMessage(input: TrackMessageInput!): TrackMessageResponse!
+
+  trackAllMessages(input: TrackAllMessagesInput!): TrackAllMessagesResponse!
+
+  createExclusionList(input: CreateExclusionListInput!): ExclusionList!
+
+  updateExclusionList(input: UpdateExclusionListInput!): ExclusionList!
+
+  destroyExclusionList(input: DestroyExclusionListInput!): ExclusionList!
+
+  createExclusionListMember(input: CreateExclusionListMemberInput!): ExclusionListMember!
+
+  destroyExclusionListMember(input: DestroyExclusionListMemberInput!): ExclusionListMember!
+
+  createExclusionListImport(input: CreateExclusionListImportInput!): ExclusionListImport!
+
+  updatePreference(input: UpdatePreferenceInput!): Preference!
+
+  createPreference(input: CreatePreferenceInput!): Preference!
+
+  destroyPreference(input: DestroyPreferenceInput!): Preference!
+
+  updateStoredPreference(input: UpdateStoredPreferenceInput!): StoredPreference!
+
+  createStoredPreference(input: CreateStoredPreferenceInput!): StoredPreference!
+
+  destroyStoredPreference(input: DestroyStoredPreferenceInput!): StoredPreference!
+
+  saveStoredPreferences(input: SaveStoredPreferencesInput!): SaveStoredPreferencesResponse!
+
+  createItem(input: CreateItemInput!): Item!
+
+  updateItem(input: UpdateItemInput!): Item!
+
+  destroyItem(input: DestroyItemInput!): Item!
+
+  createPricing(input: CreatePricingInput!): Pricing!
+
+  updatePricing(input: UpdatePricingInput!): Pricing!
+
+  destroyPricing(input: DestroyPricingInput!): Pricing!
+
+  createItemCategory(input: CreateItemCategoryInput!): ItemCategory!
+
+  updateItemCategory(input: UpdateItemCategoryInput!): ItemCategory!
+
+  destroyItemCategory(input: DestroyItemCategoryInput!): ItemCategory!
+
+  createItemCategoryMembership(input: CreateItemCategoryMembershipInput!): ItemCategoryMembership!
+
+  updateItemCategoryMembership(input: UpdateItemCategoryMembershipInput!): ItemCategoryMembership!
+
+  destroyItemCategoryMembership(input: DestroyItemCategoryMembershipInput!): ItemCategoryMembership!
+
+  createCoupon(input: CreateCouponInput!): Coupon!
+
+  updateCoupon(input: UpdateCouponInput!): Coupon!
+
+  destroyCoupon(input: DestroyCouponInput!): Coupon!
+
+  createCouponCode(input: CreateCouponCodeInput!): CouponCode!
+
+  updateCouponCode(input: UpdateCouponCodeInput!): CouponCode!
+
+  destroyCouponCode(input: DestroyCouponCodeInput!): CouponCode!
+
+  createCouponRestriction(input: CreateCouponRestrictionInput!): CouponRestriction!
+
+  updateCouponRestriction(input: UpdateCouponRestrictionInput!): CouponRestriction!
+
+  destroyCouponRestriction(input: DestroyCouponRestrictionInput!): CouponRestriction!
+
+  createCouponRedemption(input: CreateCouponRedemptionInput!): CouponRedemption!
+
+  updateCouponRedemption(input: UpdateCouponRedemptionInput!): CouponRedemption!
+
+  destroyCouponRedemption(input: DestroyCouponRedemptionInput!): CouponRedemption!
+
+  createOrder(input: CreateOrderInput!): Order!
+
+  updateOrder(input: UpdateOrderInput!): Order!
+
+  destroyOrder(input: DestroyOrderInput!): Order!
+
+  transferCart(input: TransferCartInput!): Order!
+
+  addItemToCart(input: AddItemToCartInput!): Order!
+
+  editItemInCart(input: EditItemInCartInput!): Order!
+
+  removeItemFromCart(input: RemoveItemFromCartInput!): Order!
+
+  applyCouponToCart(input: ApplyCouponToCartInput!): Order!
+
+  removeCouponFromCart(input: RemoveCouponFromCartInput!): Order!
+
+  checkoutCart(input: CheckoutCartInput!): Order!
+
+  capturePayment(input: CapturePaymentInput!): Order!
+
+  createOrderItem(input: CreateOrderItemInput!): OrderItem!
+
+  updateOrderItem(input: UpdateOrderItemInput!): OrderItem!
+
+  destroyOrderItem(input: DestroyOrderItemInput!): OrderItem!
+
+  createTransaction(input: CreateTransactionInput!): Transaction!
+
+  updateTransaction(input: UpdateTransactionInput!): Transaction!
+
+  destroyTransaction(input: DestroyTransactionInput!): Transaction!
+
+  createWorkspacePaymentMethod(input: CreateWorkspacePaymentMethodInput!): PaymentMethod!
+
+  updateWorkspacePaymentMethod(input: UpdateWorkspacePaymentMethodInput!): PaymentMethod!
+
+  destroyWorkspacePaymentMethod(input: DestroyWorkspacePaymentMethodInput!): PaymentMethod!
+
+  prepareWorkspacePaymentMethod: PrepareWorkspacePaymentMethodResponse!
+
+  setWorkspacePaymentMethodAsDefault(input: SetWorkspacePaymentMethodAsDefaultInput!): PaymentMethod!
+
+  createPolicy(input: CreatePolicyInput!): CustomPolicy!
+
+  updatePolicy(input: UpdatePolicyInput!): CustomPolicy!
+
+  destroyPolicy(input: DestroyPolicyInput!): CustomPolicy!
+
+  destroyPolicyAttachment(input: DestroyPolicyAttachmentInput!): PolicyAttachment!
+
+  attachPolicies(input: AttachPoliciesInput!): AttachPoliciesResponse!
+
+  setPolicies(input: SetPoliciesInput!): SetPoliciesResponse!
+
+  createSegment(input: CreateSegmentInput!): Segment!
+
+  updateSegment(input: UpdateSegmentInput!): Segment!
+
+  destroySegment(input: DestroySegmentInput!): Segment!
+
+  createAiAgent(input: CreateAiAgentInput!): AiAgent!
+
+  updateAiAgent(input: UpdateAiAgentInput!): AiAgent!
+
+  archiveAiAgent(input: ArchiveAiAgentInput!): AiAgent!
+
+  unarchiveAiAgent(input: UnarchiveAiAgentInput!): AiAgent!
+
+  internalInvokeAiAgent(input: InternalInvokeAiAgentInput!): InternalInvokeAiAgentResponse!
+
+  createAiAgentVersion(input: CreateAiAgentVersionInput!): AiAgentVersion!
+
+  updateAiAgentVersion(input: UpdateAiAgentVersionInput!): AiAgentVersion!
+
+  publishAiAgentVersion(input: PublishAiAgentVersionInput!): AiAgentVersion!
+
+  unpublishAiAgentVersion(input: UnpublishAiAgentVersionInput!): AiAgentVersion!
+
+  duplicateAiAgentVersion(input: DuplicateAiAgentVersionInput!): AiAgentVersion!
+
+  reviewAiAgentVersion(input: ReviewAiAgentVersionInput!): AiAgentVersion!
+
+  createAiAgentDeployment(input: CreateAiAgentDeploymentInput!): AiAgentDeployment!
+
+  updateAiAgentDeployment(input: UpdateAiAgentDeploymentInput!): AiAgentDeployment!
+
+  destroyAiAgentDeployment(input: DestroyAiAgentDeploymentInput!): AiAgentDeployment!
+
+  createAiAgentKnowledgeSource(input: CreateAiAgentKnowledgeSourceInput!): AiAgentKnowledgeSource!
+
+  updateAiAgentKnowledgeSource(input: UpdateAiAgentKnowledgeSourceInput!): AiAgentKnowledgeSource!
+
+  destroyAiAgentKnowledgeSource(input: DestroyAiAgentKnowledgeSourceInput!): AiAgentKnowledgeSource!
+
+  refreshAiAgentKnowledgeSource(input: RefreshAiAgentKnowledgeSourceInput!): AiAgentKnowledgeSource!
+
+  createApiImport(input: CreateApiImportInput!): ApiImport!
+
+  createApiRequest(input: CreateApiRequestInput!): ApiRequest!
+
+  updateApiRequest(input: UpdateApiRequestInput!): ApiRequest!
+
+  destroyApiRequest(input: DestroyApiRequestInput!): ApiRequest!
+
+  executeApiRequest(input: ExecuteApiRequestInput!): ExecuteApiRequestResponse!
+
+  createDatabaseScratchpad(input: CreateDatabaseScratchpadInput!): DatabaseScratchpad!
+
+  updateDatabaseScratchpad(input: UpdateDatabaseScratchpadInput!): DatabaseScratchpad!
+
+  destroyDatabaseScratchpad(input: DestroyDatabaseScratchpadInput!): DatabaseScratchpad!
+
+  executeDatabaseQuery(input: ExecuteDatabaseQueryInput!): ExecuteDatabaseQueryResponse!
+
+  addDatabaseRecord(input: AddDatabaseRecordInput!): JSON!
+
+  editDatabaseRecord(input: EditDatabaseRecordInput!): JSON!
+
+  deleteDatabaseRecord(input: DeleteDatabaseRecordInput!): JSON!
+
+  createDataType(input: CreateDataTypeInput!): DataType!
+
+  updateDataType(input: UpdateDataTypeInput!): DataType!
+
+  destroyDataType(input: DestroyDataTypeInput!): DataType!
+
+  createTemplate(input: CreateTemplateInput!): Template!
+
+  updateTemplate(input: UpdateTemplateInput!): Template!
+
+  upsertTemplate(input: UpsertTemplateInput!): Template!
+
+  destroyTemplate(input: DestroyTemplateInput!): Template!
+
+  publishTemplateVersion(input: PublishTemplateVersionInput!): Template!
+
+  unpublishTemplateVersion(input: UnpublishTemplateVersionInput!): Template!
+
+  restoreTemplateVersion(input: RestoreTemplateVersionInput!): Template!
+
+  createProduct(input: CreateProductInput!): Product!
+
+  updateProduct(input: UpdateProductInput!): Product!
+
+  destroyProduct(input: DestroyProductInput!): Product!
+
+  createProductVariant(input: CreateProductVariantInput!): ProductVariant!
+
+  updateProductVariant(input: UpdateProductVariantInput!): ProductVariant!
+
+  destroyProductVariant(input: DestroyProductVariantInput!): ProductVariant!
+
+  createProductVariantRelease(input: CreateProductVariantReleaseInput!): ProductVariantRelease!
+
+  addProductVariantRelease(input: AddProductVariantReleaseInput!): ProductVariantRelease!
+
+  updateProductVariantReleaseRule(input: UpdateProductVariantReleaseRuleInput!): ProductVariantReleaseRule!
+
+  createSpace(input: CreateSpaceInput!): Space!
+
+  updateSpace(input: UpdateSpaceInput!): Space!
+
+  destroySpace(input: DestroySpaceInput!): Space!
+
+  createSpaceConfiguration(input: CreateSpaceConfigurationInput!): SpaceConfiguration!
+
+  updateSpaceConfiguration(input: UpdateSpaceConfigurationInput!): SpaceConfiguration!
+
+  destroySpaceConfiguration(input: DestroySpaceConfigurationInput!): SpaceConfiguration!
+
+  createIssueType(input: CreateIssueTypeInput!): IssueType!
+
+  updateIssueType(input: UpdateIssueTypeInput!): IssueType!
+
+  destroyIssueType(input: DestroyIssueTypeInput!): IssueType!
+
+  createIssueTypeRelationship(input: CreateIssueTypeRelationshipInput!): IssueTypeRelationship!
+
+  updateIssueTypeRelationship(input: UpdateIssueTypeRelationshipInput!): IssueTypeRelationship!
+
+  destroyIssueTypeRelationship(input: DestroyIssueTypeRelationshipInput!): IssueTypeRelationship!
+
+  createIssueTypeAction(input: CreateIssueTypeActionInput!): IssueTypeAction!
+
+  updateIssueTypeAction(input: UpdateIssueTypeActionInput!): IssueTypeAction!
+
+  destroyIssueTypeAction(input: DestroyIssueTypeActionInput!): IssueTypeAction!
+
+  executeIssueTypeAction(input: ExecuteIssueTypeActionInput!): JSON!
+
+  createIssueStatus(input: CreateIssueStatusInput!): IssueStatus!
+
+  updateIssueStatus(input: UpdateIssueStatusInput!): IssueStatus!
+
+  destroyIssueStatus(input: DestroyIssueStatusInput!): IssueStatus!
+
+  createIssue(input: CreateIssueInput!): Issue!
+
+  updateIssue(input: UpdateIssueInput!): Issue!
+
+  upsertIssue(input: UpsertIssueInput!): Issue!
+
+  findOrCreateRequester(input: FindOrCreateRequesterInput!): Issue!
+
+  importIssue(input: ImportIssueInput!): Issue!
+
+  destroyIssue(input: DestroyIssueInput!): Issue!
+
+  createMessage(input: CreateMessageInput!): Message!
+
+  createPublicReply(input: CreatePublicReplyInput!): Message!
+
+  importMessage(input: ImportMessageInput!): Message!
+
+  createIssueRelation(input: CreateIssueRelationInput!): IssueRelation!
+
+  destroyIssueRelation(input: DestroyIssueRelationInput!): IssueRelation!
+
+  createIssueFilter(input: CreateIssueFilterInput!): IssueFilter!
+
+  updateIssueFilter(input: UpdateIssueFilterInput!): IssueFilter!
+
+  destroyIssueFilter(input: DestroyIssueFilterInput!): IssueFilter!
+
+  createIssueLabel(input: CreateIssueLabelInput!): IssueLabel!
+
+  updateIssueLabel(input: UpdateIssueLabelInput!): IssueLabel!
+
+  destroyIssueLabel(input: DestroyIssueLabelInput!): IssueLabel!
+
+  createIssueTemplate(input: CreateIssueTemplateInput!): IssueTemplate!
+
+  updateIssueTemplate(input: UpdateIssueTemplateInput!): IssueTemplate!
+
+  destroyIssueTemplate(input: DestroyIssueTemplateInput!): IssueTemplate!
+
+  subscribeFeed(input: SubscribeFeedInput!): FeedSubscriber!
+
+  unsubscribeFeed(input: UnsubscribeFeedInput!): FeedSubscriber!
+
+  createComment(input: CreateCommentInput!): Comment!
+
+  updateComment(input: UpdateCommentInput!): Comment!
+
+  importComment(input: ImportCommentInput!): Comment!
+
+  destroyComment(input: DestroyCommentInput!): Comment!
+
+  createShortcut(input: CreateShortcutInput!): Shortcut!
+
+  updateShortcut(input: UpdateShortcutInput!): Shortcut!
+
+  destroyShortcut(input: DestroyShortcutInput!): Shortcut!
+}
+
+"""
+ISO 8601 calendar date without timezone.
+Format: %Y-%m-%d
+
+# Examples
+
+* `1994-11-13`
+* `2000-02-24`
+"""
+scalar NaiveDate
+
+type Notification {
+  id: UUID!
+
+  broadcastId: UUID
+
+  integrationId: UUID
+
+  data: JSON
+
+  renderedContent: JSON!
+
+  report: JSON
+
+  failedSendAttempts: Int!
+
+  lastSendFailureAt: Timestamp
+
+  sentAt: Timestamp
+
+  deliveredAt: Timestamp
+
+  firstOpenedAt: Timestamp
+
+  externalUid: String
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  queuedAt: Timestamp
+
+  lastDeliveryFailureAt: Timestamp
+
+  failedDeliveryAttempts: Int
+
+  failedAt: Timestamp
+
+  failureReason: String
+
+  firstClickedAt: Timestamp
+
+  complainedAt: Timestamp
+
+  unsubscribedAt: Timestamp
+
+  dismissedAt: Timestamp
+
+  readAt: Timestamp
+
+  senderId: UUID
+
+  conversationId: UUID
+
+  channel: ConversationChannel
+
+  subChannel: ConversationSubChannel
+
+  attachments: [JSON!]
+
+  importUid: String
+
+  importMetadata: JSON
+
+  aiRole: String
+
+  metadata: JSON
+
+  aiGeneratedMessage: JSON
+
+  broadcast: Broadcast
+
+  messageRecipients(filter: JSON, order: [JSON!], limit: Int): [MessageRecipient!]!
+
+  sender: Account
+}
+
+type Operation {
+  id: UUID!
+
+  resourceId: UUID
+
+  name: String!
+
+  identifier: String!
+
+  description: String
+
+  icon: String
+
+  position: Int!
+
+  graphqlKind: OperationGraphqlKind!
+
+  actsOn: OperationActsOn
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  workspaceId: UUID
+
+  appId: UUID
+
+  behaviorKind: OperationBehaviorKind
+
+  behaviorSettings: JSON!
+
+  responseMapper: JSON
+
+  method: OperationMethod!
+
+  paginationSettings: JSON
+
+  responseTransformerKind: OperationTransformerKind!
+
+  responseTransformer: String
+
+  isDisabled: Boolean!
+
+  resource: Resource
+
+  app: App
+
+  parameters(filter: JSON, order: [JSON!], limit: Int): [Parameter!]!
+}
+
+enum OperationActsOn {
+  MEMBER
+
+  COLLECTION
+}
+
+enum OperationBehaviorKind {
+  DATABASE_QUERY
+
+  API_REQUEST
+
+  CODE
+
+  FLOW
+}
+
+enum OperationGraphqlKind {
+  QUERY
+
+  MUTATION
+}
+
+type OperationLog {
+  id: UUID!
+
+  accountId: UUID
+
+  keyPairId: UUID
+
+  operationId: UUID!
+
+  operationInstanceId: UUID
+
+  systemContext: SystemContext
+
+  status: OperationLogStatus!
+
+  statusReason: String
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  keyPair: KeyPair
+
+  account: Account
+
+  operation: Operation!
+}
+
+enum OperationLogStatus {
+  PENDING
+
+  PROCESSING
+
+  COMPLETED
+
+  FAILED
+}
+
+enum OperationMethod {
+  GENERIC
+
+  GET
+
+  LIST
+
+  AGGREGATE
+
+  PAGED_LIST
+
+  CREATE
+
+  UPDATE
+
+  DESTROY
+
+  IMPORT
+
+  EXPORT
+}
+
+enum OperationTransformerKind {
+  AUTO
+
+  CUSTOM
+
+  NONE
+}
+
+type Order {
+  id: UUID!
+
+  accountId: UUID
+
+  gatewayId: UUID
+
+  gatewayMeta: JSON
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  subtotal: Decimal!
+
+  discount: Decimal!
+
+  tax: Decimal!
+
+  total: Decimal!
+
+  status: OrderStatus!
+
+  paidAt: Timestamp
+
+  checkedOutAt: Timestamp
+
+  currencyCode: String!
+
+  createdById: UUID
+
+  environmentId: UUID!
+
+  paymentLink: String
+
+  orderItems(filter: JSON, order: [JSON!], limit: Int): [OrderItem!]!
+
+  couponRedemptions(filter: JSON, order: [JSON!], limit: Int): [CouponRedemption!]!
+
+  account: Account
+
+  createdBy: Account
+}
+
+type OrderItem {
+  id: UUID!
+
+  orderId: UUID!
+
+  itemId: UUID!
+
+  pricingId: UUID!
+
+  quantity: Decimal!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  unitPrice: Decimal!
+
+  subtotal: Decimal!
+
+  discount: Decimal!
+
+  tax: Decimal!
+
+  total: Decimal!
+
+  custom: JSON!
+
+  currencyCode: String!
+
+  order: Order!
+
+  item: Item!
+
+  pricing: Pricing!
+}
+
+enum OrderStatus {
+  DRAFT
+
+  INITIAL
+
+  CHECKED_OUT
+
+  PAID
+
+  CANCELED
+}
+
+enum OrderStyle {
+  CREATION_TIME_DESC
+
+  SPECIFIC_FIELDS
+
+  LINEAR_DRAG_AND_DROP
+
+  TREE_DRAG_AND_DROP
+}
+
+input OrdersAggregateByItemsInput {
+  filter: JSON
+
+  itemIds: [UUID!]
+}
+
+type OrdersAggregateByItemsResponse {
+  count: Int
+}
+
+input OrdersListByItemsInput {
+  filter: JSON
+
+  order: [JSON!]
+
+  limit: Int
+
+  page: Int
+
+  itemIds: [UUID!]
+}
+
+type Parameter {
+  id: UUID!
+
+  workspaceId: UUID
+
+  operationId: UUID!
+
+  attributeId: UUID
+
+  name: String!
+
+  identifier: String!
+
+  isNullable: Boolean
+
+  isArray: Boolean
+
+  validations: [JSON!]!
+
+  defaultValue: JSON
+
+  position: Int
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  dataTypeId: UUID
+
+  fieldTypeSettings: JSON!
+
+  displayType: DisplayType
+
+  displayTypeSettings: JSON
+
+  relationshipId: UUID
+
+  dataTypeSettings: JSON!
+
+  fieldType: String
+
+  isDeprecated: Boolean
+
+  operation: Operation!
+
+  attribute: Attribute
+
+  relationship: Relationship
+
+  dataType: DataType
+}
+
+input ParameterStubInput {
+  attributeId: UUID
+
+  relationshipId: UUID
+
+  name: String!
+
+  identifier: String!
+
+  dataTypeId: UUID
+
+  dataTypeSettings: JSON
+
+  fieldType: String
+
+  fieldTypeSettings: JSON
+
+  displayType: DisplayType
+
+  displayTypeSettings: JSON
+
+  isNullable: Boolean
+
+  isArray: Boolean
+
+  isDeprecated: Boolean
+
+  validations: [ValidationInput!]
+
+  defaultValue: JSON
+
+  position: Int
+}
+
+input ParseIdentityTokenInput {
+  publicKey: String!
+
+  privateKey: String!
+
+  token: String!
+}
+
+type ParseIdentityTokenResponse {
+  kind: AccountIdentityKind!
+
+  uid: String!
+}
+
+input PauseFlowExecutionInput {
+  id: UUID!
+}
+
+type PaymentMethod {
+  id: UUID!
+
+  accountId: UUID!
+
+  isDefault: Boolean!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  deletedAt: Timestamp
+
+  card: Card
+}
+
+type PolicyAttachment {
+  id: UUID!
+
+  policyId: UUID!
+
+  accountId: UUID
+
+  groupId: UUID
+
+  workspaceId: UUID!
+
+  environmentIds: [UUID!]
+
+  spaceIds: [UUID!]
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  objectId: UUID
+
+  account: Account
+
+  policy: CustomPolicy!
+
+  group: Group
+}
+
+input PolicyStubInput {
+  id: UUID!
+
+  environmentIds: [UUID!]
+
+  spaceIds: [UUID!]
+
+  objectId: UUID
+}
+
+type Preference {
+  id: UUID!
+
+  name: String!
+
+  identifier: String!
+
+  restrictions: [UUID!]!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  isEnabledByDefault: Boolean!
+
+  workspaceId: UUID!
+
+  preferenceRestrictions(filter: JSON, order: [JSON!], limit: Int): [PreferenceRestriction!]!
+}
+
+type PreferenceRestriction {
+  id: UUID!
+
+  preferenceId: UUID!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  templateId: UUID!
+
+  template: Template!
+}
+
+input PrepareAssetInput {
+  resource: String
+
+  attribute: String
+
+  operation: String
+
+  parameter: String
+
+  name: String!
+
+  size: Int!
+
+  mimeType: String!
+
+  width: Int
+
+  height: Int
+
+  externalUid: String
+
+  externalMetadata: JSON
+
+  targetEnvironment: String
+}
+
+type PrepareWorkspacePaymentMethodResponse {
+  token: String!
+}
+
+type Pricing {
+  id: UUID!
+
+  itemId: UUID!
+
+  amount: Decimal!
+
+  currencyCode: String!
+
+  isRecurring: Boolean!
+
+  recurringInterval: Int!
+
+  recurringIntervalUnit: PricingRecurringIntervalUnit!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  originalAmount: Decimal
+
+  kind: PricingKind!
+
+  appleProductIdentifier: String
+
+  googleProductIdentifier: String
+
+  item: Item!
+}
+
+enum PricingKind {
+  REGULAR
+
+  IN_APP
+}
+
+enum PricingRecurringIntervalUnit {
+  DAY
+
+  WEEK
+
+  MONTH
+
+  YEAR
+}
+
+type Product {
+  id: UUID!
+
+  workspaceId: UUID!
+
+  name: String!
+
+  identifier: String!
+
+  icon: String
+
+  summary: String
+
+  platforms: [ProductPlatform!]!
+
+  technology: ProductTechnology
+
+  dimensions: [JSON!]!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  createdById: UUID!
+
+  createdBy: Account!
+}
+
+enum ProductPlatform {
+  BROWSER
+
+  IOS
+
+  ANDROID
+
+  SERVER
+
+  OTHER
+}
+
+enum ProductTechnology {
+  JAVASCRIPT
+
+  REACT
+
+  ANGULAR
+
+  VUE
+
+  REMIX
+
+  NATIVE_IOS
+
+  NATIVE_ANDROID
+
+  REACT_NATIVE
+
+  FLUTTER
+
+  NODE
+
+  RUBY
+
+  PHP
+
+  PYTHON
+
+  GO
+
+  JAVA
+
+  RUST
+
+  OTHER
+}
+
+type ProductVariant {
+  id: UUID!
+
+  productId: UUID!
+
+  environmentId: UUID!
+
+  name: String!
+
+  dimensionValues: [JSON!]!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+}
+
+type ProductVariantRelease {
+  id: UUID!
+
+  productVariantId: UUID!
+
+  createdById: UUID!
+
+  versionName: String!
+
+  versionNumber: Int!
+
+  releaseNotes: String
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  productId: UUID!
+
+  createdBy: Account!
+
+  productVariant: ProductVariant!
+}
+
+type ProductVariantReleaseRule {
+  id: UUID!
+
+  productVariantId: UUID!
+
+  minimumReleaseId: UUID!
+
+  recommendedReleaseId: UUID!
+
+  latestReleaseId: UUID!
+
+  autoRecommendNewReleases: Boolean!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  productVariant: ProductVariant!
+
+  minimumRelease: ProductVariantRelease!
+
+  recommendedRelease: ProductVariantRelease!
+
+  latestRelease: ProductVariantRelease!
+}
+
+type Prospect {
+  id: UUID!
+
+  email: String!
+
+  code: String
+
+  codeExpiresAt: Timestamp
+
+  token: String
+
+  expiresAt: Timestamp
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+}
+
+type ProspectWorkspace {
+  id: UUID!
+
+  name: String!
+
+  identifier: String!
+
+  accessUrl: String!
+
+  hostname: String
+
+  logoSymbol: String
+}
+
+input PublishAiAgentVersionInput {
+  id: UUID!
+
+  notes: String
+}
+
+input PublishFlowVersionInput {
+  id: UUID!
+
+  isGraceful: Boolean!
+}
+
+input PublishRecordVersionInput {
+  id: UUID!
+}
+
+input PublishTemplateVersionInput {
+  id: UUID!
+}
+
+type Query {
+  workspace(hostname: String!): Workspace!
+
+  workspacesList(filter: JSON, order: [JSON!], limit: Int, page: Int): [Workspace!]!
+
+  workspacesAggregate(filter: JSON): AggregateResponse!
+
+  generateIdentityToken(input: GenerateIdentityTokenInput!): GenerateIdentityTokenResponse!
+
+  parseIdentityToken(input: ParseIdentityTokenInput!): ParseIdentityTokenResponse!
+
+  validateKeyPair(input: ValidateKeyPairInput!): ValidateKeyPairResponse!
+
+  explainAccess(input: ExplainAccessInput!): ExplainAccessResponse!
+
+  prospectWorkspaces: [ProspectWorkspace!]!
+
+  fetchWorkspaceBillingEmails: [String!]!
+
+  app(id: UUID!): App!
+
+  appsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [App!]!
+
+  appsAggregate(filter: JSON): AggregateResponse!
+
+  appCategoriesList(filter: JSON, order: [JSON!], limit: Int, page: Int): [AppCategory!]!
+
+  appCategoriesAggregate(filter: JSON): AggregateResponse!
+
+  appCategory(id: UUID!): AppCategory!
+
+  environment(id: UUID!): Environment!
+
+  environmentsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [Environment!]!
+
+  environmentsAggregate(filter: JSON): AggregateResponse!
+
+  installation(id: UUID!): Installation!
+
+  resolveInstallation(input: ResolveInstallationInput!): Installation!
+
+  installationsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [Installation!]!
+
+  installationsAggregate(filter: JSON): AggregateResponse!
+
+  configuration(id: UUID!): Configuration!
+
+  configurationsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [Configuration!]!
+
+  configurationsAggregate(filter: JSON): AggregateResponse!
+
+  testConfiguration(input: TestConfigurationInput!): TestConfigurationResponse!
+
+  dashboard(id: UUID!): Dashboard!
+
+  dashboardsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [Dashboard!]!
+
+  dashboardsAggregate(filter: JSON): AggregateResponse!
+
+  view(id: UUID!): View!
+
+  viewsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [View!]!
+
+  viewsAggregate(filter: JSON): AggregateResponse!
+
+  resolveView(input: ResolveViewInput!): View
+
+  exportBlock(input: ExportBlockInput!): ExportBlockResponse!
+
+  viewTemplate(id: UUID!): ViewTemplate!
+
+  viewTemplatesList(filter: JSON, order: [JSON!], limit: Int, page: Int): [ViewTemplate!]!
+
+  viewTemplatesAggregate(filter: JSON): AggregateResponse!
+
+  menuElementTemplate(id: UUID!): MenuElementTemplate!
+
+  menuElementTemplatesList(filter: JSON, order: [JSON!], limit: Int, page: Int): [MenuElementTemplate!]!
+
+  menuElementTemplatesAggregate(filter: JSON): AggregateResponse!
+
+  menuElement(id: UUID!): MenuElement!
+
+  menuElementsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [MenuElement!]!
+
+  menuElementsAggregate(filter: JSON): AggregateResponse!
+
+  theme(id: UUID!): Theme!
+
+  themesList(filter: JSON, order: [JSON!], limit: Int, page: Int): [Theme!]!
+
+  themesAggregate(filter: JSON): AggregateResponse!
+
+  group(id: UUID!): Group!
+
+  groupsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [Group!]!
+
+  groupsAggregate(filter: JSON): AggregateResponse!
+
+  verifyResetPasswordToken(input: VerifyResetPasswordTokenInput!): VerifyResetPasswordTokenResponse!
+
+  account(id: UUID!): Account!
+
+  currentAccount: Account!
+
+  accountsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [Account!]!
+
+  accountsAggregate(filter: JSON): AggregateResponse!
+
+  verifyInvitation(input: VerifyInvitationInput!): VerifyInvitationResponse!
+
+  fetchWorkspaceBillingAccount: WorkspaceBillingAccount!
+
+  retrieveMfaBackupCodes(input: RetrieveMfaBackupCodesInput!): RetrieveMfaBackupCodesResponse!
+
+  groupMembership(id: UUID!): GroupMembership!
+
+  groupMembershipsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [GroupMembership!]!
+
+  groupMembershipsAggregate(filter: JSON): AggregateResponse!
+
+  sessionsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [Session!]!
+
+  sessionsAggregate(filter: JSON): AggregateResponse!
+
+  keyPairsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [KeyPair!]!
+
+  keyPairsAggregate(filter: JSON): AggregateResponse!
+
+  keyPair(id: UUID!): KeyPair!
+
+  contact(id: UUID!, targetEnvironment: String): Contact!
+
+  contactsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [Contact!]!
+
+  contactsAggregate(filter: JSON, targetEnvironment: String): AggregateResponse!
+
+  fetchContacts(input: FetchContactsInput!): FetchContactsResponse!
+
+  addressesList(filter: JSON, order: [JSON!], limit: Int, page: Int): [Address!]!
+
+  addressesAggregate(filter: JSON): AggregateResponse!
+
+  address(id: UUID!): Address!
+
+  taxRegistrationsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [TaxRegistration!]!
+
+  taxRegistrationsAggregate(filter: JSON): AggregateResponse!
+
+  taxRegistration(id: UUID!): TaxRegistration!
+
+  timeZones: [TimeZone!]!
+
+  fieldTypes: [FieldType!]!
+
+  currencies: [Currency!]!
+
+  externalLog(id: UUID!): ExternalLog!
+
+  externalLogsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [ExternalLog!]!
+
+  externalLogsAggregate(filter: JSON): AggregateResponse!
+
+  locales: [Locale!]!
+
+  asset(id: UUID!): Asset!
+
+  assetsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [Asset!]!
+
+  assetsAggregate(filter: JSON): AggregateResponse!
+
+  export(id: UUID!): Export!
+
+  exportsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [Export!]!
+
+  exportsAggregate(filter: JSON): AggregateResponse!
+
+  downloadExport(input: DownloadExportInput!): DownloadExportResponse!
+
+  eventType(id: UUID!): EventType!
+
+  eventTypesList(filter: JSON, order: [JSON!], limit: Int, page: Int): [EventType!]!
+
+  eventTypesAggregate(filter: JSON): AggregateResponse!
+
+  event(id: UUID!): Event!
+
+  eventsList(filter: JSON, order: [JSON!], limit: Int, page: Int, targetEnvironment: String): [Event!]!
+
+  eventsAggregate(filter: JSON, targetEnvironment: String): AggregateResponse!
+
+  eventReport(id: UUID!): EventReport!
+
+  eventReportsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [EventReport!]!
+
+  eventReportsAggregate(filter: JSON): AggregateResponse!
+
+  executeEventReport(input: ExecuteEventReportInput!): ExecuteEventReportResponse!
+
+  resourcesList(filter: JSON, order: [JSON!], limit: Int, page: Int): [Resource!]!
+
+  resourcesAggregate(filter: JSON): AggregateResponse!
+
+  resource(id: UUID!): Resource!
+
+  operationsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [Operation!]!
+
+  operationsAggregate(filter: JSON): AggregateResponse!
+
+  operation(id: UUID!): Operation!
+
+  executeQueryOperation(input: ExecuteQueryOperationInput!): JSON!
+
+  executeOperation(input: ExecuteOperationInput!): JSON!
+
+  readCsv(input: ReadCsvInput!): ReadCsvResponse!
+
+  attributesAggregate(filter: JSON): AggregateResponse!
+
+  attributesList(filter: JSON, order: [JSON!], limit: Int, page: Int): [Attribute!]!
+
+  attribute(id: UUID!): Attribute!
+
+  parametersAggregate(filter: JSON): AggregateResponse!
+
+  parametersList(filter: JSON, order: [JSON!], limit: Int, page: Int): [Parameter!]!
+
+  parameter(id: UUID!): Parameter!
+
+  relationshipsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [Relationship!]!
+
+  relationshipsAggregate(filter: JSON): AggregateResponse!
+
+  relationship(id: UUID!): Relationship!
+
+  recordsAggregate(filter: JSON, targetEnvironment: String): AggregateResponse!
+
+  recordsList(filter: JSON, order: [JSON!], limit: Int, page: Int, targetEnvironment: String): [CustomRecord!]!
+
+  record(id: UUID!, resourceId: UUID!, targetEnvironment: String): Record!
+
+  internalSearchRecords(input: InternalSearchRecordsInput!): [CustomRecord!]!
+
+  internalSummarizeRecords(input: InternalSummarizeRecordsInput!): InternalSummarizeRecordsResponse!
+
+  internalFetchRecord(input: InternalFetchRecordInput!): CustomRecord!
+
+  internalExportRecords(input: InternalExportRecordsInput!): InternalExportRecordsResponse!
+
+  searchRecords(input: SearchRecordsInput!): [JSON!]!
+
+  fetchRecord(input: FetchRecordInput!): JSON!
+
+  recordVersionsAggregate(filter: JSON): AggregateResponse!
+
+  recordVersionsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [RecordVersion!]!
+
+  operationLog(id: UUID!): OperationLog!
+
+  operationLogsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [OperationLog!]!
+
+  operationLogsAggregate(filter: JSON): AggregateResponse!
+
+  searchOperationLogs(input: SearchOperationLogsInput!): [OperationLog!]!
+
+  summarizeOperationLogs(input: SummarizeOperationLogsInput!): SummarizeOperationLogsResponse!
+
+  flow(id: UUID!): Flow!
+
+  flowsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [Flow!]!
+
+  flowsAggregate(filter: JSON): AggregateResponse!
+
+  flowVersion(id: UUID!): FlowVersion!
+
+  flowVersionsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [FlowVersion!]!
+
+  flowVersionsAggregate(filter: JSON): AggregateResponse!
+
+  flowNode(id: UUID!): FlowNode!
+
+  flowNodesList(filter: JSON, order: [JSON!], limit: Int, page: Int): [FlowNode!]!
+
+  flowNodesAggregate(filter: JSON): AggregateResponse!
+
+  flowExecution(id: UUID!): FlowExecution!
+
+  flowExecutionsList(filter: JSON, order: [JSON!], limit: Int, page: Int, targetEnvironment: String): [FlowExecution!]!
+
+  flowExecutionsAggregate(filter: JSON, targetEnvironment: String): AggregateResponse!
+
+  flowExecutionNode(id: UUID!): FlowExecutionNode!
+
+  flowExecutionNodesList(filter: JSON, order: [JSON!], limit: Int, page: Int): [FlowExecutionNode!]!
+
+  flowExecutionNodesAggregate(filter: JSON): AggregateResponse!
+
+  identity(id: UUID!): Identity!
+
+  identitiesList(filter: JSON, order: [JSON!], limit: Int, page: Int): [Identity!]!
+
+  identitiesAggregate(filter: JSON): AggregateResponse!
+
+  campaign(id: UUID!): Campaign!
+
+  campaignsList(filter: JSON, order: [JSON!], limit: Int, page: Int, targetEnvironment: String): [Campaign!]!
+
+  campaignsAggregate(filter: JSON, targetEnvironment: String): AggregateResponse!
+
+  analyzeCampaign(input: AnalyzeCampaignInput!): AnalyzeCampaignResponse!
+
+  analyzeCampaigns(input: AnalyzeCampaignsInput!): AnalyzeCampaignsResponse!
+
+  exportCampaigns(input: ExportCampaignsInput!): Export!
+
+  broadcast(id: UUID!): Broadcast!
+
+  broadcastsList(filter: JSON, order: [JSON!], limit: Int, page: Int, targetEnvironment: String): [Broadcast!]!
+
+  broadcastsAggregate(filter: JSON, targetEnvironment: String): AggregateResponse!
+
+  recipient(id: UUID!): Recipient!
+
+  recipientsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [Recipient!]!
+
+  recipientsAggregate(filter: JSON): AggregateResponse!
+
+  exportRecipientsList(input: ExportRecipientsListInput!): ExportRecipientsListResponse!
+
+  conversation(id: UUID!): Conversation!
+
+  conversationsList(filter: JSON, order: [JSON!], limit: Int, page: Int, targetEnvironment: String): [Conversation!]!
+
+  conversationsAggregate(filter: JSON, targetEnvironment: String): AggregateResponse!
+
+  fetchInAppChatConversation(input: FetchInAppChatConversationInput!): ChatConversationSummary!
+
+  fetchInAppChatConversations(input: FetchInAppChatConversationsInput!): [ChatConversationSummary!]!
+
+  summarizeInAppChatConversations(input: SummarizeInAppChatConversationsInput!): SummarizeInAppChatConversationsResponse!
+
+  summarizeInAppChatUnread(input: SummarizeInAppChatUnreadInput!): SummarizeInAppChatUnreadResponse!
+
+  message(id: UUID!): Message!
+
+  messagesList(filter: JSON, order: [JSON!], limit: Int, page: Int, targetEnvironment: String): [Message!]!
+
+  messagesAggregate(filter: JSON, targetEnvironment: String): AggregateResponse!
+
+  exportMessagesList(input: ExportMessagesListInput!): ExportMessagesListResponse!
+
+  fetchInAppMessages(input: FetchInAppMessagesInput!): [Message!]!
+
+  fetchInAppChatMessages(input: FetchInAppChatMessagesInput!): [Message!]!
+
+  summarizeInAppChatMessages(input: SummarizeInAppChatMessagesInput!): SummarizeInAppChatMessagesResponse!
+
+  fetchInAppMessagesAggregate(input: FetchInAppMessagesAggregateInput!): FetchInAppMessagesAggregateResponse!
+
+  fetchInAppNotifications(input: FetchInAppNotificationsInput!): [Notification!]!
+
+  fetchInAppNotificationsAggregate(input: FetchInAppNotificationsAggregateInput!): FetchInAppNotificationsAggregateResponse!
+
+  messageRecipient(id: UUID!): MessageRecipient!
+
+  messageRecipientsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [MessageRecipient!]!
+
+  messageRecipientsAggregate(filter: JSON): AggregateResponse!
+
+  exclusionList(id: UUID!, targetEnvironment: String): ExclusionList!
+
+  exclusionListsList(filter: JSON, order: [JSON!], limit: Int, page: Int, targetEnvironment: String): [ExclusionList!]!
+
+  exclusionListsAggregate(filter: JSON, targetEnvironment: String): AggregateResponse!
+
+  exclusionListMembersList(filter: JSON, order: [JSON!], limit: Int, page: Int): [ExclusionListMember!]!
+
+  exclusionListMembersAggregate(filter: JSON, targetEnvironment: String): AggregateResponse!
+
+  broadcastExclusionListsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [BroadcastExclusionList!]!
+
+  broadcastExclusionListsAggregate(filter: JSON): AggregateResponse!
+
+  exclusionListImport(id: UUID!, targetEnvironment: String): ExclusionListImport!
+
+  exclusionListImportsList(filter: JSON, order: [JSON!], limit: Int, page: Int, targetEnvironment: String): [ExclusionListImport!]!
+
+  exclusionListImportsAggregate(filter: JSON, targetEnvironment: String): AggregateResponse!
+
+  preference(id: UUID!): Preference!
+
+  preferencesList(filter: JSON, order: [JSON!], limit: Int, page: Int): [Preference!]!
+
+  preferencesAggregate(filter: JSON): AggregateResponse!
+
+  storedPreference(id: UUID!): StoredPreference!
+
+  storedPreferencesList(filter: JSON, order: [JSON!], limit: Int, page: Int): [StoredPreference!]!
+
+  storedPreferencesAggregate(filter: JSON): AggregateResponse!
+
+  fetchStoredPreferences(input: FetchStoredPreferencesInput!): FetchStoredPreferencesResponse!
+
+  preferenceRestriction(id: UUID!): PreferenceRestriction!
+
+  preferenceRestrictionsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [PreferenceRestriction!]!
+
+  preferenceRestrictionsAggregate(filter: JSON): AggregateResponse!
+
+  messageLog(id: UUID!): MessageLog!
+
+  messageLogsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [MessageLog!]!
+
+  messageLogsAggregate(filter: JSON): AggregateResponse!
+
+  item(id: UUID!): Item!
+
+  fetchItem(input: FetchItemInput!): Item!
+
+  itemsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [Item!]!
+
+  itemsAggregate(filter: JSON): AggregateResponse!
+
+  pricing(id: UUID!): Pricing!
+
+  pricingsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [Pricing!]!
+
+  pricingsAggregate(filter: JSON): AggregateResponse!
+
+  itemCategory(id: UUID!): ItemCategory!
+
+  itemCategoriesList(filter: JSON, order: [JSON!], limit: Int, page: Int): [ItemCategory!]!
+
+  itemCategoriesAggregate(filter: JSON): AggregateResponse!
+
+  itemCategoryMembership(id: UUID!): ItemCategoryMembership!
+
+  itemCategoryMembershipsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [ItemCategoryMembership!]!
+
+  itemCategoryMembershipsAggregate(filter: JSON): AggregateResponse!
+
+  coupon(id: UUID!): Coupon!
+
+  couponsList(filter: JSON, order: [JSON!], limit: Int, page: Int, targetEnvironment: String): [Coupon!]!
+
+  couponsAggregate(filter: JSON, targetEnvironment: String): AggregateResponse!
+
+  couponCode(id: UUID!): CouponCode!
+
+  couponCodesList(filter: JSON, order: [JSON!], limit: Int, page: Int): [CouponCode!]!
+
+  couponCodesAggregate(filter: JSON): AggregateResponse!
+
+  couponRestriction(id: UUID!): CouponRestriction!
+
+  couponRestrictionsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [CouponRestriction!]!
+
+  couponRestrictionsAggregate(filter: JSON): AggregateResponse!
+
+  couponRedemption(id: UUID!): CouponRedemption!
+
+  couponRedemptionsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [CouponRedemption!]!
+
+  couponRedemptionsAggregate(filter: JSON): AggregateResponse!
+
+  order(id: UUID!): Order!
+
+  ordersList(filter: JSON, order: [JSON!], limit: Int, page: Int, targetEnvironment: String): [Order!]!
+
+  ordersAggregate(filter: JSON, targetEnvironment: String): AggregateResponse!
+
+  ordersListByItems(input: OrdersListByItemsInput!): [Order!]!
+
+  ordersAggregateByItems(input: OrdersAggregateByItemsInput!): OrdersAggregateByItemsResponse!
+
+  fetchCart(input: FetchCartInput!): Order!
+
+  workspaceOrdersList(filter: JSON, order: [JSON!], limit: Int, page: Int): [CustomOrder!]!
+
+  workspaceOrdersAggregate(filter: JSON): AggregateResponse!
+
+  fetchCurrentWorkspaceOrder: CustomOrder!
+
+  orderItemsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [OrderItem!]!
+
+  transaction(id: UUID!): Transaction!
+
+  transactionsList(filter: JSON, order: [JSON!], limit: Int, page: Int, targetEnvironment: String): [Transaction!]!
+
+  transactionsAggregate(filter: JSON, targetEnvironment: String): AggregateResponse!
+
+  workspacePaymentMethodsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [PaymentMethod!]!
+
+  workspacePaymentMethodsAggregate(filter: JSON): AggregateResponse!
+
+  paymentMethod(id: UUID!): PaymentMethod!
+
+  workspaceCardsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [Card!]!
+
+  workspaceCardsAggregate(filter: JSON): AggregateResponse!
+
+  policy(id: UUID!): CustomPolicy!
+
+  policiesList(filter: JSON, order: [JSON!], limit: Int, page: Int): [CustomPolicy!]!
+
+  policiesAggregate(filter: JSON): AggregateResponse!
+
+  policyAttachment(id: UUID!): PolicyAttachment!
+
+  policyAttachmentsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [PolicyAttachment!]!
+
+  policyAttachmentsAggregate(filter: JSON): AggregateResponse!
+
+  segment(id: UUID!): Segment!
+
+  segmentsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [Segment!]!
+
+  segmentsAggregate(filter: JSON): AggregateResponse!
+
+  aiAgent(id: UUID!): AiAgent!
+
+  aiAgentsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [AiAgent!]!
+
+  aiAgentsAggregate(filter: JSON): AggregateResponse!
+
+  invokeAiAgent(input: InvokeAiAgentInput!): InvokeAiAgentResponse!
+
+  loadAiAgent(input: LoadAiAgentInput!): LoadAiAgentResponse!
+
+  aiAgentVersion(id: UUID!): AiAgentVersion!
+
+  aiAgentVersionsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [AiAgentVersion!]!
+
+  aiAgentVersionsAggregate(filter: JSON): AggregateResponse!
+
+  aiAgentVersionRevisionsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [AiAgentVersionRevision!]!
+
+  aiAgentVersionRevisionsAggregate(filter: JSON): AggregateResponse!
+
+  aiAgentVersionLintRunsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [AiAgentVersionLintRun!]!
+
+  aiAgentVersionLintRunsAggregate(filter: JSON): AggregateResponse!
+
+  aiAgentVersionLintFindingsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [AiAgentVersionLintFinding!]!
+
+  aiAgentVersionLintFindingsAggregate(filter: JSON): AggregateResponse!
+
+  aiSession(id: UUID!): AiSession!
+
+  aiSessionsList(filter: JSON, order: [JSON!], limit: Int, page: Int, targetEnvironment: String): [AiSession!]!
+
+  aiSessionsAggregate(filter: JSON, targetEnvironment: String): AggregateResponse!
+
+  aiTurnsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [AiTurn!]!
+
+  aiTurnsAggregate(filter: JSON): AggregateResponse!
+
+  aiModelsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [AiModel!]!
+
+  aiModelsAggregate(filter: JSON): AggregateResponse!
+
+  aiModel(id: UUID!): AiModel!
+
+  aiAgentDeployment(id: UUID!): AiAgentDeployment!
+
+  aiAgentDeploymentsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [AiAgentDeployment!]!
+
+  aiAgentDeploymentsAggregate(filter: JSON): AggregateResponse!
+
+  aiAgentKnowledgeSource(id: UUID!): AiAgentKnowledgeSource!
+
+  aiAgentKnowledgeSourcesList(filter: JSON, order: [JSON!], limit: Int, page: Int): [AiAgentKnowledgeSource!]!
+
+  aiAgentKnowledgeSourcesAggregate(filter: JSON): AggregateResponse!
+
+  aiAgentToolsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [AiAgentTool!]!
+
+  aiAgentToolsAggregate(filter: JSON): AggregateResponse!
+
+  apiImport(id: UUID!): ApiImport!
+
+  apiRequest(id: UUID!): ApiRequest!
+
+  apiRequestsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [ApiRequest!]!
+
+  apiRequestsAggregate(filter: JSON): AggregateResponse!
+
+  databaseScratchpad(id: UUID!): DatabaseScratchpad!
+
+  databaseScratchpadsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [DatabaseScratchpad!]!
+
+  databaseScratchpadsAggregate(filter: JSON): AggregateResponse!
+
+  databaseSchema(id: UUID!): DatabaseSchema!
+
+  databaseSchemasList(filter: JSON, order: [JSON!], limit: Int, page: Int, targetEnvironment: String, installationId: UUID): [DatabaseSchema!]!
+
+  databaseSchemasAggregate(filter: JSON, targetEnvironment: String, installationId: UUID): AggregateResponse!
+
+  databaseTable(id: UUID!): DatabaseTable!
+
+  databaseTablesList(filter: JSON, order: [JSON!], limit: Int, page: Int): [DatabaseTable!]!
+
+  databaseTablesAggregate(filter: JSON): AggregateResponse!
+
+  searchDatabaseRecords(input: SearchDatabaseRecordsInput!): [JSON!]!
+
+  exportDatabaseRecords(input: ExportDatabaseRecordsInput!): ExportDatabaseRecordsResponse!
+
+  summarizeDatabaseRecords(input: SummarizeDatabaseRecordsInput!): SummarizeDatabaseRecordsResponse!
+
+  databaseColumn(id: UUID!): DatabaseColumn!
+
+  databaseColumnsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [DatabaseColumn!]!
+
+  databaseColumnsAggregate(filter: JSON): AggregateResponse!
+
+  dataTypesList(filter: JSON, order: [JSON!], limit: Int, page: Int): [DataType!]!
+
+  dataTypesAggregate(filter: JSON): AggregateResponse!
+
+  dataType(id: UUID!): DataType!
+
+  templatesList(filter: JSON, order: [JSON!], limit: Int, page: Int): [Template!]!
+
+  templatesAggregate(filter: JSON): AggregateResponse!
+
+  template(id: UUID!): Template!
+
+  templateVersionsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [TemplateVersion!]!
+
+  templateVersionsAggregate(filter: JSON): AggregateResponse!
+
+  templateVersion(id: UUID!): TemplateVersion!
+
+  productsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [Product!]!
+
+  productsAggregate(filter: JSON): AggregateResponse!
+
+  product(id: UUID!): Product!
+
+  productVariantsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [ProductVariant!]!
+
+  productVariantsAggregate(filter: JSON): AggregateResponse!
+
+  productVariant(id: UUID!): ProductVariant!
+
+  productVariantReleasesList(filter: JSON, order: [JSON!], limit: Int, page: Int): [ProductVariantRelease!]!
+
+  productVariantReleasesAggregate(filter: JSON): AggregateResponse!
+
+  productVariantRelease(id: UUID!): ProductVariantRelease!
+
+  fetchProductVariantRelease(input: FetchProductVariantReleaseInput!): ProductVariantRelease!
+
+  productVariantReleaseRulesList(filter: JSON, order: [JSON!], limit: Int, page: Int): [ProductVariantReleaseRule!]!
+
+  productVariantReleaseRulesAggregate(filter: JSON): AggregateResponse!
+
+  productVariantReleaseRule(id: UUID!): ProductVariantReleaseRule!
+
+  fetchProductVariantReleaseRule(input: FetchProductVariantReleaseRuleInput!): ProductVariantReleaseRule!
+
+  spacesList(filter: JSON, order: [JSON!], limit: Int, page: Int): [Space!]!
+
+  spacesAggregate(filter: JSON): AggregateResponse!
+
+  space(id: UUID!): Space!
+
+  spaceConfigurationsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [SpaceConfiguration!]!
+
+  spaceConfigurationsAggregate(filter: JSON): AggregateResponse!
+
+  spaceConfiguration(id: UUID!): SpaceConfiguration!
+
+  issueTypesList(filter: JSON, order: [JSON!], limit: Int, page: Int): [IssueType!]!
+
+  issueTypesAggregate(filter: JSON): AggregateResponse!
+
+  issueType(id: UUID!): IssueType!
+
+  issueTypeRelationshipsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [IssueTypeRelationship!]!
+
+  issueTypeRelationshipsAggregate(filter: JSON): AggregateResponse!
+
+  issueTypeRelationship(id: UUID!): IssueTypeRelationship!
+
+  issueTypeActionsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [IssueTypeAction!]!
+
+  issueTypeActionsAggregate(filter: JSON): AggregateResponse!
+
+  issueTypeAction(id: UUID!): IssueTypeAction!
+
+  issueStatusesList(filter: JSON, order: [JSON!], limit: Int, page: Int): [IssueStatus!]!
+
+  issueStatusesAggregate(filter: JSON): AggregateResponse!
+
+  issueStatus(id: UUID!): IssueStatus!
+
+  issuesList(filter: JSON, order: [JSON!], limit: Int, page: Int, targetEnvironment: String): [Issue!]!
+
+  issuesAggregate(filter: JSON, targetEnvironment: String): AggregateResponse!
+
+  listCurrentUserIssues(filter: JSON, order: [JSON!], limit: Int, page: Int, targetEnvironment: String): [Issue!]!
+
+  aggregateCurrentUserIssues(filter: JSON, targetEnvironment: String): AggregateResponse!
+
+  issueReportsByAssignee(input: IssueReportsByAssigneeInput!): JSON!
+
+  analyzeIssues(input: AnalyzeIssuesInput!): AnalyzeIssuesResponse!
+
+  issue(id: UUID!): Issue!
+
+  issueRecordsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [CustomRecord!]!
+
+  exportIssues(input: ExportIssuesInput!): Export!
+
+  issueRelationsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [IssueRelation!]!
+
+  issueRelationsAggregate(filter: JSON): AggregateResponse!
+
+  issueRelation(id: UUID!): IssueRelation!
+
+  issueFiltersList(filter: JSON, order: [JSON!], limit: Int, page: Int): [IssueFilter!]!
+
+  issueFiltersAggregate(filter: JSON): AggregateResponse!
+
+  issueLabelsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [IssueLabel!]!
+
+  issueLabelsAggregate(filter: JSON): AggregateResponse!
+
+  issueLabel(id: UUID!): IssueLabel!
+
+  issueLabelingsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [IssueLabeling!]!
+
+  issueLabelingsAggregate(filter: JSON): AggregateResponse!
+
+  issueTemplatesList(filter: JSON, order: [JSON!], limit: Int, page: Int): [IssueTemplate!]!
+
+  issueTemplatesAggregate(filter: JSON): AggregateResponse!
+
+  issueTemplate(id: UUID!): IssueTemplate!
+
+  feedsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [Feed!]!
+
+  feedSubscribersList(filter: JSON, order: [JSON!], limit: Int, page: Int): [FeedSubscriber!]!
+
+  feedSubscribersAggregate(filter: JSON): AggregateResponse!
+
+  activitiesList(filter: JSON, order: [JSON!], limit: Int, page: Int): [Activity!]!
+
+  activitiesAggregate(filter: JSON): AggregateResponse!
+
+  commentsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [Comment!]!
+
+  shortcutsAggregate(filter: JSON): AggregateResponse!
+
+  shortcutsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [Shortcut!]!
+
+  aiAgentLogsList(filter: JSON, order: [JSON!], limit: Int, page: Int): [AiAgentLog!]!
+
+  aiAgentLogsAggregate(filter: JSON): AggregateResponse!
+}
+
+input ReadCsvInput {
+  url: String!
+
+  filter: JSON
+
+  group: [String!]
+
+  batchNumber: Int
+}
+
+type ReadCsvResponse {
+  rows: [JSON!]!
+
+  totalBatches: Int!
+
+  batchNumber: Int!
+}
+
+type Recipient {
+  id: UUID!
+
+  broadcastId: UUID!
+
+  accountId: UUID
+
+  groupId: UUID
+
+  parentId: UUID
+
+  data: JSON
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  target: RecipientTarget!
+
+  kind: RecipientKind!
+
+  status: RecipientStatus!
+
+  statusReason: String
+
+  custom: JSON!
+
+  account: Account
+
+  group: Group
+}
+
+enum RecipientKind {
+  DIRECT_CONTACT
+
+  ACCOUNT
+
+  GROUP
+
+  ACCOUNT_SEGMENT
+
+  GROUP_SEGMENT
+}
+
+enum RecipientStatus {
+  PENDING
+
+  VALIDATED
+
+  PROCESSED
+
+  FAILED
+
+  SKIPPED
+}
+
+input RecipientStubInput {
+  kind: RecipientKind!
+
+  accountId: UUID
+
+  groupId: UUID
+
+  target: RecipientTarget
+
+  data: JSON
+
+  custom: JSON
+}
+
+enum RecipientTarget {
+  TO
+
+  CC
+
+  BCC
+}
+
+type Record {
+  id: UUID!
+
+  workspaceId: UUID!
+
+  environmentId: UUID
+
+  resourceId: UUID!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  publishedId: UUID
+
+  latestId: UUID
+
+  recordVersions(filter: JSON, order: [JSON!], limit: Int): [RecordVersion!]!
+
+  published: RecordVersion!
+
+  draft: RecordVersion!
+}
+
+type RecordVersion {
+  id: UUID!
+
+  recordId: UUID!
+
+  version: Timestamp!
+
+  snapshot: JSON!
+
+  createdAt: Timestamp!
+
+  createdById: UUID
+
+  updatedAt: Timestamp!
+
+  updatedById: UUID
+
+  deletedAt: Timestamp
+
+  deletedById: UUID
+
+  createdBy: Account
+
+  updatedBy: Account
+
+  deletedBy: Account
+}
+
+input RefreshAiAgentKnowledgeSourceInput {
+  id: UUID!
+}
+
+input RegisterWorkspaceInput {
+  name: String!
+
+  identifier: String!
+}
+
+type RegisterWorkspaceResponse {
+  invitationUrl: String!
+}
+
+type Relationship {
+  id: UUID!
+
+  name: String!
+
+  identifier: String!
+
+  sourceId: UUID!
+
+  sourceAttributeId: UUID!
+
+  targetId: UUID!
+
+  targetAttributeId: UUID!
+
+  kind: RelationshipKind!
+
+  filter: JSON
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  position: Int!
+
+  deleteBehavior: RelationshipDeleteBehavior!
+
+  source: Resource!
+
+  sourceAttribute: Attribute!
+
+  target: Resource!
+
+  targetAttribute: Attribute!
+}
+
+enum RelationshipDeleteBehavior {
+  DISALLOW
+
+  CASCADE
+
+  NULLIFY
+
+  DO_NOTHING
+}
+
+enum RelationshipKind {
+  BELONGS_TO
+
+  HAS_ONE
+
+  HAS_MANY
+}
+
+input RemoveCouponFromCartInput {
+  accountUid: String
+
+  accountAnonymousUid: String
+
+  couponCode: String!
+
+  targetEnvironment: String
+}
+
+input RemoveItemFromCartInput {
+  accountUid: String
+
+  accountAnonymousUid: String
+
+  id: UUID!
+}
+
+input RemoveWorkspaceLocaleInput {
+  identifier: String!
+}
+
+input ResetPasswordInput {
+  token: String!
+
+  password: String!
+}
+
+input ResolveInAppChatConversationInput {
+  identityId: UUID!
+
+  conversationId: UUID!
+}
+
+input ResolveInstallationInput {
+  workspaceId: UUID!
+
+  appIdentifier: String!
+
+  environmentId: UUID
+}
+
+input ResolveViewInput {
+  urn: String!
+}
+
+type Resource {
+  id: UUID!
+
+  name: String!
+
+  identifier: String!
+
+  description: String
+
+  icon: String
+
+  position: Int!
+
+  titleAttributeId: UUID
+
+  subtitleAttributeId: UUID
+
+  polymorphicAttributeId: UUID
+
+  orderStyle: OrderStyle
+
+  orderAttributes: [JSON!]!
+
+  validations: [JSON!]!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  workspaceId: UUID
+
+  appId: UUID
+
+  isReadOnly: Boolean!
+
+  origins: JSON
+
+  creationTimestampAttributeId: UUID
+
+  updationTimestampAttributeId: UUID
+
+  deletionTimestampAttributeId: UUID
+
+  isTranslatable: Boolean!
+
+  isPublishingEnabled: Boolean!
+
+  environmentBehavior: ResourceEnvironmentBehavior!
+
+  positionAttributeId: UUID
+
+  createdByAttributeId: UUID
+
+  updatedByAttributeId: UUID
+
+  deletedByAttributeId: UUID
+
+  isPrivate: Boolean!
+
+  graph: ResourceGraph!
+
+  operations(filter: JSON, order: [JSON!], limit: Int): [Operation!]!
+
+  attributes(filter: JSON, order: [JSON!], limit: Int): [Attribute!]!
+
+  relationships(filter: JSON, order: [JSON!], limit: Int): [Relationship!]!
+
+  app: App
+
+  polymorphicAttribute: Attribute
+}
+
+enum ResourceEnvironmentBehavior {
+  NONE
+
+  ISOLATED
+}
+
+enum ResourceGraph {
+  NONE
+
+  INTERNAL
+
+  EXTERNAL_READABLE
+
+  EXTERNAL_WRITEABLE
+}
+
+input ResourceMenuStubInput {
+  id: UUID!
+
+  position: Int
+}
+
+input RestoreRecordVersionInput {
+  id: UUID!
+
+  targetEnvironment: String
+}
+
+input RestoreTemplateVersionInput {
+  id: UUID!
+}
+
+input ResumeFlowExecutionInput {
+  id: UUID!
+}
+
+input RetrieveMfaBackupCodesInput {
+  password: String!
+}
+
+type RetrieveMfaBackupCodesResponse {
+  mfaBackupCodes: [String!]!
+}
+
+input RetryBroadcastInput {
+  id: UUID!
+}
+
+input ReviewAiAgentVersionInput {
+  id: UUID!
+}
+
+input RevokeKeyPairInput {
+  id: UUID!
+}
+
+type RevokeOtherSessionsResponse {
+  success: Boolean!
+}
+
+input RevokeSessionInput {
+  id: UUID!
+}
+
+input SaveContactsInput {
+  uid: String!
+
+  contacts: [ContactStubInput!]!
+
+  targetEnvironment: String
+}
+
+type SaveContactsResponse {
+  contacts: [Contact!]!
+}
+
+input SaveStoredPreferencesInput {
+  accountUid: String!
+
+  preferenceData: JSON!
+
+  targetEnvironment: String
+}
+
+type SaveStoredPreferencesResponse {
+  success: Boolean!
+}
+
+input SaveWorkspaceBillingAccountInput {
+  id: UUID!
+
+  name: String!
+
+  address: AddressStubInput
+
+  taxRegistration: TaxRegistrationStubInput
+}
+
+type SaveWorkspaceBillingAccountResponse {
+  billingAccount: WorkspaceBillingAccount!
+}
+
+input SaveWorkspaceBillingEmailsInput {
+  billingEmails: [String!]!
+}
+
+input SaveWorkspaceLocaleInput {
+  identifier: String!
+
+  isDefault: Boolean!
+
+  allowFallback: Boolean!
+
+  fallbacks: [String!]!
+}
+
+input SearchDatabaseRecordsInput {
+  databaseTableId: UUID!
+
+  filter: JSON
+
+  order: [JSON!]
+
+  limit: Int
+
+  page: Int
+
+  targetEnvironment: String
+
+  installationId: UUID!
+}
+
+input SearchOperationLogsInput {
+  publicKey: String!
+
+  privateKey: String!
+
+  filter: JSON
+
+  order: [JSON!]
+
+  limit: Int
+
+  page: Int
+}
+
+input SearchRecordsInput {
+  resource: String!
+
+  project: String
+
+  filter: JSON
+
+  order: [JSON!]
+
+  limit: Int
+
+  page: Int
+
+  preview: Boolean
+
+  language: String
+
+  fields: [JSON!]
+
+  include: [JSON!]
+
+  exclude: [JSON!]
+}
+
+type Segment {
+  id: UUID!
+
+  workspaceId: UUID
+
+  resourceId: UUID!
+
+  name: String!
+
+  identifier: String!
+
+  filter: JSON!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  resource: Resource!
+}
+
+input SendInAppChatMessageInput {
+  conversationId: UUID!
+
+  identityId: UUID!
+
+  content: JSON!
+
+  clientMessageId: String!
+}
+
+input SendMessageInput {
+  conversationId: UUID
+
+  issueId: UUID
+
+  integrationId: UUID
+
+  templateSubkind: TemplateSubkind
+
+  content: JSON
+
+  templateId: UUID
+
+  data: JSON
+}
+
+input SendMessageStubInput {
+  content: JSON
+
+  templateId: UUID
+
+  data: JSON
+}
+
+type Session {
+  id: UUID!
+
+  accountId: UUID!
+
+  token: String!
+
+  lastActiveAt: Timestamp!
+
+  expiresAt: Timestamp!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  isMfaRequired: Boolean!
+
+  mfaVerifiedAt: Timestamp
+}
+
+enum SessionVerifyMethod {
+  SOFTWARE
+
+  BACKUP
+}
+
+input SetPoliciesInput {
+  accountId: UUID
+
+  groupId: UUID
+
+  policies: [PolicyStubInput!]!
+}
+
+type SetPoliciesResponse {
+  policyAttachments: [PolicyAttachment!]!
+}
+
+input SetWorkspacePaymentMethodAsDefaultInput {
+  id: UUID!
+}
+
+type Shortcut {
+  id: UUID!
+
+  workspaceId: UUID!
+
+  parentId: UUID
+
+  kind: ShortcutKind!
+
+  name: String!
+
+  description: String
+
+  color: String
+
+  icon: String
+
+  position: Int!
+
+  startingViewUrn: String
+
+  steps: [JSON!]
+
+  createdAt: Timestamp!
+
+  createdById: UUID
+
+  updatedAt: Timestamp!
+
+  updatedById: UUID
+
+  deletedAt: Timestamp
+
+  deletedById: UUID
+
+  shortcuts(filter: JSON, order: [JSON!], limit: Int): [Shortcut!]!
+}
+
+enum ShortcutKind {
+  FOLDER
+
+  LEAF
+}
+
+type Space {
+  id: UUID!
+
+  workspaceId: UUID!
+
+  name: String!
+
+  identifier: String!
+
+  icon: String
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+}
+
+type SpaceConfiguration {
+  id: UUID!
+
+  workspaceId: UUID!
+
+  appId: UUID!
+
+  spaceId: UUID
+
+  settings: JSON!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  app: App!
+
+  space: Space
+}
+
+input StartBroadcastInput {
+  id: UUID!
+}
+
+input StartInAppChatConversationInput {
+  identityId: UUID!
+
+  accountUid: String!
+
+  clientIdempotencyKey: String!
+
+  content: JSON
+
+  clientMessageId: String
+
+  data: JSON
+
+  issueProperties: JSON
+}
+
+input StartOnboardingInput {
+  invitationToken: String!
+
+  password: String!
+
+  passwordConfirmation: String!
+}
+
+input StopBroadcastInput {
+  id: UUID!
+}
+
+type StoredPreference {
+  id: UUID!
+
+  accountId: UUID!
+
+  preferenceId: UUID
+
+  isEnabled: Boolean!
+
+  channels: [DeliveryChannel!]!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  preference: Preference
+
+  account: Account!
+}
+
+"""
+The `String` scalar type represents textual data, represented as UTF-8
+character sequences. The String type is most often used by GraphQL to
+represent free-form human-readable text.
+"""
+scalar String
+
+input SubmitContactFormInput {
+  message: String!
+}
+
+type SubmitContactFormResponse {
+  success: Boolean!
+}
+
+input SubscribeContactInput {
+  accountUid: String
+
+  accountAnonymousUid: String
+
+  name: String
+
+  kind: ContactKind!
+
+  value: String!
+
+  userAgent: String
+
+  osName: String
+
+  osVersion: String
+
+  deviceModel: String
+
+  deviceManufacturer: String
+
+  deviceUid: String
+
+  deviceAdvertisingUid: String
+
+  isDeviceAdTrackingEnabled: Boolean
+
+  metadata: JSON
+
+  tag: String
+
+  targetEnvironment: String
+}
+
+input SubscribeFeedInput {
+  accountId: UUID!
+
+  feedResourceId: UUID!
+
+  feedRecordId: UUID!
+}
+
+input SummarizeDatabaseRecordsInput {
+  databaseTableId: UUID!
+
+  filter: JSON
+
+  targetEnvironment: String
+
+  installationId: UUID!
+}
+
+type SummarizeDatabaseRecordsResponse {
+  count: Int!
+}
+
+input SummarizeInAppChatConversationsInput {
+  identityId: UUID!
+
+  statuses: [String!]
+
+  properties: JSON
+}
+
+type SummarizeInAppChatConversationsResponse {
+  count: Int!
+}
+
+input SummarizeInAppChatMessagesInput {
+  conversationId: UUID
+}
+
+type SummarizeInAppChatMessagesResponse {
+  count: Int!
+}
+
+input SummarizeInAppChatUnreadInput {
+  identityId: UUID!
+}
+
+type SummarizeInAppChatUnreadResponse {
+  count: Int!
+}
+
+input SummarizeOperationLogsInput {
+  publicKey: String!
+
+  privateKey: String!
+
+  filter: JSON
+}
+
+type SummarizeOperationLogsResponse {
+  count: Int
+}
+
+type SystemContext {
+  ipV4: String!
+
+  ipV6: String
+
+  locale: String!
+
+  timeZone: String!
+
+  userAgent: String!
+
+  app: SystemContextApp
+
+  device: SystemContextDevice
+
+  os: SystemContextOs
+
+  library: SystemContextLibrary
+
+  network: SystemContextNetwork
+
+  screen: SystemContextScreen
+
+  campaign: SystemContextCampaign
+
+  location: SystemContextLocation
+}
+
+type SystemContextApp {
+  name: String!
+
+  version: String!
+
+  build: String!
+
+  namespace: String!
+}
+
+input SystemContextAppInput {
+  name: String!
+
+  version: String!
+
+  build: String!
+
+  namespace: String!
+}
+
+type SystemContextCampaign {
+  name: String!
+
+  source: String!
+
+  medium: String!
+
+  term: String!
+
+  content: String!
+}
+
+input SystemContextCampaignInput {
+  name: String!
+
+  source: String!
+
+  medium: String!
+
+  term: String!
+
+  content: String!
+}
+
+type SystemContextDevice {
+  id: String!
+
+  advertisingId: String!
+
+  adTrackingEnabled: Boolean!
+
+  manufacturer: String!
+
+  model: String!
+
+  name: String!
+
+  kind: String!
+}
+
+input SystemContextDeviceInput {
+  id: String!
+
+  advertisingId: String!
+
+  adTrackingEnabled: Boolean!
+
+  manufacturer: String!
+
+  model: String!
+
+  name: String!
+
+  kind: String!
+}
+
+input SystemContextInput {
+  ipV4: String!
+
+  ipV6: String
+
+  locale: String!
+
+  timeZone: String!
+
+  userAgent: String!
+
+  app: SystemContextAppInput
+
+  device: SystemContextDeviceInput
+
+  os: SystemContextOsInput
+
+  library: SystemContextLibraryInput
+
+  network: SystemContextNetworkInput
+
+  screen: SystemContextScreenInput
+
+  campaign: SystemContextCampaignInput
+
+  location: SystemContextLocationInput
+}
+
+type SystemContextLibrary {
+  name: String!
+
+  version: String!
+}
+
+input SystemContextLibraryInput {
+  name: String!
+
+  version: String!
+}
+
+type SystemContextLocation {
+  latitude: Decimal
+
+  longitude: Decimal
+
+  city: String
+
+  country: String
+
+  speed: Decimal
+}
+
+input SystemContextLocationInput {
+  latitude: Decimal
+
+  longitude: Decimal
+
+  city: String
+
+  country: String
+
+  speed: Decimal
+}
+
+type SystemContextNetwork {
+  bluetooth: Boolean!
+
+  carrier: String!
+
+  cellular: Boolean!
+
+  wifi: Boolean!
+}
+
+input SystemContextNetworkInput {
+  bluetooth: Boolean!
+
+  carrier: String!
+
+  cellular: Boolean!
+
+  wifi: Boolean!
+}
+
+type SystemContextOs {
+  name: String!
+
+  version: String!
+}
+
+input SystemContextOsInput {
+  name: String!
+
+  version: String!
+}
+
+type SystemContextScreen {
+  width: Int!
+
+  height: Int!
+
+  density: Int!
+}
+
+input SystemContextScreenInput {
+  width: Int!
+
+  height: Int!
+
+  density: Int!
+}
+
+type TaxRegistration {
+  id: UUID!
+
+  accountId: UUID!
+
+  externalUid: String!
+
+  kind: TaxRegistrationKind!
+
+  value: String!
+
+  deletedAt: Timestamp
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+}
+
+enum TaxRegistrationKind {
+  AE_TRN
+
+  AU_ABN
+
+  AU_ARN
+
+  BG_UIC
+
+  BR_CNPJ
+
+  BR_CPF
+
+  CA_BN
+
+  CA_GST_HST
+
+  CA_PST_BC
+
+  CA_PST_MB
+
+  CA_PST_SK
+
+  CA_QST
+
+  CH_VAT
+
+  CL_TIN
+
+  EG_TIN
+
+  ES_CIF
+
+  EU_OSS_VAT
+
+  EU_VAT
+
+  GB_VAT
+
+  GE_VAT
+
+  HK_BR
+
+  HU_TIN
+
+  ID_NPWP
+
+  IL_VAT
+
+  IN_GST
+
+  IS_VAT
+
+  JP_CN
+
+  JP_RN
+
+  JP_TRN
+
+  KE_PIN
+
+  KR_BRN
+
+  LI_UID
+
+  MX_RFC
+
+  MY_FRP
+
+  MY_ITN
+
+  MY_SST
+
+  NO_VAT
+
+  NZ_GST
+
+  PH_TIN
+
+  RU_INN
+
+  RU_KPP
+
+  SA_VAT
+
+  SG_GST
+
+  SG_UEN
+
+  SI_TIN
+
+  TH_VAT
+
+  TR_TIN
+
+  TW_VAT
+
+  UA_VAT
+
+  US_EIN
+
+  ZA_VAT
+}
+
+type TaxRegistrationStub {
+  kind: TaxRegistrationKind!
+
+  value: String!
+}
+
+input TaxRegistrationStubInput {
+  kind: TaxRegistrationKind!
+
+  value: String!
+}
+
+type Template {
+  id: UUID!
+
+  workspaceId: UUID!
+
+  projectId: UUID
+
+  kind: TemplateKind!
+
+  subkind: TemplateSubkind!
+
+  name: String!
+
+  identifier: String!
+
+  currentVersionId: UUID
+
+  publishedVersionId: UUID
+
+  settings: JSON
+
+  previewAsset: JSON
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  integrationId: UUID
+
+  externalUid: String
+
+  currentVersion: TemplateVersion
+
+  publishedVersion: TemplateVersion
+}
+
+enum TemplateKind {
+  VIEW
+
+  MESSAGE
+}
+
+enum TemplateSubkind {
+  SCREEN
+
+  OVERLAY
+
+  EMAIL
+
+  SMS
+
+  PUSH
+
+  WHATSAPP
+
+  IN_APP
+}
+
+type TemplateVersion {
+  id: UUID!
+
+  templateId: UUID!
+
+  settings: JSON
+
+  authorId: UUID!
+
+  isDeleted: Boolean!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  previewAssetId: UUID
+
+  previewRenderVersion: Int
+
+  template: Template!
+
+  author: Account!
+
+  previewAsset: Asset
+}
+
+input TestBroadcastInput {
+  id: UUID!
+
+  recipients: [RecipientStubInput!]!
+}
+
+input TestConfigurationInput {
+  appId: UUID!
+
+  settings: JSON!
+}
+
+type TestConfigurationResponse {
+  success: Boolean!
+}
+
+type Theme {
+  id: UUID!
+
+  workspaceId: UUID
+
+  name: String!
+
+  palette: ThemePalette!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+}
+
+type ThemePalette {
+  primary: String!
+
+  secondary: String!
+
+  accent: String!
+}
+
+input ThemePaletteInput {
+  primary: String!
+
+  secondary: String!
+
+  accent: String!
+}
+
+type TimeZone {
+  label: String!
+
+  value: String!
+}
+
+scalar Timestamp
+
+input TrackAllMessagesInput {
+  accountUid: String!
+
+  timestamp: Timestamp!
+}
+
+type TrackAllMessagesResponse {
+  success: Boolean!
+}
+
+input TrackEventInput {
+  event: String!
+
+  accountUid: String
+
+  accountAnonymousUid: String
+
+  data: JSON
+
+  timestamp: Timestamp
+
+  systemContext: SystemContextInput
+}
+
+type TrackEventResponse {
+  success: Boolean!
+}
+
+input TrackMessageInput {
+  id: UUID!
+
+  status: TrackMessageStatus!
+
+  timestamp: Timestamp!
+}
+
+type TrackMessageResponse {
+  success: Boolean!
+}
+
+enum TrackMessageStatus {
+  DELIVERED
+
+  DISMISSED
+
+  OPENED
+
+  CLICKED
+
+  READ
+
+  UNREAD
+}
+
+type Transaction {
+  id: UUID!
+
+  orderId: UUID!
+
+  accountId: UUID!
+
+  amount: Decimal!
+
+  status: TransactionStatus!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  gatewayMeta: JSON
+
+  currencyCode: String!
+}
+
+enum TransactionStatus {
+  SUCCEEDED
+
+  FAILED
+}
+
+input TransferCartInput {
+  accountUid: String!
+
+  accountAnonymousUid: String!
+
+  orderId: UUID
+
+  targetEnvironment: String
+}
+
+scalar UUID
+
+input UnarchiveAiAgentInput {
+  id: UUID!
+}
+
+input UnarchiveInstallationInput {
+  id: UUID!
+}
+
+input UnpublishAiAgentVersionInput {
+  id: UUID!
+}
+
+input UnpublishFlowVersionInput {
+  id: UUID!
+
+  isGraceful: Boolean!
+}
+
+input UnpublishRecordVersionInput {
+  id: UUID!
+}
+
+input UnpublishTemplateVersionInput {
+  id: UUID!
+}
+
+input UnsubscribeContactInput {
+  accountUid: String
+
+  accountAnonymousUid: String
+
+  value: String!
+
+  targetEnvironment: String
+}
+
+type UnsubscribeContactResponse {
+  success: Boolean!
+}
+
+input UnsubscribeFeedInput {
+  accountId: UUID!
+
+  feedResourceId: UUID!
+
+  feedRecordId: UUID!
+}
+
+input UpdateAccountAvatarInput {
+  id: UUID!
+
+  avatar: Upload
+}
+
+input UpdateAccountInput {
+  id: UUID!
+
+  email: String
+
+  fullName: String
+
+  name: String
+
+  firstName: String
+
+  lastName: String
+
+  avatar: String
+
+  dateOfBirth: NaiveDate
+
+  timeZone: String
+
+  hasApiAccess: Boolean
+
+  hasGuiAccess: Boolean
+
+  custom: JSON
+
+  gender: AccountGender
+
+  phone: String
+
+  defaultGroupId: UUID
+}
+
+input UpdateAiAgentDeploymentInput {
+  id: UUID!
+
+  settings: JSON
+}
+
+input UpdateAiAgentInput {
+  id: UUID!
+
+  name: String
+
+  identifier: String
+
+  avatar: Upload
+}
+
+input UpdateAiAgentKnowledgeSourceInput {
+  id: UUID!
+
+  name: String
+
+  url: String
+
+  assetId: UUID
+
+  textSnippet: String
+}
+
+input UpdateAiAgentVersionInput {
+  id: UUID!
+
+  systemInstructions: String
+
+  interactionMode: AiAgentInteractionMode
+
+  llmProviderId: UUID
+
+  llmSettings: JSON
+
+  ttsProviderId: UUID
+
+  ttsSettings: JSON
+
+  sttProviderId: UUID
+
+  sttSettings: JSON
+
+  stsProviderId: UUID
+
+  stsSettings: JSON
+
+  starterMessages: [JSON!]
+
+  starterSuggestions: [JSON!]
+
+  showStarterSuggestionLabel: Boolean
+
+  state: [JSON!]
+
+  hooks: [JSON!]
+
+  tools: [JSON!]
+
+  skills: [JSON!]
+
+  revision: Int
+
+  notes: String
+}
+
+input UpdateApiRequestInput {
+  id: UUID!
+
+  name: String
+
+  description: String
+
+  authStrategy: ApiRequestAuthStrategy
+
+  authStrategySettings: JSON
+
+  parentId: UUID
+
+  position: Int
+
+  method: String
+
+  path: String
+
+  urlFragment: String
+
+  body: String
+
+  queryParams: [JSON!]
+
+  headers: [JSON!]
+
+  pathParams: [JSON!]
+}
+
+input UpdateAppInput {
+  id: UUID!
+
+  name: String
+
+  identifier: String
+
+  icon: String
+
+  summary: String
+}
+
+input UpdateAttributeInput {
+  id: UUID!
+
+  name: String
+
+  identifier: String
+
+  dataTypeId: UUID
+
+  fieldType: String
+
+  fieldTypeSettings: JSON
+
+  displayType: DisplayType
+
+  displayTypeSettings: JSON
+
+  isPrimary: Boolean
+
+  isNullable: Boolean
+
+  isArray: Boolean
+
+  isTranslatable: Boolean
+
+  isFilterable: Boolean
+
+  isOrderable: Boolean
+
+  isDeprecated: Boolean
+
+  validations: [ValidationInput!]
+
+  settings: JSON
+
+  defaultValue: JSON
+
+  position: Int
+
+  dataTypeSettings: JSON
+
+  resolutionSettings: JSON
+}
+
+input UpdateBroadcastInput {
+  id: UUID!
+
+  templateId: UUID
+
+  integrationId: UUID
+
+  content: JSON
+
+  name: String
+
+  data: JSON
+
+  isTest: Boolean
+
+  scheduledAt: Timestamp
+
+  status: BroadcastStatus
+
+  recipients: [RecipientStubInput!]
+
+  custom: JSON
+
+  campaignId: UUID
+
+  recipientsAssetId: UUID
+
+  exclusionListIds: [UUID!]
+}
+
+input UpdateCampaignInput {
+  id: UUID!
+
+  name: String
+}
+
+input UpdateCommentInput {
+  id: UUID!
+
+  body: String
+
+  attachments: [UUID!]
+}
+
+input UpdateConfigurationInput {
+  id: UUID!
+
+  settings: JSON
+}
+
+input UpdateContactInput {
+  id: UUID!
+
+  name: String
+
+  kind: ContactKind
+
+  value: String
+
+  status: ContactStatus
+
+  userAgent: String
+
+  osName: String
+
+  osVersion: String
+
+  deviceModel: String
+
+  deviceManufacturer: String
+
+  deviceUid: String
+
+  deviceAdvertisingUid: String
+
+  isDeviceAdTrackingEnabled: Boolean
+
+  tag: String
+
+  targetEnvironment: String
+}
+
+input UpdateConversationInput {
+  id: UUID!
+
+  readAt: Timestamp
+}
+
+input UpdateCouponCodeInput {
+  id: UUID!
+
+  name: String
+
+  accountId: UUID
+
+  redemptionsLimit: Int
+}
+
+input UpdateCouponInput {
+  id: UUID!
+
+  name: String
+
+  identifier: String
+
+  discountType: CouponDiscountType
+
+  discountAmount: Decimal
+
+  currencyCode: String
+
+  expiresAt: Timestamp
+
+  redemptionsLimit: Int
+}
+
+input UpdateCouponRedemptionInput {
+  id: UUID!
+
+  couponId: UUID
+}
+
+input UpdateCouponRestrictionInput {
+  id: UUID!
+
+  itemId: UUID
+
+  itemCategoryId: UUID
+}
+
+input UpdateDashboardInput {
+  id: UUID!
+
+  name: String
+
+  position: Int
+}
+
+input UpdateDataTypeInput {
+  id: UUID!
+
+  name: String
+
+  identifier: String
+
+  position: Int
+
+  description: String
+
+  icon: String
+
+  defaultValue: JSON
+
+  validations: [JSON!]
+
+  settings: JSON
+}
+
+input UpdateDatabaseScratchpadInput {
+  id: UUID!
+
+  title: String
+
+  body: String
+}
+
+input UpdateEnvironmentInput {
+  id: UUID!
+
+  name: String
+
+  identifier: String
+}
+
+input UpdateEventReportInput {
+  id: UUID!
+
+  name: String
+
+  description: String
+
+  criteria: EventReportCriteriaInput
+}
+
+input UpdateEventTypeInput {
+  id: UUID!
+
+  name: String
+}
+
+input UpdateExclusionListInput {
+  id: UUID!
+
+  name: String
+
+  description: String
+
+  isGlobal: Boolean
+
+  isEnabled: Boolean
+
+  segmentFilter: JSON
+
+  targetEnvironment: String
+}
+
+input UpdateFlowInput {
+  id: UUID!
+
+  name: String
+
+  identifier: String
+}
+
+input UpdateFlowVersionInput {
+  id: UUID!
+
+  snapshot: JSON
+}
+
+input UpdateGroupInput {
+  id: UUID!
+
+  parentId: UUID
+
+  name: String
+
+  position: Int
+}
+
+input UpdateIdentityInput {
+  id: UUID!
+
+  name: String
+
+  value: String
+
+  status: IdentityStatus
+
+  externalUid: String
+
+  externalMetadata: JSON
+}
+
+input UpdateInstallationInput {
+  id: UUID!
+
+  name: String
+
+  identifier: String
+
+  fields: [JSON!]
+
+  settings: JSON
+}
+
+input UpdateIssueFilterInput {
+  id: UUID!
+
+  name: String
+
+  filter: JSON
+
+  position: Int
+
+  group: [JSON!]
+
+  order: [JSON!]
+
+  cols: [JSON!]
+
+  restrictedGroupIds: [UUID!]
+
+  issueTypeId: UUID
+
+  externalUid: String
+
+  externalMetadata: JSON
+}
+
+input UpdateIssueInput {
+  id: UUID!
+
+  issueStatus: String
+
+  parent: String
+
+  assigneeId: UUID
+
+  requestedById: UUID
+
+  requestedBy: JSON
+
+  priority: IssuePriority
+
+  title: String
+
+  description: String
+
+  position: Int
+
+  properties: JSON
+
+  labels: [String!]
+
+  dueAt: Timestamp
+
+  groupId: UUID
+
+  group: String
+
+  relations: [IssueRelationStubInput!]
+}
+
+input UpdateIssueLabelInput {
+  id: UUID!
+
+  name: String
+
+  color: String
+
+  position: Int
+}
+
+input UpdateIssueStatusInput {
+  id: UUID!
+
+  kind: IssueStatusKind
+
+  name: String
+
+  identifier: String
+
+  color: String
+
+  position: Int
+
+  isDefault: Boolean
+}
+
+input UpdateIssueTemplateInput {
+  id: UUID!
+
+  issueStatusId: UUID
+
+  assigneeId: UUID
+
+  parentId: UUID
+
+  name: String
+
+  title: String
+
+  description: String
+
+  priority: IssuePriority
+
+  position: Int
+
+  properties: JSON
+}
+
+input UpdateIssueTypeActionInput {
+  id: UUID!
+
+  operationId: UUID
+
+  name: String
+
+  identifier: String
+
+  icon: String
+
+  position: Int
+
+  arguments: JSON
+
+  target: IssueTypeActionTarget
+
+  url: String
+}
+
+input UpdateIssueTypeInput {
+  id: UUID!
+
+  name: String
+
+  identifier: String
+
+  position: Int
+
+  fields: [JSON!]
+
+  conditions: [JSON!]
+
+  createField: JSON
+
+  updateField: JSON
+
+  destroyFieldId: UUID
+
+  moveField: JSON
+
+  childrenKind: IssueTypeChildrenKind
+
+  allowedChildren: [UUID!]
+
+  statuses: [IssueStatusInputInput!]
+
+  isDefault: Boolean
+
+  isPublicReplyAllowed: Boolean
+
+  isAutosaved: Boolean
+
+  isHistoryEnabled: Boolean
+}
+
+input UpdateIssueTypeRelationshipInput {
+  id: UUID!
+
+  name: String
+
+  identifier: String
+
+  sourceFieldId: UUID
+
+  targetAttributeId: UUID
+
+  kind: RelationshipKind
+
+  filter: JSON
+
+  position: Int
+
+  displayAttributes: [JSON!]
+}
+
+input UpdateItemCategoryInput {
+  id: UUID!
+
+  name: String
+
+  identifier: String
+
+  description: String
+}
+
+input UpdateItemCategoryMembershipInput {
+  id: UUID!
+
+  itemId: UUID
+
+  itemCategoryId: UUID
+}
+
+input UpdateItemInput {
+  id: UUID!
+
+  kind: ItemKind
+
+  name: String
+
+  identifier: String
+
+  description: String
+}
+
+input UpdateMenuElementInput {
+  id: UUID!
+
+  parentId: UUID
+
+  name: String
+
+  icon: String
+
+  separatorStyle: MenuElementSeparatorStyle
+
+  placement: MenuElementPlacement
+
+  target: MenuElementTarget
+
+  url: String
+
+  position: Int
+
+  query: String
+
+  actions: [MenuElementActionInput!]
+
+  isRepeated: Boolean
+
+  isSticky: Boolean
+}
+
+input UpdateOperationInput {
+  id: UUID!
+
+  name: String
+
+  identifier: String
+
+  description: String
+
+  icon: String
+
+  position: Int
+
+  graphqlKind: OperationGraphqlKind
+
+  behaviorKind: OperationBehaviorKind
+
+  method: OperationMethod
+
+  behaviorSettings: JSON
+
+  actsOn: OperationActsOn
+
+  parameters: [ParameterStubInput!]
+
+  responseMapper: JSON
+
+  paginationSettings: JSON
+
+  responseTransformerKind: OperationTransformerKind
+
+  responseTransformer: String
+
+  isDisabled: Boolean
+}
+
+input UpdateOrderInput {
+  id: UUID!
+
+  discount: Decimal
+
+  total: Decimal
+
+  checkedOutAt: Timestamp
+
+  paidAt: Timestamp
+
+  gatewayId: UUID
+
+  gatewayMeta: JSON
+
+  status: OrderStatus
+}
+
+input UpdateOrderItemInput {
+  id: UUID!
+
+  pricingId: UUID
+
+  quantity: Decimal
+
+  discount: Decimal
+}
+
+input UpdateParameterInput {
+  id: UUID!
+
+  attributeId: UUID
+
+  relationshipId: UUID
+
+  name: String
+
+  identifier: String
+
+  dataTypeId: UUID
+
+  dataTypeSettings: JSON
+
+  fieldTypeSettings: JSON
+
+  displayType: DisplayType
+
+  displayTypeSettings: JSON
+
+  isNullable: Boolean
+
+  isArray: Boolean
+
+  isDeprecated: Boolean
+
+  validations: [ValidationInput!]
+
+  defaultValue: JSON
+
+  position: Int
+
+  fieldType: String
+}
+
+input UpdatePolicyInput {
+  id: UUID!
+
+  name: String
+
+  description: String
+
+  statements: JSON
+}
+
+input UpdatePreferenceInput {
+  id: UUID!
+
+  name: String
+
+  identifier: String
+
+  restrictions: [UUID!]
+
+  isEnabledByDefault: Boolean
+}
+
+input UpdatePricingInput {
+  id: UUID!
+
+  amount: Decimal
+
+  currencyCode: String
+
+  originalAmount: Decimal
+
+  isRecurring: Boolean
+
+  recurringInterval: Int
+
+  recurringIntervalUnit: PricingRecurringIntervalUnit
+
+  kind: PricingKind
+
+  appleProductIdentifier: String
+
+  googleProductIdentifier: String
+}
+
+input UpdateProductInput {
+  id: UUID!
+
+  name: String
+
+  identifier: String
+
+  icon: String
+
+  summary: String
+
+  platforms: [ProductPlatform!]
+
+  technology: ProductTechnology
+
+  dimensions: [JSON!]
+}
+
+input UpdateProductVariantInput {
+  id: UUID!
+
+  name: String
+
+  dimensionValues: [JSON!]
+}
+
+input UpdateProductVariantReleaseRuleInput {
+  id: UUID!
+
+  minimumReleaseId: UUID
+
+  recommendedReleaseId: UUID
+
+  autoRecommendNewReleases: Boolean
+}
+
+input UpdateRecipientInput {
+  id: UUID!
+
+  target: RecipientTarget
+
+  data: JSON
+
+  custom: JSON
+}
+
+input UpdateRecordInput {
+  id: UUID!
+
+  resourceId: UUID
+
+  data: JSON
+
+  targetEnvironment: String
+}
+
+input UpdateRelationshipInput {
+  id: UUID!
+
+  name: String
+
+  identifier: String
+
+  sourceAttributeId: UUID
+
+  targetAttributeId: UUID
+
+  kind: RelationshipKind
+
+  filter: JSON
+
+  position: Int
+
+  deleteBehavior: RelationshipDeleteBehavior
+}
+
+input UpdateResourceInput {
+  id: UUID!
+
+  name: String
+
+  identifier: String
+
+  description: String
+
+  icon: String
+
+  position: Int
+
+  titleAttributeId: UUID
+
+  subtitleAttributeId: UUID
+
+  polymorphicAttributeId: UUID
+
+  creationTimestampAttributeId: UUID
+
+  updationTimestampAttributeId: UUID
+
+  deletionTimestampAttributeId: UUID
+
+  orderStyle: OrderStyle
+
+  orderAttributes: [JSON!]
+
+  validations: [JSON!]
+
+  environmentBehavior: ResourceEnvironmentBehavior
+
+  isPublishingEnabled: Boolean
+
+  createdByAttributeId: UUID
+
+  updatedByAttributeId: UUID
+
+  deletedByAttributeId: UUID
+
+  isPrivate: Boolean
+}
+
+input UpdateSegmentInput {
+  id: UUID!
+
+  name: String
+
+  identifier: String
+
+  filter: JSON
+}
+
+input UpdateSessionInput {
+  id: UUID!
+
+  lastActiveAt: Timestamp
+}
+
+input UpdateShortcutInput {
+  id: UUID!
+
+  name: String
+
+  description: String
+
+  color: String
+
+  icon: String
+
+  position: Int
+
+  startingViewUrn: String
+
+  steps: [JSON!]
+}
+
+input UpdateSpaceConfigurationInput {
+  id: UUID!
+
+  settings: JSON
+}
+
+input UpdateSpaceInput {
+  id: UUID!
+
+  name: String
+
+  identifier: String
+
+  icon: String
+}
+
+input UpdateStoredPreferenceInput {
+  id: UUID!
+
+  isEnabled: Boolean
+
+  channels: [DeliveryChannel!]
+}
+
+input UpdateTemplateInput {
+  id: UUID!
+
+  name: String
+
+  identifier: String
+
+  settings: JSON
+}
+
+input UpdateThemeInput {
+  id: UUID!
+
+  name: String
+
+  palette: ThemePaletteInput
+}
+
+input UpdateTransactionInput {
+  id: UUID!
+
+  amount: Decimal
+
+  status: TransactionStatus
+}
+
+input UpdateWorkspaceBrandingInput {
+  id: UUID!
+
+  name: String
+
+  logoFull: Upload
+
+  logoSymbol: Upload
+
+  wallpaper: Upload
+}
+
+input UpdateWorkspaceDomainInput {
+  id: UUID!
+
+  identifier: String
+
+  hostname: String
+}
+
+input UpdateWorkspaceOnboardingInput {
+  id: UUID!
+
+  onboarding: JSON
+}
+
+input UpdateWorkspacePaymentMethodInput {
+  id: UUID!
+
+  expiryMonth: Int
+
+  expiryYear: Int
+}
+
+input UpdateWorkspaceThemeInput {
+  id: UUID!
+
+  themeId: UUID
+}
+
+scalar Upload
+
+input UpsertAccountInput {
+  email: String
+
+  phone: String
+
+  name: String
+
+  targetEnvironment: String
+}
+
+input UpsertIssueInput {
+  idempotencyKey: String
+
+  issueType: String
+
+  issueStatus: String
+
+  space: String
+
+  parent: String
+
+  assigneeId: UUID
+
+  requestedById: UUID
+
+  requestedBy: JSON
+
+  priority: IssuePriority
+
+  title: String!
+
+  description: String
+
+  position: Int
+
+  properties: JSON
+
+  labels: [String!]
+
+  dueAt: Timestamp
+
+  groupId: UUID
+
+  group: String
+
+  relations: [IssueRelationStubInput!]
+
+  isTest: Boolean
+
+  targetEnvironment: String
+}
+
+input UpsertTemplateInput {
+  kind: TemplateKind!
+
+  subkind: TemplateSubkind!
+
+  name: String!
+
+  identifier: String!
+
+  settings: JSON
+}
+
+input UpsertViewInput {
+  name: String
+
+  urn: String!
+
+  blocks: [JSON!]
+
+  operations: [JSON!]
+
+  accessCriteria: [JSON!]
+
+  variables: [JSON!]
+
+  document: JSON
+
+  runtimeVersion: String
+}
+
+input ValidateKeyPairInput {
+  publicKey: String!
+
+  privateKey: String!
+}
+
+type ValidateKeyPairResponse {
+  success: Boolean!
+}
+
+input ValidationInput {
+  kind: ValidationKind!
+
+  settings: JSON
+
+  criteria: JSON
+}
+
+enum ValidationKind {
+  PRESENCE
+
+  UNIQUENESS
+
+  LENGTH
+
+  MATCHES
+
+  NOT_MATCHES
+
+  INCLUSION
+
+  EXCLUSION
+
+  NUMERICALITY
+
+  FILE_SIZE
+
+  FILE_MIME_TYPE
+
+  FILE_DIMENSION
+
+  FILE_DURATION
+
+  COMPARISON
+
+  CUSTOM
+}
+
+input VerifyEmailChangeInput {
+  token: String!
+}
+
+input VerifyInvitationInput {
+  invitationToken: String!
+}
+
+type VerifyInvitationResponse {
+  success: Boolean!
+}
+
+input VerifyProspectInput {
+  email: String!
+
+  code: String!
+}
+
+input VerifyResetPasswordTokenInput {
+  token: String!
+}
+
+type VerifyResetPasswordTokenResponse {
+  success: Boolean!
+}
+
+input VerifySessionInput {
+  code: String!
+
+  method: SessionVerifyMethod
+}
+
+type View {
+  id: UUID!
+
+  dashboardId: UUID
+
+  name: String!
+
+  defaultStyle: ViewStyle!
+
+  componentPath: String
+
+  blocks: [JSON!]
+
+  operations: [JSON!]!
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  workspaceId: UUID!
+
+  appId: UUID
+
+  resourceId: UUID
+
+  kind: ViewKind!
+
+  variables: [JSON!]!
+
+  document: JSON
+
+  runtimeVersion: String
+
+  accessCriteria: [JSON!]!
+
+  urn: String
+
+  app: App
+
+  resource: Resource
+}
+
+enum ViewKind {
+  CUSTOM
+
+  APP
+
+  RESOURCE
+}
+
+enum ViewStyle {
+  MAIN
+
+  MODAL
+
+  PANEL
+
+  DIALOG
+
+  POPOVER
+}
+
+type ViewTemplate {
+  id: UUID!
+
+  workspaceId: UUID
+
+  appId: UUID
+
+  name: String!
+
+  componentPath: String!
+
+  kind: ViewKind!
+
+  defaultStyle: ViewStyle!
+
+  blocks: [JSON!]!
+
+  operations: [JSON!]!
+
+  variables: [JSON!]!
+
+  document: JSON
+
+  runtimeVersion: String
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  accessCriteria: [JSON!]!
+
+  app: App
+}
+
+type Workspace {
+  id: UUID!
+
+  name: String!
+
+  identifier: String!
+
+  hostname: String
+
+  logoSymbol: String
+
+  logoFull: String
+
+  wallpaper: String
+
+  createdAt: Timestamp!
+
+  updatedAt: Timestamp!
+
+  themeId: UUID
+
+  locales: [JSON!]!
+
+  billingAccountId: UUID
+
+  status: WorkspaceStatus!
+
+  trialEndsAt: Timestamp!
+
+  dashxEmailsCount: Int!
+
+  onboarding: JSON
+
+  theme: Theme
+}
+
+type WorkspaceBillingAccount {
+  id: UUID!
+
+  name: String
+
+  address: AddressStub
+
+  taxRegistration: TaxRegistrationStub
+}
+
+enum WorkspaceStatus {
+  IN_TRIAL
+
+  ACTIVE
+
+  SUSPENDED
+
+  INACTIVE
+}
+
+input WriteCsvInput {
+  rows: [JSON!]!
+
+  columns: [String!]
+}
+
+type WriteCsvResponse {
+  csvBase64: String!
+}
+
+"""
+A Directive provides a way to describe alternate runtime execution and type
+validation behavior in a GraphQL document.
+
+In some cases, you need to provide options to alter GraphQL's execution
+behavior in ways field arguments will not suffice, such as conditionally
+including or skipping a field. Directives provide this by describing
+additional information to the executor.
+"""
+type __Directive {
+  name: String!
+
+  description: String
+
+  locations: [__DirectiveLocation!]!
+
+  args: [__InputValue!]!
+
+  isRepeatable: Boolean!
+}
+
+"""
+A Directive can be adjacent to many parts of the GraphQL language, a
+__DirectiveLocation describes one such possible adjacencies.
+"""
+enum __DirectiveLocation {
+  """
+  Location adjacent to a query operation.
+  """
+  QUERY
+
+  """
+  Location adjacent to a mutation operation.
+  """
+  MUTATION
+
+  """
+  Location adjacent to a subscription operation.
+  """
+  SUBSCRIPTION
+
+  """
+  Location adjacent to a field.
+  """
+  FIELD
+
+  """
+  Location adjacent to a fragment definition.
+  """
+  FRAGMENT_DEFINITION
+
+  """
+  Location adjacent to a fragment spread.
+  """
+  FRAGMENT_SPREAD
+
+  """
+  Location adjacent to an inline fragment.
+  """
+  INLINE_FRAGMENT
+
+  """
+  Location adjacent to a variable definition.
+  """
+  VARIABLE_DEFINITION
+
+  """
+  Location adjacent to a schema definition.
+  """
+  SCHEMA
+
+  """
+  Location adjacent to a scalar definition.
+  """
+  SCALAR
+
+  """
+  Location adjacent to an object type definition.
+  """
+  OBJECT
+
+  """
+  Location adjacent to a field definition.
+  """
+  FIELD_DEFINITION
+
+  """
+  Location adjacent to an argument definition.
+  """
+  ARGUMENT_DEFINITION
+
+  """
+  Location adjacent to an interface definition.
+  """
+  INTERFACE
+
+  """
+  Location adjacent to a union definition.
+  """
+  UNION
+
+  """
+  Location adjacent to an enum definition.
+  """
+  ENUM
+
+  """
+  Location adjacent to an enum value definition.
+  """
+  ENUM_VALUE
+
+  """
+  Location adjacent to an input object type definition.
+  """
+  INPUT_OBJECT
+
+  """
+  Location adjacent to an input object field definition.
+  """
+  INPUT_FIELD_DEFINITION
+}
+
+"""
+One possible value for a given Enum. Enum values are unique values, not a
+placeholder for a string or numeric value. However an Enum value is returned
+in a JSON response as a string.
+"""
+type __EnumValue {
+  name: String!
+
+  description: String
+
+  isDeprecated: Boolean!
+
+  deprecationReason: String
+}
+
+"""
+Object and Interface types are described by a list of Fields, each of which
+has a name, potentially a list of arguments, and a return type.
+"""
+type __Field {
+  name: String!
+
+  description: String
+
+  args: [__InputValue!]!
+
+  type: __Type!
+
+  isDeprecated: Boolean!
+
+  deprecationReason: String
+}
+
+"""
+Arguments provided to Fields or Directives and the input fields of an
+InputObject are represented as Input Values which describe their type and
+optionally a default value.
+"""
+type __InputValue {
+  name: String!
+
+  description: String
+
+  type: __Type!
+
+  defaultValue: String
+}
+
+"""
+A GraphQL Schema defines the capabilities of a GraphQL server. It exposes
+all available types and directives on the server, as well as the entry
+points for query, mutation, and subscription operations.
+"""
+type __Schema {
+  """
+  description of __Schema for newer graphiql introspection schema
+  requirements
+  """
+  description: String!
+
+  """
+  A list of all types supported by this server.
+  """
+  types: [__Type!]!
+
+  """
+  The type that query operations will be rooted at.
+  """
+  queryType: __Type!
+
+  """
+  If this server supports mutation, the type that mutation operations will
+  be rooted at.
+  """
+  mutationType: __Type
+
+  """
+  If this server support subscription, the type that subscription
+  operations will be rooted at.
+  """
+  subscriptionType: __Type
+
+  """
+  A list of all directives supported by this server.
+  """
+  directives: [__Directive!]!
+}
+
+"""
+The fundamental unit of any GraphQL Schema is the type. There are many kinds
+of types in GraphQL as represented by the `__TypeKind` enum.
+
+Depending on the kind of a type, certain fields describe information about
+that type. Scalar types provide no information beyond a name and
+description, while Enum types provide their values. Object and Interface
+types provide the fields they describe. Abstract types, Union and Interface,
+provide the Object types possible at runtime. List and NonNull types compose
+other types.
+"""
+type __Type {
+  kind: __TypeKind!
+
+  name: String
+
+  description: String
+
+  fields(includeDeprecated: Boolean! = false): [__Field!]
+
+  interfaces: [__Type!]
+
+  possibleTypes: [__Type!]
+
+  enumValues(includeDeprecated: Boolean! = false): [__EnumValue!]
+
+  inputFields: [__InputValue!]
+
+  ofType: __Type
+
+  specifiedByURL: String
+
+  isOneOf: Boolean
+}
+
+"""
+An enum describing what kind of type a given `__Type` is.
+"""
+enum __TypeKind {
+  """
+  Indicates this type is a scalar.
+  """
+  SCALAR
+
+  """
+  Indicates this type is an object. `fields` and `interfaces` are valid
+  fields.
+  """
+  OBJECT
+
+  """
+  Indicates this type is an interface. `fields` and `possibleTypes` are
+  valid fields.
+  """
+  INTERFACE
+
+  """
+  Indicates this type is a union. `possibleTypes` is a valid field.
+  """
+  UNION
+
+  """
+  Indicates this type is an enum. `enumValues` is a valid field.
+  """
+  ENUM
+
+  """
+  Indicates this type is an input object. `inputFields` is a valid field.
+  """
+  INPUT_OBJECT
+
+  """
+  Indicates this type is a list. `ofType` is a valid field.
+  """
+  LIST
+
+  """
+  Indicates this type is a non-null. `ofType` is a valid field.
+  """
+  NON_NULL
+}
+
+"""
+Directs the executor to include this field or fragment only when the `if` argument is true.
+"""
+directive @include ("Included when true." if: Boolean!) on FIELD|FRAGMENT_SPREAD|INLINE_FRAGMENT
+
+"""
+Directs the executor to skip this field or fragment when the `if` argument is true.
+"""
+directive @skip ("Skipped when true." if: Boolean!) on FIELD|FRAGMENT_SPREAD|INLINE_FRAGMENT
+
+"""
+A GraphQL Schema defines the capabilities of a GraphQL server. It exposes all available types and directives on the server, as well as the entry points for query, mutation, and subscription operations.
+"""
+schema {
+  query: Query
+  mutation: Mutation
+}
