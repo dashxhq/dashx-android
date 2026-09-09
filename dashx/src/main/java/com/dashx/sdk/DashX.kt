@@ -849,6 +849,13 @@ class DashX {
                     current.tokenEpoch != requestSnapshot.tokenEpoch ||
                     boundProvider !== bound
 
+                // Release the single-flight slot BEFORE completing the deferred. A waiter resumed
+                // by the completion may request another load at once; if the slot still held this
+                // finished deferred, that request would join it and take the stale result instead
+                // of reaching the provider. The completion handler below remains the safety net
+                // for the cancellation paths that never get here.
+                tokenLoadInFlight.compareAndSet(result, null)
+
                 if (!stale && token != null) {
                     account.updateAndGet { it.copy(identityToken = token) } // T1: generation unchanged
                     saveToStorage()
