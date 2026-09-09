@@ -38,7 +38,7 @@ dependencyResolutionManagement {
 
 ```groovy
 dependencies {
-    implementation 'com.dashx:dashx-android:1.3.2'
+    implementation 'com.dashx:dashx-android:1.4.0'
 }
 ```
 
@@ -71,7 +71,13 @@ lease.addStateListener { state ->
     }
 }
 
-lease.sendMessage(content, onSuccess = { }, onError = { })
+// content is {"text": "..."} — non-empty, at most 4096 characters. The returned id is the
+// idempotency key; a retry must reuse it, and the committed row echoes it as clientMessageId.
+val clientMessageId = lease.sendMessage(
+    content = buildJsonObject { put("text", "Hello") },
+    onSuccess = { message -> /* merged into state already; message.clientMessageId == clientMessageId */ },
+    onError = { }
+)
 lease.loadPreviousPage()
 lease.setVisible(true) // marks messages read, suppresses this conversation's pushes
 

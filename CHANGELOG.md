@@ -16,7 +16,9 @@ host's backend creates the conversation and returns the
     handle exposing `state: StateFlow<ConversationState>` (`Loading` /
     `Ready(messages)` / `Error`, plus listener add/remove for non-coroutine
     hosts), `sendMessage(content)` (returns the client message id
-    *synchronously* — the idempotency key a host-triggered retry must reuse),
+    *synchronously* — the idempotency key a host-triggered retry must reuse;
+    the committed row is merged into `state` on success and reports the key
+    back as `ChatMessage.clientMessageId`),
     `loadPreviousPage()`, `setVisible(Boolean)` (drives read-marking and push
     suppression), `setOnTerminated(...)`, and idempotent `close()`. Leases on
     the same `(identity, conversation)` share one subscription and message
@@ -76,6 +78,12 @@ host's backend creates the conversation and returns the
   it: identity switch, `reset()`, or `shutdown()`.
 - **`DashXError.SubscriptionFailed`** — a realtime channel subscription that
   was never acknowledged within its deadline.
+- **`DashXError.GraphQLError.code`** — the backend's `extensions.code`
+  (`UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `UNPROCESSABLE_ENTITY`, ...) when
+  every error in the response carried the same one. The chat synchronizer uses
+  it to rebuild only on a genuinely rejected cursor; a token, permission, or
+  server failure during reconnect no longer replaces a loaded conversation
+  with `Error` unless it is terminal for that conversation.
 
 ### Changed
 
@@ -86,7 +94,9 @@ host's backend creates the conversation and returns the
   to every request.
 - **Auth retry.** A request rejected before execution with `UNAUTHORIZED` (and
   no data) is retried once after refreshing the identity token through the
-  registered provider. `FORBIDDEN` and partial-data responses never retry, and
+  registered provider. Rejections a new token cannot fix (bad signature,
+  malformed token, deleted account, wrong public key) are returned as-is
+  without a refresh. `FORBIDDEN` and partial-data responses never retry, and
   the retry is generation-guarded: if the identity switched while the refresh
   ran, the original rejection is returned rather than resending the old
   request under the new identity's token.

@@ -2,7 +2,8 @@ fragment ChatMessageFragment on Message {
   id
   conversationId
   renderedContent
-  # Stable per send attempt — reconcile optimistic rows against this, not `id`.
+  # Backend idempotency key: `in_app_chat:<clientMessageId>` for visitor sends. The SDK exposes
+  # the bare client id as ChatMessage.clientMessageId for reconciling optimistic rows.
   externalUid
   senderId
   # `USER` for the visitor's own message; anything else is an agent or AI reply.

@@ -35,6 +35,11 @@ class AuthRetryInterceptorTest {
             .build()
     }
 
+    private fun unauthorized(message: String): ApolloResponse<SummarizeInAppChatMessagesQuery.Data> =
+        ApolloResponse.Builder(operation, UUID.randomUUID())
+            .errors(listOf(Error.Builder(message).putExtension("code", "UNAUTHORIZED").build()))
+            .build()
+
     private fun executedData() = SummarizeInAppChatMessagesQuery.Data(
         SummarizeInAppChatMessagesQuery.SummarizeInAppChatMessages(count = 7)
     )
@@ -87,6 +92,35 @@ class AuthRetryInterceptorTest {
         assertEquals(1, chain.proceeds.get())
         assertEquals(1, refreshes)
         assertSame(rejected, result)
+    }
+
+    @Test
+    fun expiredToken_refreshesAndRetries() {
+        val chain = FakeChain(listOf(unauthorized("Incorrect Identity Token: Expired."), response(data = executedData())))
+        val (result, refreshes) = run(chain)
+        assertEquals(2, chain.proceeds.get())
+        assertEquals(1, refreshes)
+        assertEquals(7, result.data?.summarizeInAppChatMessages?.count)
+    }
+
+    @Test
+    fun rejectionsANewTokenCannotFix_neverRefresh() {
+        // Every token problem is UNAUTHORIZED; only the message separates expiry from the rest.
+        for (message in listOf(
+            "Incorrect Identity Token: Invalid signature.",
+            "Incorrect Identity Token: Improper format.",
+            "Incorrect Identity Token: Missing account.",
+            "Incorrect Identity Token: Missing identity 'uid'.",
+            "Incorrect Public Key.",
+            "Your API Key Pair has expired."
+        )) {
+            val rejected = unauthorized(message)
+            val chain = FakeChain(listOf(rejected, response(data = executedData())))
+            val (result, refreshes) = run(chain)
+            assertEquals(message, 1, chain.proceeds.get())
+            assertEquals(message, 0, refreshes)
+            assertSame(message, rejected, result)
+        }
     }
 
     @Test

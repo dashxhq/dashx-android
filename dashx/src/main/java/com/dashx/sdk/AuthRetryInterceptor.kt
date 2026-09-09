@@ -20,6 +20,8 @@ import kotlinx.coroutines.flow.flow
  * - `data != null` means something executed; retrying a mutation then is how a message double-sends.
  * - An empty errors list must not refresh: `all {}` is vacuously true on it.
  * - `FORBIDDEN` never refreshes — a new token will not grant permission.
+ * - An `UNAUTHORIZED` whose message names a rejection a new token cannot fix (bad signature,
+ *   malformed token, deleted account, wrong public key) is returned as-is; see [isRefreshable].
  *
  * The retry is generation-guarded: if the identity switched while the refresh ran, the new token
  * belongs to a different account and the old-era request must not be resent under it.
@@ -56,6 +58,20 @@ internal class AuthRetryInterceptor(
         if (response.data != null) return false
         val errors = response.errors
         if (errors.isNullOrEmpty()) return false
-        return errors.all { (it.extensions?.get("code") as? String) == "UNAUTHORIZED" }
+        return errors.all {
+            (it.extensions?.get("code") as? String) == "UNAUTHORIZED" && isRefreshable(it.message)
+        }
+    }
+
+    /**
+     * The backend reports every token problem as `UNAUTHORIZED`; only the message tells expiry
+     * apart from rejections a fresh token cannot fix (bad signature, malformed token, deleted
+     * account, wrong public key). Unknown messages refresh — failing open costs one provider
+     * call, failing closed would leave an expired token in place.
+     */
+    private fun isRefreshable(message: String): Boolean {
+        if (message.contains("Public Key") || message.contains("API Key Pair")) return false
+        if (message.startsWith("Incorrect Identity Token") && !message.contains("Expired")) return false
+        return true
     }
 }

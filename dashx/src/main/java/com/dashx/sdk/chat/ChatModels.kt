@@ -10,7 +10,9 @@ import kotlinx.serialization.json.JsonObject
 data class ChatMessage(
     val id: String,
     val conversationId: String,
-    /** Stable per send attempt — reconcile a pending send against this, not [id]. */
+    /** The backend's raw idempotency key: `in_app_chat:<clientMessageId>` for visitor sends,
+     * `in_app_chat_reply:<uuid>` and similar for agent, AI, and follow-up rows. Prefer
+     * [clientMessageId] for reconciling a pending send. */
     val externalUid: String?,
     val senderId: String?,
     /** `USER` for the visitor's own message; anything else is an agent or AI reply. */
@@ -20,7 +22,21 @@ data class ChatMessage(
     val createdAt: String?,
     val sentAt: String?
 ) {
+    /**
+     * The `clientMessageId` this visitor message was sent with (the value
+     * [DashXConversationLease.sendMessage] returned), or null for agent, AI, and system rows.
+     * Stable per send attempt — reconcile an optimistic row against this, not [id], which is only
+     * known once the server commits.
+     */
+    val clientMessageId: String?
+        get() = externalUid
+            ?.takeIf { it.startsWith(CLIENT_MESSAGE_PREFIX) }
+            ?.removePrefix(CLIENT_MESSAGE_PREFIX)
+
     companion object {
+        /** What the backend prepends to a visitor's `clientMessageId` to form `externalUid`. */
+        internal const val CLIENT_MESSAGE_PREFIX = "in_app_chat:"
+
         /** The backend's own total order: `(turn_seq, created_at, id)`. */
         val ORDER: Comparator<ChatMessage> =
             compareBy({ it.turnSeq }, { it.createdAt ?: "" }, { it.id })
@@ -43,7 +59,7 @@ data class ChatMessage(
             externalUid = f.externalUid,
             senderId = f.senderId?.toString(),
             aiRole = f.aiRole,
-            turnSeq = f.turnSeq?.toLong() ?: 0L,
+            turnSeq = f.turnSeq.toLong(),
             renderedContent = f.renderedContent as? JsonObject ?: JsonObject(emptyMap()),
             createdAt = f.createdAt.toString(),
             sentAt = f.sentAt?.toString()

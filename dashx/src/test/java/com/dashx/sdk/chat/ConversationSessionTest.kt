@@ -8,6 +8,7 @@ import com.dashx.android.realtime.DashXRealtimeSubscription
 import com.dashx.android.realtime.SubscriberHandle
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.serialization.json.JsonObject
 import org.junit.Assert.assertEquals
@@ -53,6 +54,11 @@ private class FakeBackend : ChatSessionBackend {
     val fetchPageCalls = CopyOnWriteArrayList<Int>()
     val fetchAfterCursors = CopyOnWriteArrayList<String>()
     val markReadIds = CopyOnWriteArrayList<String>()
+    val sentClientMessageIds = CopyOnWriteArrayList<String>()
+    /** The committed row the fake server returns for a send, keyed by the client message id. */
+    @Volatile var sendResult: (String) -> ChatMessage = { clientMessageId ->
+        msg("sent-$clientMessageId", 1_000).copy(externalUid = "in_app_chat:$clientMessageId")
+    }
 
     @Volatile var count = 0
     @Volatile var pages: Map<Int, List<ChatMessage>> = emptyMap()
@@ -84,6 +90,18 @@ private class FakeBackend : ChatSessionBackend {
         fetchAfterCursors.add(afterMessageId)
         afterGate?.await()
         return after(afterMessageId)
+    }
+
+    override fun send(
+        identityId: String,
+        conversationId: String,
+        content: JsonObject,
+        clientMessageId: String,
+        onSuccess: (ChatMessage) -> Unit,
+        onError: (DashXError) -> Unit
+    ) {
+        sentClientMessageIds.add(clientMessageId)
+        onSuccess(sendResult(clientMessageId))
     }
 
     override fun markRead(
@@ -219,7 +237,12 @@ class ConversationSessionTest {
 
         // The retained cursor (m2) was deleted server-side: the fetch is rejected, and the rebuilt
         // snapshot no longer contains it.
-        backend.after = { throw DashXException(DashXError.GraphQLError("invalid afterMessageId")) }
+        backend.after = {
+            throw DashXException(DashXError.GraphQLError(
+                "`after_message_id` is not a visible message of this conversation.",
+                DashXError.GraphQLError.UNPROCESSABLE_ENTITY
+            ))
+        }
         backend.count = 1
         backend.pages = mapOf(1 to listOf(msg("m1", 1)))
         backend.handles[0].onEstablished(true)
@@ -232,6 +255,75 @@ class ConversationSessionTest {
         backend.handles[0].onEstablished(true)
         awaitUntil(what = "second reconnect fetch") { backend.fetchAfterCursors.size == 2 }
         assertEquals("m1", backend.fetchAfterCursors[1])
+    }
+
+    @Test
+    fun reconnectRejectedByATokenProblem_keepsTheSnapshot_andDoesNotRebuild() {
+        val backend = FakeBackend()
+        val (_, lease) = openReady(backend, listOf(msg("m1", 1), msg("m2", 2)))
+
+        // UNAUTHORIZED is not a cursor problem: rebuilding would fail the same way, and the auth
+        // retry / provider refresh is what recovers it. The loaded list must stay on screen.
+        backend.after = {
+            throw DashXException(DashXError.GraphQLError(
+                "Incorrect Identity Token: Expired.", DashXError.GraphQLError.UNAUTHORIZED
+            ))
+        }
+        backend.handles[0].onEstablished(true)
+
+        awaitUntil(what = "cursor fetch attempted") { backend.fetchAfterCursors.size == 1 }
+        Thread.sleep(200)
+        assertEquals(listOf("m1", "m2"), readyIds(lease))
+        assertEquals("no rebuild for a non-cursor failure", 1, backend.summarizeCalls.get())
+    }
+
+    @Test
+    fun reconnectRejectedByPermissionLoss_surfacesError_withoutRebuilding() {
+        val backend = FakeBackend()
+        val (_, lease) = openReady(backend, listOf(msg("m1", 1), msg("m2", 2)))
+
+        backend.after = {
+            throw DashXException(DashXError.GraphQLError(
+                "You don't have access to this chat conversation.", DashXError.GraphQLError.FORBIDDEN
+            ))
+        }
+        backend.handles[0].onEstablished(true)
+
+        awaitUntil(what = "Error state") { lease.state.value is ConversationState.Error }
+        val cause = (lease.state.value as ConversationState.Error).cause
+        assertTrue(cause is DashXError.GraphQLError && cause.code == DashXError.GraphQLError.FORBIDDEN)
+        assertEquals("no rebuild for a non-cursor failure", 1, backend.summarizeCalls.get())
+    }
+
+    @Test
+    fun sendMessage_mergesTheCommittedRow_withoutWaitingForAFrame_andReportsTheClientId() {
+        val backend = FakeBackend()
+        val (_, lease) = openReady(backend, listOf(msg("m1", 1)))
+        backend.sendResult = { clientId -> msg("m2", 2).copy(externalUid = "in_app_chat:$clientId") }
+
+        val delivered = AtomicReference<ChatMessage?>(null)
+        val clientMessageId = lease.sendMessage(
+            JsonObject(emptyMap()),
+            onSuccess = { delivered.set(it) },
+            onError = { fail("send failed: ${it.message}") }
+        )
+
+        awaitUntil(what = "committed row merged") { readyIds(lease) == listOf("m1", "m2") }
+        assertEquals(listOf(clientMessageId), backend.sentClientMessageIds)
+        assertEquals("the backend's prefix is stripped", clientMessageId, delivered.get()!!.clientMessageId)
+        assertEquals("in_app_chat:$clientMessageId", delivered.get()!!.externalUid)
+
+        // Display-only: the merged send must not move the reconnect cursor past m1.
+        backend.handles[0].onEstablished(true)
+        awaitUntil(what = "reconnect fetch") { backend.fetchAfterCursors.size == 1 }
+        assertEquals("m1", backend.fetchAfterCursors[0])
+    }
+
+    @Test
+    fun clientMessageId_isNullForRowsTheVisitorDidNotSend() {
+        assertEquals(null, msg("a", 1).copy(externalUid = "in_app_chat_reply:abc").clientMessageId)
+        assertEquals(null, msg("a", 1).copy(externalUid = null).clientMessageId)
+        assertEquals("k-1", msg("a", 1).copy(externalUid = "in_app_chat:k-1").clientMessageId)
     }
 
     @Test

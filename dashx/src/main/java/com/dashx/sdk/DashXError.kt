@@ -9,9 +9,23 @@ sealed class DashXError(val message: String) {
         message: String = "accountUid is not set. Call setIdentity() first."
     ) : DashXError(message)
 
+    /**
+     * The server answered with GraphQL errors. [code] is the backend's `extensions.code` when
+     * every error in the response carried the same one (`UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`,
+     * `UNPROCESSABLE_ENTITY`, ...); null when the codes were mixed or absent.
+     */
     class GraphQLError(
-        message: String
-    ) : DashXError(message)
+        message: String,
+        val code: String? = null
+    ) : DashXError(message) {
+        companion object {
+            const val UNAUTHORIZED = "UNAUTHORIZED"
+            const val FORBIDDEN = "FORBIDDEN"
+            const val NOT_FOUND = "NOT_FOUND"
+            const val UNPROCESSABLE_ENTITY = "UNPROCESSABLE_ENTITY"
+            const val INTERNAL_SERVER_ERROR = "INTERNAL_SERVER_ERROR"
+        }
+    }
 
     class NetworkError(
         message: String

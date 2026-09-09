@@ -34,7 +34,9 @@ internal class SubscriberHandle(
     val onFrame: (DashXRealtimeMessage) -> Unit,
     val onEstablished: (isResubscribe: Boolean) -> Unit,
     /** The channel was not acknowledged within [RealtimeRuntime.ACK_TIMEOUT_MS] of being requested
-     * — invalid or unauthorized. The subscription stays registered; a later ack still recovers. */
+     * — invalid or unauthorized. The server answers a rejected SUBSCRIBE with an `ERROR` frame that
+     * names no channel, so the rejection cannot be routed and surfaces only through this deadline.
+     * The subscription stays registered; a later ack still recovers. */
     val onSubscribeError: (DashXError) -> Unit = {}
 )
 
@@ -251,6 +253,11 @@ internal class RealtimeRuntime(
                 if (command.generation != connectionGeneration) return
                 socket = null
                 connectingSocket = null
+                // A SUBSCRIBE still awaiting its ack died with the socket; the reconnect re-sends
+                // it under a fresh attempt. Left in place, its deadline would fire during the
+                // backoff — same generation, same attempt id — and report a network blip as a
+                // rejected subscription.
+                pendingAcks.clear()
                 if (isTerminalCloseCode(command.code)) {
                     authFailed = true
                     DashXLog.e(TAG, "Realtime closed with terminal code ${command.code} (${command.reason})")
@@ -271,6 +278,7 @@ internal class RealtimeRuntime(
                 if (command.generation != connectionGeneration) return
                 socket = null
                 connectingSocket = null
+                pendingAcks.clear() // see SocketClosed
                 DashXLog.e(TAG, "Realtime failure: ${command.cause.message ?: command.cause::class.java.simpleName}")
                 scheduleReconnect()
                 publishState()

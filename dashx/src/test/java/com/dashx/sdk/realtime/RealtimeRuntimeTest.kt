@@ -265,6 +265,25 @@ class RealtimeRuntimeTest {
     }
 
     @Test
+    fun socketLostBeforeAck_isAReconnect_notASubscribeError() {
+        val harness = Harness(ackTimeoutMs = 150)
+        harness.subscribe("c1")
+        awaitUntil(what = "socket created") { harness.sockets.size == 1 }
+        harness.open(0)
+        awaitUntil(what = "SUBSCRIBE sent") { harness.sockets[0].sent.any { it.contains("SUBSCRIBE") } }
+
+        // The connection drops before the server can acknowledge. The reconnect backoff (>= 500ms)
+        // outlasts the ack window, so a deadline left pending would fire in the gap.
+        harness.listeners[0].onClosed(harness.sockets[0], 1006, "network lost")
+        Thread.sleep(400)
+
+        assertTrue(
+            "a socket lost mid-subscribe must not be reported as a rejected channel",
+            harness.subscribeErrors.isEmpty()
+        )
+    }
+
+    @Test
     fun reopenedChannel_onALiveSocket_getsAFreshAckDeadline() {
         val harness = Harness(ackTimeoutMs = 150)
         val first = harness.subscribe("c1")

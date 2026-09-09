@@ -493,7 +493,13 @@ class DashX {
             if (!errors.isNullOrEmpty()) {
                 val errorsString = errors.toString()
                 if (errorsString.isNotEmpty()) {
-                    val error = DashXError.GraphQLError(errorsString)
+                    // One code for the whole response, or none: callers branch on it (a rejected
+                    // chat cursor is UNPROCESSABLE_ENTITY; UNAUTHORIZED is a token problem).
+                    val code = errors
+                        .mapNotNull { (it as? com.apollographql.apollo.api.Error)?.extensions?.get("code") as? String }
+                        .distinct()
+                        .singleOrNull()
+                    val error = DashXError.GraphQLError(errorsString, code)
                     DashXLog.e(tag, errorsString)
                     onError?.invoke(error)
                 }

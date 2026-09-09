@@ -93,8 +93,12 @@ interface DashXConversationLease {
 
     /**
      * Sends a visitor message; [onSuccess] delivers the committed message as the SDK's own
-     * [ChatMessage]. Returns the client message id SYNCHRONOUSLY — the idempotency key: a
-     * host-triggered retry of a failed send must reuse it via the raw operation.
+     * [ChatMessage] and merges it into [state]. Returns the client message id SYNCHRONOUSLY — the
+     * idempotency key: a host-triggered retry of a failed send must reuse it via the raw
+     * operation, and the committed row reports it back as [ChatMessage.clientMessageId].
+     *
+     * [content] must be `{"text": "<non-empty, at most 4096 characters>"}`; the backend rejects
+     * anything else with a `GraphQLError` (`UNPROCESSABLE_ENTITY`).
      */
     fun sendMessage(
         content: JsonObject,
@@ -161,6 +165,14 @@ internal interface ChatSessionBackend {
     suspend fun summarizeMessages(conversationId: String): Int
     suspend fun fetchPage(conversationId: String, limit: Int, page: Int): List<ChatMessage>
     suspend fun fetchAfter(conversationId: String, limit: Int, afterMessageId: String): List<ChatMessage>
+    fun send(
+        identityId: String,
+        conversationId: String,
+        content: JsonObject,
+        clientMessageId: String,
+        onSuccess: (ChatMessage) -> Unit,
+        onError: (DashXError) -> Unit
+    )
     fun markRead(
         identityId: String,
         conversationId: String,
@@ -188,6 +200,24 @@ internal object DashXChatSessionBackend : ChatSessionBackend {
         DashX.awaitOperation<List<FetchInAppChatMessagesQuery.FetchInAppChatMessage>> { ok, err ->
             DashX.fetchInAppChatMessagesJob(conversationId, limit, null, afterMessageId, ok, err)
         }.map { ChatMessage.from(it) }
+
+    override fun send(
+        identityId: String,
+        conversationId: String,
+        content: JsonObject,
+        clientMessageId: String,
+        onSuccess: (ChatMessage) -> Unit,
+        onError: (DashXError) -> Unit
+    ) {
+        DashX.sendInAppChatMessageJob(
+            conversationId = conversationId,
+            identityId = identityId,
+            content = content,
+            clientMessageId = clientMessageId,
+            onSuccess = { result -> onSuccess(ChatMessage.from(result.chatMessageFragment)) },
+            onError = onError
+        )
+    }
 
     override fun markRead(
         identityId: String,
@@ -335,7 +365,7 @@ internal class ConversationSession(
             if (t is kotlinx.coroutines.CancellationException) throw t
             val error = (t as? com.dashx.android.DashXException)?.error
                 ?: DashXError.NetworkError(t.message ?: "chat synchronization failed")
-            if (snapshotDone && error is DashXError.NetworkError) {
+            if (snapshotDone && keepsSnapshot(error)) {
                 // Keep the displayed snapshot on a transient failure; the next reconnect retries.
                 DashXLog.e(TAG, "Reconciliation failed for ${key.conversationId}: ${error.message}")
             } else {
@@ -346,6 +376,23 @@ internal class ConversationSession(
         } finally {
             syncing = false
         }
+    }
+
+    /**
+     * A failure that leaves an already-loaded conversation on screen rather than replacing it with
+     * [ConversationState.Error]: transport problems, a rejected token (the auth retry or a provider
+     * refresh recovers it), a server fault, or a GraphQL response without a single code. Permission
+     * loss, a missing conversation, and a cursor rejected twice are terminal for this session.
+     */
+    private fun keepsSnapshot(error: DashXError): Boolean = when (error) {
+        is DashXError.NetworkError -> true
+        is DashXError.GraphQLError -> when (error.code) {
+            null,
+            DashXError.GraphQLError.UNAUTHORIZED,
+            DashXError.GraphQLError.INTERNAL_SERVER_ERROR -> true
+            else -> false
+        }
+        else -> false
     }
 
     /** First open, no-cursor recovery, and rejected-cursor rebuild: candidate snapshot, one merge,
@@ -393,6 +440,12 @@ internal class ConversationSession(
                 if (t is kotlinx.coroutines.CancellationException) throw t
                 val error = (t as? com.dashx.android.DashXException)?.error
                 if (error is DashXError.GraphQLError) {
+                    // Only UNPROCESSABLE_ENTITY means the cursor itself was rejected (the retained
+                    // message is no longer a visible message of this conversation). Every other
+                    // GraphQL failure — token, permission, missing conversation, server fault — is
+                    // not a cursor problem: rebuilding would just fail again, so let [runSync]
+                    // decide whether the snapshot stays on screen.
+                    if (error.code != DashXError.GraphQLError.UNPROCESSABLE_ENTITY) throw t
                     if (rebuildUsed) throw t // a rebuilt mark rejected again is terminal, not a loop
                     // The server rejected the retained cursor (deleted message). Rebuild — never
                     // merge, or the deleted id survives as the mark and rejects forever.
@@ -628,12 +681,21 @@ internal class ConversationSession(
             // Generated BEFORE the network attempt and returned synchronously: the idempotency key a
             // host-triggered retry must reuse.
             val clientMessageId = UUID.randomUUID().toString()
-            DashX.sendInAppChatMessageJob(
-                conversationId = key.conversationId,
+            backend.send(
                 identityId = key.chatIdentityId,
+                conversationId = key.conversationId,
                 content = content,
                 clientMessageId = clientMessageId,
-                onSuccess = { result -> onSuccess(ChatMessage.from(result.chatMessageFragment)) },
+                onSuccess = { message ->
+                    // The committed row goes into the list directly. The realtime frame usually
+                    // beats this callback and the merge dedupes by id; but the frame is missed
+                    // while the socket is reconnecting, and an idempotent retry of an already
+                    // committed send gets no frame at all — without this merge the visitor's own
+                    // message would not appear until the next reconcile. Display-only: the
+                    // cursor still advances only on fetch results.
+                    scope.launch(syncLane) { mergeLive(message) }
+                    onSuccess(message)
+                },
                 onError = onError
             )
             return clientMessageId

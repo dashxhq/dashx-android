@@ -41,6 +41,12 @@ internal fun <T> sessionBound(
     )
 }
 
+/**
+ * Raw send. [content] must be `{"text": "<non-empty, at most 4096 characters>"}` and
+ * [clientMessageId] 1–128 characters of `[A-Za-z0-9._-]`; anything else is rejected with a
+ * `GraphQLError` (`UNPROCESSABLE_ENTITY`). Re-sending an already committed [clientMessageId]
+ * returns the existing message without emitting a realtime frame or a push.
+ */
 fun DashX.Companion.sendInAppChatMessage(
     conversationId: String,
     identityId: String,
