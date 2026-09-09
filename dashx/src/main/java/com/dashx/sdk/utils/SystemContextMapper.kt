@@ -81,7 +81,7 @@ object SystemContextMapper {
     private fun toScreen(o: JSONObject): SystemContextScreenInput = SystemContextScreenInput(
         width = o.optInt(SystemContextConstants.WIDTH, 0),
         height = o.optInt(SystemContextConstants.HEIGHT, 0),
-        density = o.optInt(SystemContextConstants.DENSITY, 0)
+        density = o.optDouble(SystemContextConstants.DENSITY, 0.0)
     )
 
     private fun toCampaign(o: JSONObject): SystemContextCampaignInput = SystemContextCampaignInput(
