@@ -19,7 +19,9 @@ import kotlinx.serialization.json.JsonObject
 // token, so an identity must be set first. `DashX.chat(identityId)` is the managed surface.
 
 private fun notIdentifiedJob(onError: (DashXError) -> Unit): Job =
-    DashX.launchCallback { onError(DashXError.NotIdentified()) }
+    DashX.launchCallback {
+        onError(DashXError.NotIdentified("Identity token is not set. Call setIdentity(uid, token) or setIdentityTokenProvider() first."))
+    }
 
 /**
  * Gates an operation's callbacks on the identity session it began under. These jobs run on the

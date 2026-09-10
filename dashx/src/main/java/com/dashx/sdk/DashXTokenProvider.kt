@@ -1,6 +1,9 @@
 package com.dashx.android
 
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
@@ -15,14 +18,20 @@ fun interface DashXTokenProvider {
     fun loadToken(forceRefresh: Boolean, callback: DashXTokenCallback)
 
     companion object {
+        private val adapterScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+        /** Longer than the SDK's own load timeout, so a hung loader is cancelled rather than left running. */
+        private const val LOADER_TIMEOUT_MS = 35_000L
+
         /** Adapter for a suspending loader. */
         fun suspending(loader: suspend (forceRefresh: Boolean) -> String?): DashXTokenProvider =
             DashXTokenProvider { forceRefresh, callback ->
-                CoroutineScope(Dispatchers.IO).launch {
+                adapterScope.launch {
                     try {
-                        val token = loader(forceRefresh)
+                        val token = withTimeoutOrNull(LOADER_TIMEOUT_MS) { loader(forceRefresh) }
                         if (token != null) callback.onToken(token) else callback.onUnavailable(null)
                     } catch (t: Throwable) {
+                        if (t is CancellationException) throw t
                         callback.onUnavailable(t)
                     }
                 }

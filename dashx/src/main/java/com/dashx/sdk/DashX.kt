@@ -293,7 +293,9 @@ class DashX {
 
         internal fun dispatchNotificationReceived(payload: DashXPayload) {
             for (listener in notificationListeners) {
-                listener.onNotificationReceived(payload)
+                // Host code runs on the FCM thread; one throwing listener must not kill the process.
+                runCatching { listener.onNotificationReceived(payload) }
+                    .onFailure { DashXLog.e(tag, "onNotificationReceived threw: ${it.message}") }
             }
         }
 
@@ -479,6 +481,16 @@ class DashX {
                 .build()
         }
 
+        /** Host callbacks run on the callback dispatcher under a scope with no handler; a throw must not kill the process. */
+        private inline fun hostCallback(block: () -> Unit) {
+            try {
+                block()
+            } catch (t: Throwable) {
+                if (t is CancellationException) throw t
+                DashXLog.e(tag, "Host callback threw: ${t.message ?: t::class.java.simpleName}")
+            }
+        }
+
         private fun hasApolloErrors(
             errors: List<*>?,
             exception: Throwable?,
@@ -529,13 +541,15 @@ class DashX {
                     val errorMsg = "Mutation execute failed: ${t.message ?: t::class.java.simpleName}"
                     DashXLog.e(tag, errorMsg)
                     withContext(callbackDispatcher) {
-                        onError?.invoke(DashXError.NetworkError(errorMsg))
+                        hostCallback { onError?.invoke(DashXError.NetworkError(errorMsg)) }
                     }
                     return@launch
                 }
                 withContext(callbackDispatcher) {
-                    if (!hasApolloErrors(response.errors, response.exception, onError)) {
-                        onSuccess(response)
+                    hostCallback {
+                        if (!hasApolloErrors(response.errors, response.exception, onError)) {
+                            onSuccess(response)
+                        }
                     }
                 }
             }
@@ -572,13 +586,15 @@ class DashX {
                     val errorMsg = "Query execute failed: ${t.message ?: t::class.java.simpleName}"
                     DashXLog.e(tag, errorMsg)
                     withContext(callbackDispatcher) {
-                        onError?.invoke(DashXError.NetworkError(errorMsg))
+                        hostCallback { onError?.invoke(DashXError.NetworkError(errorMsg)) }
                     }
                     return@launch
                 }
                 withContext(callbackDispatcher) {
-                    if (!hasApolloErrors(response.errors, response.exception, onError)) {
-                        onSuccess(response)
+                    hostCallback {
+                        if (!hasApolloErrors(response.errors, response.exception, onError)) {
+                            onSuccess(response)
+                        }
                     }
                 }
             }
@@ -694,12 +710,17 @@ class DashX {
          * Transitions:
          *  - no current identity → T0: waiting subscriptions are preserved and connect now
          *  - same uid, same token → no-op
+         *  - same uid, null token while one is held → no-op: the held token is kept (use [reset] to clear)
          *  - same uid, new token → T1: sessions preserved, socket recycled
          *  - different uid (incl. → null) → T2: previous identity's chat work is terminated
          */
         fun setIdentity(uid: String?, token: String?) {
             val current = account.get()
             if (current.uid == uid && current.identityToken == token) return // no-op, even with a provider
+            if (current.uid != null && current.uid == uid && token == null && current.identityToken != null) {
+                DashXLog.d(tag, "setIdentity: keeping the held identity token for the current uid")
+                return
+            }
 
             val isActivation = current.uid == null && current.identityToken == null && uid != null
             val isRefresh = current.uid != null && current.uid == uid
@@ -731,6 +752,26 @@ class DashX {
                 com.dashx.android.chat.ChatCoordinator.onIdentityAvailable()
                 publishDirect(ConnectionState.Idle) // nothing else clears a stale AuthenticationFailed
             }
+        }
+
+        /** Whether an identity token is currently held; chat operations require one. */
+        val hasIdentityToken: Boolean get() = account.get().identityToken != null
+
+        /**
+         * Drops the held identity token when no provider can refresh it, so requests fall back to the
+         * public key. Returns false when a provider is bound (the retry path refreshes instead) or no
+         * token is held.
+         */
+        internal fun dropUnrefreshableIdentityToken(): Boolean {
+            if (boundProvider != null) return false
+            val before = account.getAndUpdate {
+                if (it.identityToken == null) it else it.copy(identityToken = null, tokenEpoch = it.tokenEpoch + 1)
+            }
+            if (before.identityToken == null) return false
+            DashXLog.i(tag, "Identity token expired with no provider bound; continuing unauthenticated")
+            saveToStorage()
+            realtimeRuntime?.onIdentityChanged()
+            return true
         }
 
         /**

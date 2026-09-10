@@ -2,6 +2,7 @@ package com.dashx.android
 
 import com.apollographql.apollo.api.ApolloRequest
 import com.apollographql.apollo.api.ApolloResponse
+import com.apollographql.apollo.api.Error
 import com.apollographql.apollo.api.Operation
 import com.apollographql.apollo.interceptor.ApolloInterceptor
 import com.apollographql.apollo.interceptor.ApolloInterceptorChain
@@ -28,7 +29,9 @@ import kotlinx.coroutines.flow.flow
  */
 internal class AuthRetryInterceptor(
     private val refreshToken: suspend () -> Boolean = { DashX.awaitTokenRefresh() },
-    private val sessionGeneration: () -> Long = { DashX.currentSessionGeneration() }
+    private val sessionGeneration: () -> Long = { DashX.currentSessionGeneration() },
+    /** Clears an expired token nothing can refresh, so the retry runs on the public key alone. */
+    private val dropExpiredToken: () -> Boolean = { DashX.dropUnrefreshableIdentityToken() }
 ) : ApolloInterceptor {
 
     override fun <D : Operation.Data> intercept(
@@ -44,7 +47,14 @@ internal class AuthRetryInterceptor(
         // awaitTokenRefresh joins any in-flight load and completes only after the new token is
         // installed in the snapshot, so the retried request picks it up via the HTTP interceptor.
         if (!refreshToken()) {
-            emit(first)
+            // No provider (a host that never opened chat) or the refresh failed. An expired token
+            // would otherwise fail every call, including identify/track/subscribe, which pre-1.4
+            // hosts ran unauthenticated; drop it and retry that way once.
+            if (isExpired(first) && dropExpiredToken()) {
+                emitAll(chain.proceed(request))
+            } else {
+                emit(first)
+            }
             return@flow
         }
         if (sessionGeneration() != generationAtStart) {
@@ -58,20 +68,35 @@ internal class AuthRetryInterceptor(
         if (response.data != null) return false
         val errors = response.errors
         if (errors.isNullOrEmpty()) return false
-        return errors.all {
-            (it.extensions?.get("code") as? String) == "UNAUTHORIZED" && isRefreshable(it.message)
-        }
+        return errors.all { it.isUnauthorized() && isRefreshable(it) }
     }
 
+    private fun isExpired(response: ApolloResponse<*>): Boolean =
+        response.errors.orEmpty().let { errors -> errors.isNotEmpty() && errors.all { it.isUnauthorized() && it.isExpiry() } }
+
+    private fun Error.isUnauthorized() = (extensions?.get("code") as? String) == "UNAUTHORIZED"
+
+    /** A structured `extensions.reason` wins when the backend sends one; the message text is the fallback. */
+    private fun Error.reason(): String? = extensions?.get("reason") as? String
+
+    private fun Error.isExpiry(): Boolean =
+        reason()?.let { it == REASON_IDENTITY_TOKEN_EXPIRED } ?: (message.startsWith("Incorrect Identity Token") && message.contains("Expired"))
+
     /**
-     * The backend reports every token problem as `UNAUTHORIZED`; only the message tells expiry
-     * apart from rejections a fresh token cannot fix (bad signature, malformed token, deleted
-     * account, wrong public key). Unknown messages refresh — failing open costs one provider
-     * call, failing closed would leave an expired token in place.
+     * The backend reports every token problem as `UNAUTHORIZED`; the reason (or, absent one, the
+     * message) tells expiry apart from rejections a fresh token cannot fix (bad signature, malformed
+     * token, deleted account, wrong public key). Unknown messages refresh — failing open costs one
+     * provider call, failing closed would leave an expired token in place.
      */
-    private fun isRefreshable(message: String): Boolean {
+    private fun isRefreshable(error: Error): Boolean {
+        error.reason()?.let { return it == REASON_IDENTITY_TOKEN_EXPIRED }
+        val message = error.message
         if (message.contains("Public Key") || message.contains("API Key Pair")) return false
         if (message.startsWith("Incorrect Identity Token") && !message.contains("Expired")) return false
         return true
+    }
+
+    private companion object {
+        const val REASON_IDENTITY_TOKEN_EXPIRED = "IDENTITY_TOKEN_EXPIRED"
     }
 }

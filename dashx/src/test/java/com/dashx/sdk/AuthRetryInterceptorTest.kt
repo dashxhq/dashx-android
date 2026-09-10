@@ -54,19 +54,74 @@ class AuthRetryInterceptorTest {
         }
     }
 
+    private val drops = AtomicInteger(0)
+
     private fun run(
         chain: FakeChain,
         refreshResult: Boolean = true,
         generation: AtomicLong = AtomicLong(1),
-        onRefresh: () -> Unit = {}
+        onRefresh: () -> Unit = {},
+        dropResult: Boolean = false
     ): Pair<ApolloResponse<SummarizeInAppChatMessagesQuery.Data>, Int> {
         val refreshes = AtomicInteger(0)
         val interceptor = AuthRetryInterceptor(
             refreshToken = { refreshes.incrementAndGet(); onRefresh(); refreshResult },
-            sessionGeneration = { generation.get() }
+            sessionGeneration = { generation.get() },
+            dropExpiredToken = { drops.incrementAndGet(); dropResult }
         )
         val result = runBlocking { interceptor.intercept(request, chain).first() }
         return result to refreshes.get()
+    }
+
+    @Test
+    fun expiredToken_noRefreshPossible_dropsTokenAndRetriesUnauthenticated() {
+        val chain = FakeChain(listOf(unauthorized("Incorrect Identity Token: Expired."), response(data = executedData())))
+
+        val (result, refreshes) = run(chain, refreshResult = false, dropResult = true)
+
+        assertEquals(2, chain.proceeds.get())
+        assertEquals(1, refreshes)
+        assertEquals(1, drops.get())
+        assertEquals(7, result.data?.summarizeInAppChatMessages?.count)
+    }
+
+    @Test
+    fun expiredToken_noRefreshPossible_nothingToDrop_emitsRejection() {
+        val rejected = unauthorized("Incorrect Identity Token: Expired.")
+        val chain = FakeChain(listOf(rejected))
+
+        val (result, _) = run(chain, refreshResult = false, dropResult = false)
+
+        assertEquals(1, chain.proceeds.get())
+        assertSame(rejected, result)
+    }
+
+    @Test
+    fun genericUnauthorized_noRefreshPossible_doesNotDropToken() {
+        val rejected = response(errorCodes = listOf("UNAUTHORIZED"))
+        val chain = FakeChain(listOf(rejected))
+
+        val (result, _) = run(chain, refreshResult = false, dropResult = true)
+
+        assertEquals(1, chain.proceeds.get())
+        assertEquals(0, drops.get())
+        assertSame(rejected, result)
+    }
+
+    @Test
+    fun structuredReason_expiredIsRefreshable_otherReasonIsNot() {
+        val expired = ApolloResponse.Builder(operation, UUID.randomUUID())
+            .errors(listOf(Error.Builder("rejected").putExtension("code", "UNAUTHORIZED").putExtension("reason", "IDENTITY_TOKEN_EXPIRED").build()))
+            .build()
+        val (_, refreshesExpired) = run(FakeChain(listOf(expired, response(data = executedData()))))
+        assertEquals(1, refreshesExpired)
+
+        val revoked = ApolloResponse.Builder(operation, UUID.randomUUID())
+            .errors(listOf(Error.Builder("Incorrect Identity Token: Expired.").putExtension("code", "UNAUTHORIZED").putExtension("reason", "IDENTITY_TOKEN_REVOKED").build()))
+            .build()
+        val (result, refreshesRevoked) = run(FakeChain(listOf(revoked)))
+        assertEquals(0, refreshesRevoked)
+        assertSame(revoked, result)
     }
 
     @Test
