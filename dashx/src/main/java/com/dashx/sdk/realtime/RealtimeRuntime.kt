@@ -308,6 +308,11 @@ internal class RealtimeRuntime(
                 publishState(ConnectionState.Idle)
                 commands.close()
                 command.ack.complete(Unit)
+                // Per-runtime client: release its threads and pooled connections with the actor.
+                if (socketFactory == null) {
+                    client.dispatcher.executorService.shutdown()
+                    client.connectionPool.evictAll()
+                }
                 scope.cancel()
             }
         }

@@ -6,26 +6,6 @@ All notable changes to `dashx-android` are documented in this file. Format loose
 
 ### Added
 
-- **Unauthenticated fallback for expired identity tokens.** The identity token rides on every
-  GraphQL call. When the backend rejects it as expired and no provider is bound (or the refresh
-  fails), the SDK now drops the token and retries once on the public key alone, so
-  `identify`/`track`/`subscribe` keep working for hosts that never open chat — the pre-1.4
-  behaviour. Chat operations then report `NotIdentified` locally. `AuthRetryInterceptor` also
-  prefers a structured `extensions.reason` (`IDENTITY_TOKEN_EXPIRED`) over message text when the
-  backend sends one.
-- **`DashX.hasIdentityToken`** — whether an identity token is currently held.
-
-### Changed
-
-- `setIdentity(uid, null)` for the current uid now keeps the held token instead of clearing it;
-  use `reset()` to clear. A null token on an identity switch still applies.
-- Host callbacks passed to queries/mutations and `onNotificationReceived` listeners are guarded:
-  a throwing callback is logged instead of killing the process.
-- `DashXTokenProvider.suspending` runs loaders on a shared scope with a 35 s bound, so a hung
-  loader is cancelled rather than left running after the SDK's own timeout.
-- `NotIdentified` from chat operations now says the identity token is missing, which is what is
-  checked, rather than the account uid.
-
 In-app chat. The SDK now manages a realtime WebSocket connection and exposes a
 conversation API on top of it. Conversation **creation is server-only** — the
 host's backend creates the conversation and returns the
@@ -105,6 +85,15 @@ host's backend creates the conversation and returns the
   server failure during reconnect no longer replaces a loaded conversation
   with `Error` unless it is terminal for that conversation.
 
+- **Unauthenticated fallback for expired identity tokens.** The identity token rides on every
+  GraphQL call. When the backend rejects it as expired and no provider is bound (or the refresh
+  fails), the SDK now drops the token and retries once on the public key alone, so
+  `identify`/`track`/`subscribe` keep working for hosts that never open chat — the pre-1.4
+  behaviour. Chat operations then report `NotIdentified` locally. `AuthRetryInterceptor` also
+  prefers a structured `extensions.reason` (`IDENTITY_TOKEN_EXPIRED`) over message text when the
+  backend sends one.
+- **`DashX.hasIdentityToken`** — whether an identity token is currently held.
+
 ### Changed
 
 - **GraphQL requests read the identity token per request.** Previously
@@ -129,6 +118,14 @@ host's backend creates the conversation and returns the
 - `DashXFirebaseMessagingService` delegates to `DashXPush`, so the built-in
   service and a host's custom service share one notification pipeline. No
   behavior change for hosts using the built-in service.
+- `setIdentity(uid, null)` for the current uid now keeps the held token instead of clearing it;
+  use `reset()` to clear. A null token on an identity switch still applies.
+- Host callbacks passed to queries/mutations and `onNotificationReceived` listeners are guarded:
+  a throwing callback is logged instead of killing the process.
+- `DashXTokenProvider.suspending` runs loaders on a shared scope with a 35 s bound, so a hung
+  loader is cancelled rather than left running after the SDK's own timeout.
+- `NotIdentified` from chat operations now says the identity token is missing, which is what is
+  checked, rather than the account uid.
 
 ## [1.3.2] — 2026-08-17
 
