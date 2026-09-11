@@ -1,7 +1,5 @@
-# Owner-scoped inbox page. `properties` is a generic issue-property equality
-# filter (key -> scalar) matched by JSONB containment against the conversation's
-# current non-test issues. Pagination is client-derived from
-# SummarizeInAppChatConversations.
+# One inbox page for the visitor. `properties` is an equality filter (key -> scalar);
+# the total for pagination comes from SummarizeInAppChatConversations.
 query FetchInAppChatConversations(
   $identityId: UUID!
   $limit: Int

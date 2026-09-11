@@ -11,8 +11,8 @@ import kotlinx.serialization.json.put
 /**
  * Frames exchanged with the realtime server.
  *
- * The wire shape is `{"type": "SCREAMING_SNAKE_CASE", "data": {...}}` — serde's
- * tag/content tagging on the server side — and every `data` object is camelCase.
+ * The wire shape is `{"type": "SCREAMING_SNAKE_CASE", "data": {...}}`, and every `data`
+ * object is camelCase.
  *
  * Unknown types decode to [Unknown] rather than throwing: the server adds frame types
  * (assistant streams, product releases) that an older SDK must ignore instead of dropping

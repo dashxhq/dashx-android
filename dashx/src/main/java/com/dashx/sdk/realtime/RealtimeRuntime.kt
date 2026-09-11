@@ -403,7 +403,7 @@ internal class RealtimeRuntime(
         private const val MAX_RECONNECT_DELAY_MS = 30_000L
         private const val TERMINAL_CLOSE_CODE_MIN = 4400
         private const val TERMINAL_CLOSE_CODE_MAX = 4499
-        /** Mirrors HTTP 401 (websocket_handler.rs) — the only close a token refresh can fix. */
+        /** Mirrors HTTP 401 — the only close a token refresh can fix. */
         private const val CLOSE_CODE_UNAUTHORIZED = 4401
         internal const val ACK_TIMEOUT_MS = 10_000L
 

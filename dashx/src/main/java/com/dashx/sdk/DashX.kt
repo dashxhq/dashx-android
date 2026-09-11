@@ -2015,8 +2015,7 @@ class DashX {
 
             // Sends the unsubscribe mutation after waiting for in-flight
             // subscribes to drain — required so the backend sees
-            // subscribe → unsubscribe in order (no per-(uid, kind, value)
-            // server-side lock).
+            // subscribe → unsubscribe in order.
             //
             // `reportResult` is false on the Firebase-failure path where
             // we still attempt backend cleanup but the consumer's onError

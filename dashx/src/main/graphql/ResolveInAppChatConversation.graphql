@@ -1,8 +1,6 @@
-# Visitor-initiated "End chat": completes the conversation's active issues and
-# returns the UPDATED summary. ACTIVE -> RESOLVED is the only supported case; a
-# DRAFT or already-terminal conversation is a no-op returning its status
-# unchanged, so apply the returned status as-is. The conversation stays
-# replyable — a later message reopens it with a fresh issue.
+# Visitor-initiated "End chat", returning the updated summary. Only ACTIVE -> RESOLVED
+# changes anything; any other state comes back unchanged, so apply the returned status
+# as-is. The conversation stays replyable and a later message reopens it.
 mutation ResolveInAppChatConversation($identityId: UUID!, $conversationId: UUID!) {
   resolveInAppChatConversation(
     input: { identityId: $identityId, conversationId: $conversationId }

@@ -12,9 +12,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 
 /**
- * Retries a request rejected before resolver execution with a freshly loaded identity token — once.
+ * Retries a request rejected before execution with a freshly loaded identity token — once.
  *
- * The auth signal is NOT an HTTP status: the backend returns `UNAUTHORIZED` in
+ * The auth signal is NOT an HTTP status: the server returns `UNAUTHORIZED` in
  * `errors[].extensions.code` of an HTTP 200. The retry predicate requires all three conditions —
  * `data == null`, a non-empty `errors` list, and every error `UNAUTHORIZED`:
  *
@@ -76,14 +76,14 @@ internal class AuthRetryInterceptor(
 
     private fun Error.isUnauthorized() = (extensions?.get("code") as? String) == "UNAUTHORIZED"
 
-    /** A structured `extensions.reason` wins when the backend sends one; the message text is the fallback. */
+    /** A structured `extensions.reason` wins when present; the message text is the fallback. */
     private fun Error.reason(): String? = extensions?.get("reason") as? String
 
     private fun Error.isExpiry(): Boolean =
         reason()?.let { it == REASON_IDENTITY_TOKEN_EXPIRED } ?: (message.startsWith("Incorrect Identity Token") && message.contains("Expired"))
 
     /**
-     * The backend reports every token problem as `UNAUTHORIZED`; the reason (or, absent one, the
+     * Every token problem arrives as `UNAUTHORIZED`; the reason (or, absent one, the
      * message) tells expiry apart from rejections a fresh token cannot fix (bad signature, malformed
      * token, deleted account, wrong public key). Unknown messages refresh — failing open costs one
      * provider call, failing closed would leave an expired token in place.

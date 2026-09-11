@@ -272,7 +272,7 @@ synchronously without a guard):
 ### Changed
 - `DashX.subscribe()` now sends `ContactMetadata` in the `subscribeContact`
   mutation — `app.{identifier, name, version}` (host app identity, used by
-  the backend to scope broadcasts via `FCMSettings.app_identifier`) and
+  the backend to scope broadcasts) and
   `library.{name, version}` (SDK slug + version, used by the backend to gate
   per-contact behaviour by SDK version).
 - `SubscribeContactInput.metadata` is now typed as `JSON` (kotlinx

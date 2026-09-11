@@ -93,7 +93,7 @@ internal fun DashX.Companion.fetchInAppChatMessagesJob(
     conversationId: String,
     limit: Int? = null,
     page: Int? = null,
-    /** Cursor mode: rows strictly after this message. The backend rejects a non-null [page] with it. */
+    /** Cursor mode: rows strictly after this message. Mutually exclusive with [page]. */
     afterMessageId: String? = null,
     onSuccess: (result: List<FetchInAppChatMessagesQuery.FetchInAppChatMessage>) -> Unit,
     onError: (error: DashXError) -> Unit

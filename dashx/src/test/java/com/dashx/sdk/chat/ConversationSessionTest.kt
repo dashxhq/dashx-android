@@ -416,8 +416,8 @@ class ConversationSessionTest {
         val backend = FakeBackend()
         val (_, lease) = openReady(backend, listOf(msg("m1", 1)))
 
-        // m2 and m3 commit server-side, but m3's frame overtakes m2's (frames are keyed per
-        // message, not per conversation) and m2's is lost with the connection. m3 is displayed,
+        // m2 and m3 commit server-side, but m3's frame overtakes m2's (frames can arrive out of
+        // order) and m2's is lost with the connection. m3 is displayed,
         // yet the server has only confirmed history through m1.
         backend.handles[0].onFrame(frame("m3", 3))
         awaitUntil(what = "m3 displayed") { readyIds(lease) == listOf("m1", "m3") }

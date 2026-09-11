@@ -103,8 +103,8 @@ object DashXPush {
     }
 
     /**
-     * Client-side defence in depth over the server's read-cursor suppression: a chat push for a
-     * conversation the visitor is looking at RIGHT NOW is not displayed. Decided synchronously from
+     * A chat push for a conversation the visitor is looking at RIGHT NOW is not displayed, even
+     * if it was sent before the read position caught up. Decided synchronously from
      * one published snapshot — never from mutable chat state. The host decider gets the final say.
      */
     private fun shouldDisplay(payload: DashXPayload): Boolean {

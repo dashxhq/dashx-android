@@ -1,7 +1,6 @@
-# Marks ONE conversation read through `lastMessageId` — required, and validated
-# server-side to be a visible message of that conversation, so it must be a real
-# server id (never an optimistic local one). Conversation-scoped and idempotent;
-# the cursor only advances in message order.
+# Marks one conversation read through `lastMessageId`, which must be a server message id
+# of that conversation, never a local optimistic one. Idempotent; the read position only
+# moves forward.
 mutation MarkInAppChatConversationRead(
   $identityId: UUID!
   $conversationId: UUID!

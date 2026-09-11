@@ -276,10 +276,9 @@ internal class ConversationSession(
     private var oldestFetchedPage = Int.MAX_VALUE
     /** Newest unconfirmed tail id a resync was already requested for — one request per tail. */
     private var resyncRequestedFor: String? = null
-    /** Server-confirmed reconnect cursor: the backend has confirmed that every visible message
-     * through this id is in [messages]. Advanced only by snapshot/cursor FETCH results, never by
-     * realtime frames — frames can arrive out of commit order (they are keyed per message, not per
-     * conversation), and a frame-advanced cursor would leap past a lost sibling that no
+    /** Server-confirmed reconnect cursor: every message through this id is in [messages].
+     * Advanced only by snapshot/cursor FETCH results, never by realtime frames — frames can
+     * arrive out of order, and a frame-advanced cursor would leap past a lost sibling that no
      * `afterMessageId` walk could ever return. */
     private var lastKnownMessageId: String? = null
 
@@ -550,7 +549,7 @@ internal class ConversationSession(
         if (!anyLeaseVisible()) return
         val newest = messages.lastOrNull()?.id ?: return
         if (newest == markedMessageId) return
-        // Read-through is a server-side tuple comparison, so marking a live frame that overtook a
+        // Read-through is evaluated by message order, so marking a live frame that overtook a
         // lost sibling would mark the unseen sibling read and kill its push. Only the
         // server-confirmed cursor is a safe boundary: an unconfirmed tail reconciles first — which
         // also surfaces any gap on screen — and the completed cycle re-enters here. One resync per

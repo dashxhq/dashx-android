@@ -10,9 +10,7 @@ import kotlinx.serialization.json.JsonObject
 data class ChatMessage(
     val id: String,
     val conversationId: String,
-    /** The backend's raw idempotency key: `in_app_chat:<clientMessageId>` for visitor sends,
-     * `in_app_chat_reply:<uuid>` and similar for agent, AI, and follow-up rows. Prefer
-     * [clientMessageId] for reconciling a pending send. */
+    /** Raw server key. Prefer [clientMessageId] for reconciling a pending send. */
     val externalUid: String?,
     val senderId: String?,
     /** `USER` for the visitor's own message; anything else is an agent or AI reply. */
@@ -34,10 +32,10 @@ data class ChatMessage(
             ?.removePrefix(CLIENT_MESSAGE_PREFIX)
 
     companion object {
-        /** What the backend prepends to a visitor's `clientMessageId` to form `externalUid`. */
+        /** Prefix under which a visitor's `clientMessageId` is returned in `externalUid`. */
         internal const val CLIENT_MESSAGE_PREFIX = "in_app_chat:"
 
-        /** The backend's own total order: `(turn_seq, created_at, id)`. */
+        /** Server message order. */
         val ORDER: Comparator<ChatMessage> =
             compareBy({ it.turnSeq }, { it.createdAt ?: "" }, { it.id })
 
@@ -87,7 +85,7 @@ enum class DashXSubscriptionEnd { SessionEnded, Unsubscribed }
 
 /**
  * Internal shared-state key. Identity participates because the same conversation id under a
- * different chat identity is a different backend resource — sharing state across identities would
- * hide a mismatch the backend rejects.
+ * different chat identity is a different resource; sharing state across identities would hide
+ * a mismatch the server rejects.
  */
 internal data class ChatSessionKey(val chatIdentityId: String, val conversationId: String)
