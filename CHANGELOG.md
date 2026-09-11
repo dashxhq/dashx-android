@@ -4,128 +4,46 @@ All notable changes to `dashx-android` are documented in this file. Format loose
 
 ## [1.4.0] — 2026-09-11
 
+In-app chat. The SDK now manages a realtime WebSocket connection and exposes a
+conversation API on top of it. Conversation creation is server-only: the host's
+backend creates the conversation and returns the `(conversationId, chatIdentityId)`
+pair the SDK consumes.
+
 ### Added
 
-In-app chat. The SDK now manages a realtime WebSocket connection and exposes a
-conversation API on top of it. Conversation **creation is server-only** — the
-host's backend creates the conversation and returns the
-`(conversationId, chatIdentityId)` pair everything below consumes.
-
-- **`DashX.chat(chatIdentityId)`** — identity-scoped chat surface.
-  - `openConversation(conversationId): DashXConversationLease` — a managed
-    handle exposing `state: StateFlow<ConversationState>` (`Loading` /
-    `Ready(messages)` / `Error`, plus listener add/remove for non-coroutine
-    hosts), `sendMessage(content)` (returns the client message id
-    *synchronously* — the idempotency key a host-triggered retry must reuse;
-    the committed row is merged into `state` on success and reports the key
-    back as `ChatMessage.clientMessageId`),
-    `loadPreviousPage()`, `setVisible(Boolean)` (drives read-marking and push
-    suppression), `setOnTerminated(...)`, and idempotent `close()`. Leases on
-    the same `(identity, conversation)` share one subscription and message
-    list; shared state tears down when the last lease closes. After a
-    reconnect, missed messages are fetched forward from the newest
-    server-confirmed message (`afterMessageId` cursor — advanced only by fetch
-    results, never by live frames, which can arrive out of order), preserving
-    already-loaded history; live frames are merged by server id, and
-    read-marking is debounced. A
-    subscription that is never acknowledged (invalid or unauthorized
-    conversation) surfaces as `ConversationState.Error(SubscriptionFailed)`
-    instead of loading forever.
-  - `fetchConversations` / `fetchConversation` / `summarizeConversations` /
-    `summarizeUnread` / `resolveConversation` for conversation lists and
-    counts. `summarizeUnread` is an on-demand query — the SDK does not push
-    updates to it; re-query on the triggers the host cares about (foreground,
-    push receipt, mark-read).
-- **Raw chat operations** as `DashX` extensions, for hosts that skip the
-  managed lease: `sendInAppChatMessage`, `fetchInAppChatMessages`,
-  `summarizeInAppChatMessages`, `fetchInAppChatConversations`,
-  `fetchInAppChatConversation`, `summarizeInAppChatConversations`,
-  `summarizeInAppChatUnread`, `markInAppChatConversationRead`,
-  `resolveInAppChatConversation`.
-- **Managed realtime connection.** One WebSocket for the whole SDK, owned by an
-  internal single-writer actor. It connects only when something is subscribed,
-  the app is foregrounded, and an identity token exists; disconnects on
-  background; reconnects with exponential backoff + jitter (1s–30s). A terminal
-  close in the 4400 band stops reconnecting; 4401 specifically triggers one
-  token refresh through the registered provider — a refreshed token that is
-  rejected again stays `AuthenticationFailed` rather than looping, and 4403
-  never burns a refresh. Observe it via `DashX.connectionState`
-  (`StateFlow<ConnectionState>`: `Idle` / `Connecting` / `Connected` /
-  `Suspended` / `AuthenticationFailed`) or `addConnectionStateListener` /
-  `removeConnectionStateListener`. The realtime URI is overridable via
-  `DashX.setRealtimeBaseUri` — a separate setter, so `configure()` keeps its
-  pre-1.4 JVM signature.
-- **`DashX.setIdentityTokenProvider(uid, DashXTokenProvider)`** — on-demand
-  identity-token loading. The SDK calls the provider when it needs a token
-  (with `forceRefresh = true` after the server rejects the current one),
-  single-flights concurrent loads, and times a hung provider out after 30s into
-  `AuthenticationFailed`. `DashXTokenProvider.suspending {}` and `.blocking {}`
-  adapters cover coroutine and Java hosts. Register it in
-  `Application.onCreate()`: the cached token survives process death, the
-  provider cannot.
-- **Composable push.** Hosts with their own `FirebaseMessagingService` can
-  delegate to the SDK instead of registering ours:
-  `DashXPush.isDashXMessage(remoteMessage)`,
-  `DashXPush.handleMessage(context, remoteMessage): Boolean` (`true` =
-  recognized and consumed — displayed or deliberately suppressed), and
-  `DashXPush.onNewToken(token)`; remove the built-in service with
-  `tools:node="remove"`. Chat pushes collapse per conversation in the tray, are
-  suppressed while that conversation is visible in a foregrounded app, and are
-  dismissed when it becomes visible. `DashX.setNotificationDisplayDecider` lets
-  a host veto display of any notification it renders in-app itself.
-- **`DashXError.SessionEnded`** — delivered to a lease's `setOnTerminated`
-  callback (and its terminal `Error` state) when the session ends underneath
-  it: identity switch, `reset()`, or `shutdown()`.
-- **`DashXError.SubscriptionFailed`** — a realtime channel subscription that
-  was never acknowledged within its deadline.
-- **`DashXError.GraphQLError.code`** — the backend's `extensions.code`
-  (`UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `UNPROCESSABLE_ENTITY`, ...) when
-  every error in the response carried the same one. The chat synchronizer uses
-  it to rebuild only on a genuinely rejected cursor; a token, permission, or
-  server failure during reconnect no longer replaces a loaded conversation
-  with `Error` unless it is terminal for that conversation.
-
-- **Unauthenticated fallback for expired identity tokens.** The identity token rides on every
-  GraphQL call. When the backend rejects it as expired and no provider is bound (or the refresh
-  fails), the SDK now drops the token and retries once on the public key alone, so
-  `identify`/`track`/`subscribe` keep working for hosts that never open chat — the pre-1.4
-  behaviour. Chat operations then report `NotIdentified` locally. `AuthRetryInterceptor` also
-  prefers a structured `extensions.reason` (`IDENTITY_TOKEN_EXPIRED`) over message text when the
-  backend sends one.
-- **`DashX.hasIdentityToken`** — whether an identity token is currently held.
+- **`DashX.chat(chatIdentityId)`** — `openConversation(conversationId)` returns a
+  `DashXConversationLease` with `state: StateFlow<ConversationState>` (`Loading` /
+  `Ready(messages)` / `Error`), `sendMessage` (returns the client message id, the
+  idempotency key a retry must reuse), `loadPreviousPage`, `setVisible` (drives
+  read-marking and push suppression) and `close`. Missed messages are reconciled after
+  a reconnect. Also `fetchConversations`, `fetchConversation`, `summarizeConversations`,
+  `summarizeUnread` and `resolveConversation`, plus the same operations as raw `DashX`
+  extensions for hosts that skip the managed lease.
+- **Managed realtime connection** — connects only while a conversation is open, the
+  app is foregrounded and an identity token exists; reconnects with backoff. Observe it
+  via `DashX.connectionState` or `addConnectionStateListener`; override the endpoint
+  with `DashX.setRealtimeBaseUri`.
+- **`DashX.setIdentityTokenProvider(uid, DashXTokenProvider)`** — on-demand identity
+  token loading, called with `forceRefresh = true` after a rejection. Register it in
+  `Application.onCreate()`.
+- **Composable push** — `DashXPush.isDashXMessage` / `handleMessage` / `onNewToken`
+  for hosts with their own `FirebaseMessagingService`. Chat pushes collapse per
+  conversation and are suppressed while that conversation is visible.
+  `DashX.setNotificationDisplayDecider` lets a host veto any notification.
+- `DashXError.SessionEnded`, `DashXError.SubscriptionFailed`, and
+  `DashXError.GraphQLError.code` (the response's `extensions.code`).
 
 ### Changed
 
-- **GraphQL requests read the identity token per request.** Previously
-  `setIdentity` rebuilt the Apollo client to bake the token into headers, so a
-  request built just before an identity change could still carry the old token.
-  The client is now built once; an HTTP interceptor attaches the current token
-  to every request.
-- **Auth retry.** A request rejected before execution with `UNAUTHORIZED` (and
-  no data) is retried once after refreshing the identity token through the
-  registered provider. Rejections a new token cannot fix (bad signature,
-  malformed token, deleted account, wrong public key) are returned as-is
-  without a refresh. `FORBIDDEN` and partial-data responses never retry, and
-  the retry is generation-guarded: if the identity switched while the refresh
-  ran, the original rejection is returned rather than resending the old
-  request under the new identity's token.
-- **`setIdentity` / `reset()` / `shutdown()` now manage the chat and realtime
-  subsystems.** Switching to a different uid or calling `reset()` ends open
-  chat sessions (leases receive `SessionEnded`) and recycles the realtime
-  connection under the new credentials. `shutdown()` releases the connection
-  and chat resources along with the rest of the SDK while — as before — leaving
-  the stored identity intact for the next `configure()`.
-- `DashXFirebaseMessagingService` delegates to `DashXPush`, so the built-in
-  service and a host's custom service share one notification pipeline. No
-  behavior change for hosts using the built-in service.
-- `setIdentity(uid, null)` for the current uid now keeps the held token instead of clearing it;
-  use `reset()` to clear. A null token on an identity switch still applies.
-- Host callbacks passed to queries/mutations and `onNotificationReceived` listeners are guarded:
-  a throwing callback is logged instead of killing the process.
-- `DashXTokenProvider.suspending` runs loaders on a shared scope with a 35 s bound, so a hung
-  loader is cancelled rather than left running after the SDK's own timeout.
-- `NotIdentified` from chat operations now says the identity token is missing, which is what is
-  checked, rather than the account uid.
+- The identity token is attached to every GraphQL request at send time, and a request
+  rejected as `UNAUTHORIZED` before execution is retried once after a token refresh.
+  When no provider can refresh an expired token, the SDK drops it and continues on the
+  public key alone, so `identify` / `track` / `subscribe` keep working as in 1.3.x.
+- `setIdentity(uid, null)` for the current uid keeps the held token; `reset()` clears it.
+  Switching uid, `reset()` and `shutdown()` end open chat sessions (leases receive
+  `SessionEnded`) and recycle the realtime connection.
+- `DashXFirebaseMessagingService` delegates to `DashXPush`. No behaviour change for
+  hosts using the built-in service.
 
 ## [1.3.2] — 2026-08-17
 

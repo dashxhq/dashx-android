@@ -182,6 +182,8 @@ internal interface ChatSessionBackend {
     )
     fun setConversationVisible(conversationId: String, visible: Boolean)
     fun dismissConversationNotifications(conversationId: String)
+    /** Read marking requires a foregrounded process, not just a visible lease. */
+    fun isAppForeground(): Boolean = true
 }
 
 internal object DashXChatSessionBackend : ChatSessionBackend {
@@ -236,6 +238,8 @@ internal object DashXChatSessionBackend : ChatSessionBackend {
     override fun dismissConversationNotifications(conversationId: String) {
         com.dashx.android.push.DashXPush.dismissConversation(conversationId)
     }
+
+    override fun isAppForeground(): Boolean = DashX.pushRuntime.get().isForeground
 }
 
 /**
@@ -273,6 +277,8 @@ internal class ConversationSession(
     private var syncing = false
     private var resyncPending = false
     private var rebuildUsed = false
+    /** Transient failures of the FIRST load retry with backoff; a fresh acknowledgement resets it. */
+    private var initialSyncAttempts = 0
     private var oldestFetchedPage = Int.MAX_VALUE
     /** Newest unconfirmed tail id a resync was already requested for — one request per tail. */
     private var resyncRequestedFor: String? = null
@@ -318,6 +324,7 @@ internal class ConversationSession(
     private fun onEstablished(isResubscribe: Boolean) {
         DashXLog.d(TAG, "Channel acknowledged for ${key.conversationId} (isResubscribe=$isResubscribe)")
         scope.launch(syncLane) {
+            initialSyncAttempts = 0
             if (syncing) {
                 // A reconnect acknowledged mid-cycle: the running fetch may predate the gap, so
                 // re-run once this cycle completes rather than assuming it covered everything.
@@ -364,11 +371,24 @@ internal class ConversationSession(
             if (t is kotlinx.coroutines.CancellationException) throw t
             val error = (t as? com.dashx.android.DashXException)?.error
                 ?: DashXError.NetworkError(t.message ?: "chat synchronization failed")
-            if (snapshotDone && keepsSnapshot(error)) {
-                // Keep the displayed snapshot on a transient failure; the next reconnect retries.
-                DashXLog.e(TAG, "Reconciliation failed for ${key.conversationId}: ${error.message}")
-            } else {
-                publishState(ConversationState.Error(error))
+            when {
+                snapshotDone && keepsSnapshot(error) -> {
+                    // Keep the displayed snapshot on a transient failure; the next reconnect retries.
+                    DashXLog.e(TAG, "Reconciliation failed for ${key.conversationId}: ${error.message}")
+                }
+                !snapshotDone && keepsSnapshot(error) && initialSyncAttempts < MAX_INITIAL_SYNC_RETRIES -> {
+                    // Nothing is on screen yet and the socket may well stay connected, so no
+                    // reconnect would ever re-run this: retry a transient failure ourselves.
+                    initialSyncAttempts += 1
+                    val delayMs = cursorRetryDelay(initialSyncAttempts)
+                    DashXLog.e(TAG, "Initial load failed for ${key.conversationId} " +
+                        "(attempt $initialSyncAttempts, retrying in ${delayMs}ms): ${error.message}")
+                    scope.launch(syncLane) {
+                        delay(delayMs)
+                        if (!syncing && !snapshotDone) runSync()
+                    }
+                }
+                else -> publishState(ConversationState.Error(error))
             }
             // Buffering stays on: a partial live list must not follow the Error, and the next
             // acknowledged sync starts from a fresh buffer anyway.
@@ -545,8 +565,11 @@ internal class ConversationSession(
 
     private fun anyLeaseVisible() = leases.any { it.visibleNow }
 
+    /** A visible lease in a foregrounded process; re-checked at every step of the mark path. */
+    private fun canMarkRead() = anyLeaseVisible() && backend.isAppForeground()
+
     private fun maybeMarkRead() {
-        if (!anyLeaseVisible()) return
+        if (!canMarkRead()) return
         val newest = messages.lastOrNull()?.id ?: return
         if (newest == markedMessageId) return
         // Read-through is evaluated by message order, so marking a live frame that overtook a
@@ -564,6 +587,7 @@ internal class ConversationSession(
         pendingMarkJob?.cancel()
         pendingMarkJob = scope.launch(syncLane) {
             delay(MARK_DEBOUNCE_MS) // coalesce the burst a history load or rapid exchange produces
+            if (!canMarkRead()) return@launch // hidden or backgrounded during the debounce
             markNow(newest)
         }
     }
@@ -622,7 +646,9 @@ internal class ConversationSession(
         // The leases list is already cleared; the captured list still gets the terminal state.
         toNotify.forEach { lease ->
             lease.notifyStateListeners(terminal)
-            lease.terminatedCallback?.let { cb -> DashX.launchCallback { cb(DashXSubscriptionEnd.SessionEnded) } }
+            lease.terminatedCallback?.let { cb ->
+                DashX.launchCallback { runCatching { cb(DashXSubscriptionEnd.SessionEnded) } }
+            }
         }
         ChatCoordinator.remove(key, this)
         scope.cancel()
@@ -727,6 +753,7 @@ internal class ConversationSession(
         internal const val PAGE_SIZE = 50
         private const val BUFFER_LIMIT = 500
         private const val MARK_DEBOUNCE_MS = 400L
+        private const val MAX_INITIAL_SYNC_RETRIES = 3
         private const val CURSOR_RETRY_BASE_MS = 1_000L
         private const val CURSOR_RETRY_MAX_MS = 30_000L
     }

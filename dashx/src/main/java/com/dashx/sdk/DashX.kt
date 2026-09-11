@@ -759,15 +759,15 @@ class DashX {
 
         /**
          * Drops the held identity token when no provider can refresh it, so requests fall back to the
-         * public key. Returns false when a provider is bound (the retry path refreshes instead) or no
-         * token is held.
+         * public key. Returns false when a provider is bound (the retry path refreshes instead) or the
+         * held token is no longer [rejected] — a newer token must never be cleared by an old rejection.
          */
-        internal fun dropUnrefreshableIdentityToken(): Boolean {
-            if (boundProvider != null) return false
+        internal fun dropUnrefreshableIdentityToken(rejected: String?): Boolean {
+            if (boundProvider != null || rejected == null) return false
             val before = account.getAndUpdate {
-                if (it.identityToken == null) it else it.copy(identityToken = null, tokenEpoch = it.tokenEpoch + 1)
+                if (it.identityToken != rejected) it else it.copy(identityToken = null, tokenEpoch = it.tokenEpoch + 1)
             }
-            if (before.identityToken == null) return false
+            if (before.identityToken != rejected) return false
             DashXLog.i(tag, "Identity token expired with no provider bound; continuing unauthenticated")
             saveToStorage()
             realtimeRuntime?.onIdentityChanged()

@@ -75,10 +75,18 @@ private class FakeBackend : ChatSessionBackend {
         }
     }
 
+    /** Thrown by the next [summarizeMessages] calls while positive; models a failing initial load. */
+    @Volatile var summarizeFailures = 0
+    @Volatile var summarizeFailure: Throwable = DashXException(DashXError.NetworkError("boom"))
+    @Volatile var foreground = true
+
     override suspend fun summarizeMessages(conversationId: String): Int {
         summarizeCalls.incrementAndGet()
+        if (summarizeFailures > 0) { summarizeFailures -= 1; throw summarizeFailure }
         return count
     }
+
+    override fun isAppForeground(): Boolean = foreground
 
     override suspend fun fetchPage(conversationId: String, limit: Int, page: Int): List<ChatMessage> {
         fetchPageCalls.add(page)
@@ -137,6 +145,64 @@ class ConversationSessionTest {
         backend.handles[0].onEstablished(false)
         awaitUntil(what = "initial Ready") { readyIds(lease) == history.takeLast(50).map { it.id } || readyIds(lease) == history.map { it.id } }
         return session to lease
+    }
+
+    @Test
+    fun initialLoad_transientFailure_retriesAndBecomesReady() {
+        val backend = FakeBackend()
+        backend.count = 1
+        backend.pages = mapOf(1 to listOf(msg("m1", 1)))
+        backend.summarizeFailures = 1
+
+        val session = ConversationSession(key, backend)
+        val lease = session.newLease()!!
+        backend.handles[0].onEstablished(false)
+
+        awaitUntil(what = "first attempt failed") { backend.summarizeCalls.get() == 1 }
+        Thread.sleep(100)
+        assertTrue("stays Loading while the retry is pending", lease.state.value is ConversationState.Loading)
+        awaitUntil(what = "Ready after retry") { readyIds(lease) == listOf("m1") }
+        assertEquals(2, backend.summarizeCalls.get())
+        session.endSession()
+    }
+
+    @Test
+    fun initialLoad_terminalFailure_reportsErrorWithoutRetry() {
+        val backend = FakeBackend()
+        backend.summarizeFailures = 1
+        backend.summarizeFailure = DashXException(DashXError.GraphQLError("gone", DashXError.GraphQLError.NOT_FOUND))
+
+        val session = ConversationSession(key, backend)
+        val lease = session.newLease()!!
+        backend.handles[0].onEstablished(false)
+
+        awaitUntil(what = "Error") { lease.state.value is ConversationState.Error }
+        Thread.sleep(1200)
+        assertEquals("no retry for a terminal failure", 1, backend.summarizeCalls.get())
+        session.endSession()
+    }
+
+    @Test
+    fun markRead_requiresForegroundAndVisibilityAtMarkTime() {
+        val backend = FakeBackend()
+        val (session, lease) = openReady(backend, listOf(msg("m1", 1)))
+
+        backend.foreground = false
+        lease.setVisible(true)
+        Thread.sleep(700)
+        assertTrue("backgrounded: nothing marked", backend.markReadIds.isEmpty())
+
+        backend.foreground = true
+        session.onAppForegrounded()
+        awaitUntil(what = "marked once foregrounded") { backend.markReadIds == listOf("m1") }
+
+        // Hidden during the debounce: the pending mark must not fire.
+        backend.handles[0].onFrame(frame("m2", 2))
+        awaitUntil(what = "m2 displayed") { readyIds(lease) == listOf("m1", "m2") }
+        lease.setVisible(false)
+        Thread.sleep(700)
+        assertEquals(listOf("m1"), backend.markReadIds.toList())
+        session.endSession()
     }
 
     @Test

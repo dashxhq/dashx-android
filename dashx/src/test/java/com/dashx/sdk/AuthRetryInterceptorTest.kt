@@ -61,13 +61,15 @@ class AuthRetryInterceptorTest {
         refreshResult: Boolean = true,
         generation: AtomicLong = AtomicLong(1),
         onRefresh: () -> Unit = {},
-        dropResult: Boolean = false
+        dropResult: Boolean = false,
+        /** Overrides the generation read; each call is one read, so a sequence can model a switch. */
+        generationProvider: (() -> Long)? = null
     ): Pair<ApolloResponse<SummarizeInAppChatMessagesQuery.Data>, Int> {
         val refreshes = AtomicInteger(0)
         val interceptor = AuthRetryInterceptor(
             refreshToken = { refreshes.incrementAndGet(); onRefresh(); refreshResult },
-            sessionGeneration = { generation.get() },
-            dropExpiredToken = { drops.incrementAndGet(); dropResult }
+            sessionGeneration = { generationProvider?.invoke() ?: generation.get() },
+            dropExpiredToken = { _ -> drops.incrementAndGet(); dropResult }
         )
         val result = runBlocking { interceptor.intercept(request, chain).first() }
         return result to refreshes.get()
@@ -83,6 +85,21 @@ class AuthRetryInterceptorTest {
         assertEquals(1, refreshes)
         assertEquals(1, drops.get())
         assertEquals(7, result.data?.summarizeInAppChatMessages?.count)
+    }
+
+    @Test
+    fun expiredToken_identitySwitchedInFlight_neitherRefreshesNorDropsNorRetries() {
+        val rejected = unauthorized("Incorrect Identity Token: Expired.")
+        val chain = FakeChain(listOf(rejected, response(data = executedData())))
+        // First read (request start) sees generation 1; the read after the response sees 2.
+        val reads = AtomicLong(1)
+
+        val (result, refreshes) = run(chain, refreshResult = false, dropResult = true, generationProvider = { reads.getAndIncrement() })
+
+        assertEquals(1, chain.proceeds.get())
+        assertEquals(0, refreshes)
+        assertEquals(0, drops.get())
+        assertSame(rejected, result)
     }
 
     @Test

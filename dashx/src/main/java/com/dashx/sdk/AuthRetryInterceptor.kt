@@ -24,14 +24,17 @@ import kotlinx.coroutines.flow.flow
  * - An `UNAUTHORIZED` whose message names a rejection a new token cannot fix (bad signature,
  *   malformed token, deleted account, wrong public key) is returned as-is; see [isRefreshable].
  *
- * The retry is generation-guarded: if the identity switched while the refresh ran, the new token
- * belongs to a different account and the old-era request must not be resent under it.
+ * The retry is generation-guarded: if the identity switched while the request or the refresh was
+ * in flight, the rejection belongs to the old session — nothing is refreshed, dropped, or resent
+ * under the new one. Dropping an expired token is also value-guarded: only the exact token that
+ * was rejected is cleared, never a newer one installed since.
  */
 internal class AuthRetryInterceptor(
     private val refreshToken: suspend () -> Boolean = { DashX.awaitTokenRefresh() },
     private val sessionGeneration: () -> Long = { DashX.currentSessionGeneration() },
-    /** Clears an expired token nothing can refresh, so the retry runs on the public key alone. */
-    private val dropExpiredToken: () -> Boolean = { DashX.dropUnrefreshableIdentityToken() }
+    private val currentToken: () -> String? = { DashX.getIdentityToken() },
+    /** Clears the rejected token when nothing can refresh it and it is still the one held. */
+    private val dropExpiredToken: (rejected: String?) -> Boolean = { DashX.dropUnrefreshableIdentityToken(it) }
 ) : ApolloInterceptor {
 
     override fun <D : Operation.Data> intercept(
@@ -39,9 +42,14 @@ internal class AuthRetryInterceptor(
         chain: ApolloInterceptorChain
     ): Flow<ApolloResponse<D>> = flow {
         val generationAtStart = sessionGeneration()
+        val tokenAtStart = currentToken()
         val first = chain.proceed(request).first()
         if (!isPreExecutionUnauthorized(first)) {
             emit(first)
+            return@flow
+        }
+        if (sessionGeneration() != generationAtStart) {
+            emit(first) // rejected under the previous identity; the new one is not involved
             return@flow
         }
         // awaitTokenRefresh joins any in-flight load and completes only after the new token is
@@ -50,7 +58,7 @@ internal class AuthRetryInterceptor(
             // No provider (a host that never opened chat) or the refresh failed. An expired token
             // would otherwise fail every call, including identify/track/subscribe, which pre-1.4
             // hosts ran unauthenticated; drop it and retry that way once.
-            if (isExpired(first) && dropExpiredToken()) {
+            if (isExpired(first) && dropExpiredToken(tokenAtStart)) {
                 emitAll(chain.proceed(request))
             } else {
                 emit(first)
