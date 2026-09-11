@@ -1,0 +1,10 @@
+# Visitor-initiated "End chat", returning the updated summary. Only ACTIVE -> RESOLVED
+# changes anything; any other state comes back unchanged, so apply the returned status
+# as-is. The conversation stays replyable and a later message reopens it.
+mutation ResolveInAppChatConversation($identityId: UUID!, $conversationId: UUID!) {
+  resolveInAppChatConversation(
+    input: { identityId: $identityId, conversationId: $conversationId }
+  ) {
+    ...ChatConversationSummaryFragment
+  }
+}

@@ -1,0 +1,7 @@
+query FetchInAppChatConversation($identityId: UUID!, $conversationId: UUID!) {
+  fetchInAppChatConversation(
+    input: { identityId: $identityId, conversationId: $conversationId }
+  ) {
+    ...ChatConversationSummaryFragment
+  }
+}

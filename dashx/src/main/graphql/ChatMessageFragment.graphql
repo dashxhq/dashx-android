@@ -1,0 +1,13 @@
+fragment ChatMessageFragment on Message {
+  id
+  conversationId
+  renderedContent
+  # Carries the visitor's clientMessageId; the SDK exposes it as ChatMessage.clientMessageId.
+  externalUid
+  senderId
+  # `USER` for the visitor's own message; anything else is an agent or AI reply.
+  aiRole
+  turnSeq
+  sentAt
+  createdAt
+}
