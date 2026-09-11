@@ -2,7 +2,7 @@
 
 All notable changes to `dashx-android` are documented in this file. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
-## [1.4.0] — Unreleased
+## [1.4.0] — 2026-09-11
 
 ### Added
 
