@@ -487,6 +487,34 @@ class ConversationSessionTest {
     }
 
     @Test
+    fun ready_reportsOlderHistory_untilTheFirstPageIsFetched() {
+        val backend = FakeBackend()
+        backend.count = 51
+        backend.pages = mapOf(2 to listOf(msg("m051", 51)), 1 to (1..50).map { msg("m%03d".format(it), it.toLong()) })
+        val session = ConversationSession(key, backend)
+        val lease = session.newLease()!!
+        backend.handles[0].onEstablished(false)
+        awaitUntil(what = "last page Ready") { readyIds(lease) == listOf("m051") }
+        assertTrue("one row on screen, fifty behind it", (lease.state.value as ConversationState.Ready).hasOlderMessages)
+
+        lease.loadPreviousPage()
+        awaitUntil(what = "first page prepended") { readyIds(lease)?.size == 51 }
+        assertEquals(false, (lease.state.value as ConversationState.Ready).hasOlderMessages)
+
+        // Nothing left to page: another request is a no-op, not a fetch.
+        lease.loadPreviousPage()
+        Thread.sleep(200)
+        assertEquals(listOf(2, 1), backend.fetchPageCalls)
+    }
+
+    @Test
+    fun ready_singlePageConversation_hasNoOlderHistory() {
+        val backend = FakeBackend()
+        val (_, lease) = openReady(backend, listOf(msg("m1", 1)))
+        assertEquals(false, (lease.state.value as ConversationState.Ready).hasOlderMessages)
+    }
+
+    @Test
     fun loadPreviousPage_neverMovesTheReconnectCursorBackward() {
         val backend = FakeBackend()
         val newest = (51..60).map { msg("m%03d".format(it), it.toLong()) }
