@@ -1,0 +1,21 @@
+# One inbox page for the visitor. `properties` is an equality filter (key -> scalar);
+# the total for pagination comes from SummarizeInAppChatConversations.
+query FetchInAppChatConversations(
+  $identityId: UUID!
+  $limit: Int
+  $page: Int
+  $statuses: [String!]
+  $properties: JSON
+) {
+  fetchInAppChatConversations(
+    input: {
+      identityId: $identityId
+      limit: $limit
+      page: $page
+      statuses: $statuses
+      properties: $properties
+    }
+  ) {
+    ...ChatConversationSummaryFragment
+  }
+}

@@ -1,0 +1,13 @@
+# Total conversations matching the SAME filters as FetchInAppChatConversations,
+# minus limit/page. Drives hasNextPage = page * pageSize < count.
+query SummarizeInAppChatConversations(
+  $identityId: UUID!
+  $statuses: [String!]
+  $properties: JSON
+) {
+  summarizeInAppChatConversations(
+    input: { identityId: $identityId, statuses: $statuses, properties: $properties }
+  ) {
+    count
+  }
+}

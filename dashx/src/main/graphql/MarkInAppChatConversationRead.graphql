@@ -1,0 +1,18 @@
+# Marks one conversation read through `lastMessageId`, which must be a server message id
+# of that conversation, never a local optimistic one. Idempotent; the read position only
+# moves forward.
+mutation MarkInAppChatConversationRead(
+  $identityId: UUID!
+  $conversationId: UUID!
+  $lastMessageId: UUID!
+) {
+  markInAppChatConversationRead(
+    input: {
+      identityId: $identityId
+      conversationId: $conversationId
+      lastMessageId: $lastMessageId
+    }
+  ) {
+    success
+  }
+}

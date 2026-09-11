@@ -1,0 +1,27 @@
+fragment ChatConversationSummaryFragment on ChatConversationSummary {
+  conversationId
+  category
+  context {
+    kind
+    subtype
+    id
+    reference
+    name
+  }
+  topic {
+    id
+    label
+  }
+  status
+  title
+  lastMessagePreview
+  lastMessageAt
+  lastSenderKind
+  activityAt
+  assignedGroups {
+    id
+    name
+  }
+  # Messages the visitor has not read yet; cleared by MarkInAppChatConversationRead.
+  unreadCount
+}
