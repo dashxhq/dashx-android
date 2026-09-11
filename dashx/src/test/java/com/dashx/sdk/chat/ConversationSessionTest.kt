@@ -429,6 +429,37 @@ class ConversationSessionTest {
     }
 
     @Test
+    fun transientGraphQLReconcileFailure_retries_andLiveFramesResume() {
+        val backend = FakeBackend()
+        val (_, lease) = openReady(backend, listOf(msg("m1", 1), msg("m2", 2)))
+
+        // A transport failure surfaces as a code-less GraphQLError; the socket stays healthy, so
+        // no reconnect re-runs the walk — the session must, or buffered frames never appear.
+        val failures = AtomicInteger(0)
+        backend.after = { cursor ->
+            when {
+                cursor == "m2" && failures.incrementAndGet() == 1 ->
+                    throw DashXException(DashXError.GraphQLError("connection reset"))
+                cursor == "m2" -> listOf(msg("m3", 3), msg("m4", 4))
+                else -> emptyList()
+            }
+        }
+        backend.handles[0].onEstablished(true)
+        awaitUntil(what = "first walk failed") { failures.get() == 1 }
+        Thread.sleep(100)
+        assertEquals("the snapshot stays on screen", listOf("m1", "m2"), readyIds(lease))
+
+        awaitUntil(what = "retried walk from the unchanged cursor") {
+            readyIds(lease) == listOf("m1", "m2", "m3", "m4")
+        }
+        backend.handles[0].onFrame(frame("m5", 5))
+        awaitUntil(what = "live frames flow again") {
+            readyIds(lease) == listOf("m1", "m2", "m3", "m4", "m5")
+        }
+        assertEquals(listOf("m2", "m2"), backend.fetchAfterCursors)
+    }
+
+    @Test
     fun subscribeError_beforeAnySnapshot_surfacesError_lateAckRecovers() {
         val backend = FakeBackend()
         backend.count = 1

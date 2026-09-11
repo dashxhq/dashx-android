@@ -20,7 +20,9 @@ import kotlinx.serialization.json.JsonObject
 
 private fun notIdentifiedJob(onError: (DashXError) -> Unit): Job =
     DashX.launchCallback {
-        onError(DashXError.NotIdentified("Identity token is not set. Call setIdentity(uid, token) or setIdentityTokenProvider() first."))
+        runCatching {
+            onError(DashXError.NotIdentified("Identity token is not set. Call setIdentity(uid, token) or setIdentityTokenProvider() first."))
+        }
     }
 
 /**

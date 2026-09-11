@@ -42,11 +42,18 @@ private class Harness(
     val listeners = CopyOnWriteArrayList<WebSocketListener>()
     val established = CopyOnWriteArrayList<Boolean>()
     val subscribeErrors = CopyOnWriteArrayList<com.dashx.android.DashXError>()
+    /** What the 4401 hook reports. */
+    @Volatile var authRefreshSucceeds = false
+    @Volatile var onAuthRejectedHook: (() -> Unit)? = null
 
     val runtime = RealtimeRuntime(
         urlProvider = { url },
         onAnyFrame = { },
-        onAuthRejected = { authRejections.incrementAndGet() },
+        onAuthRejected = {
+            authRejections.incrementAndGet()
+            onAuthRejectedHook?.invoke()
+            authRefreshSucceeds
+        },
         publishState = { states.add(it) },
         initialForeground = initialForeground,
         socketFactory = { request, listener ->
@@ -222,6 +229,104 @@ class RealtimeRuntimeTest {
         Thread.sleep(400)
         assertEquals("a permission problem must not burn a token refresh", 0, harness.authRejections.get())
         assertEquals(1, harness.sockets.size)
+    }
+
+    @Test
+    fun terminal4403_failsWaitingSubscribersImmediately() {
+        val harness = Harness()
+        harness.subscribe("c1")
+        awaitUntil(what = "socket 1") { harness.sockets.size == 1 }
+        harness.open(0)
+
+        // No refresh fixes a permission problem; without this, the conversation stays Loading.
+        harness.listeners[0].onClosed(harness.sockets[0], 4403, "FORBIDDEN")
+        awaitUntil(what = "subscribe error") { harness.subscribeErrors.size == 1 }
+        assertTrue(harness.subscribeErrors[0] is com.dashx.android.DashXError.SubscriptionFailed)
+        assertEquals(0, harness.authRejections.get())
+    }
+
+    @Test
+    fun terminal4401_failedRefresh_failsWaitingSubscribers() {
+        val harness = Harness() // the hook reports no new token
+        harness.subscribe("c1")
+        awaitUntil(what = "socket 1") { harness.sockets.size == 1 }
+        harness.open(0)
+
+        harness.listeners[0].onClosed(harness.sockets[0], 4401, "UNAUTHORIZED")
+        awaitUntil(what = "subscribe error") { harness.subscribeErrors.size == 1 }
+        assertEquals("the refresh was attempted first", 1, harness.authRejections.get())
+        assertTrue(harness.subscribeErrors[0] is com.dashx.android.DashXError.SubscriptionFailed)
+    }
+
+    @Test
+    fun terminal4401_successfulRefresh_doesNotFailSubscribers_untilRejectedAgain() {
+        val harness = Harness()
+        harness.authRefreshSucceeds = true
+        // DashX installs the token and recycles the socket before the hook returns.
+        harness.onAuthRejectedHook = { harness.runtime.onIdentityChanged(fromAuthRefresh = true) }
+        harness.subscribe("c1")
+        awaitUntil(what = "socket 1") { harness.sockets.size == 1 }
+        harness.open(0)
+
+        harness.listeners[0].onClosed(harness.sockets[0], 4401, "UNAUTHORIZED")
+        awaitUntil(what = "reconnect under the refreshed token") { harness.sockets.size == 2 }
+        Thread.sleep(300)
+        assertTrue("a refresh that installs a token is not a failure", harness.subscribeErrors.isEmpty())
+
+        // The refreshed token is rejected too; the hook is spent.
+        harness.open(1)
+        harness.listeners[1].onClosed(harness.sockets[1], 4401, "UNAUTHORIZED")
+        awaitUntil(what = "subscribe error") { harness.subscribeErrors.size == 1 }
+        assertEquals("no second refresh", 1, harness.authRejections.get())
+    }
+
+    @Test
+    fun terminal4401_refreshFailsAfterBackgrounding_stillFailsWaitingSubscribers() {
+        val harness = Harness()
+        val hookEntered = java.util.concurrent.CountDownLatch(1)
+        val releaseHook = java.util.concurrent.CountDownLatch(1)
+        harness.onAuthRejectedHook = {
+            hookEntered.countDown()
+            releaseHook.await(10, java.util.concurrent.TimeUnit.SECONDS)
+        }
+        harness.subscribe("c1")
+        awaitUntil(what = "socket 1") { harness.sockets.size == 1 }
+        harness.open(0)
+
+        harness.listeners[0].onClosed(harness.sockets[0], 4401, "UNAUTHORIZED")
+        assertTrue(hookEntered.await(4, java.util.concurrent.TimeUnit.SECONDS))
+        // Backgrounding recycles the socket, not the credentials; authFailed blocks the reconnect.
+        harness.runtime.onBackground()
+        harness.runtime.onForeground()
+        Thread.sleep(200)
+        assertEquals("no reconnect while auth-failed", 1, harness.sockets.size)
+
+        releaseHook.countDown() // refresh reports no new token
+        awaitUntil(what = "subscribe error survives the background cycle") { harness.subscribeErrors.size == 1 }
+    }
+
+    @Test
+    fun terminal4401_refreshFailsAfterIdentitySwitch_isStale() {
+        val harness = Harness()
+        val hookEntered = java.util.concurrent.CountDownLatch(1)
+        val releaseHook = java.util.concurrent.CountDownLatch(1)
+        harness.onAuthRejectedHook = {
+            hookEntered.countDown()
+            releaseHook.await(10, java.util.concurrent.TimeUnit.SECONDS)
+        }
+        harness.subscribe("c1")
+        awaitUntil(what = "socket 1") { harness.sockets.size == 1 }
+        harness.open(0)
+
+        harness.listeners[0].onClosed(harness.sockets[0], 4401, "UNAUTHORIZED")
+        assertTrue(hookEntered.await(4, java.util.concurrent.TimeUnit.SECONDS))
+        // The old refresh's failure must not fail the new identity's subscribers.
+        harness.runtime.onIdentityChanged()
+        awaitUntil(what = "socket 2") { harness.sockets.size == 2 }
+        harness.open(1)
+        releaseHook.countDown()
+        Thread.sleep(300)
+        assertTrue("a stale refresh outcome is ignored", harness.subscribeErrors.isEmpty())
     }
 
     @Test

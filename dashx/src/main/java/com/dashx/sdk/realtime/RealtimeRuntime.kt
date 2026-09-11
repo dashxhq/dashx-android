@@ -5,6 +5,7 @@ import com.dashx.android.DashXLog
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
 import kotlin.random.Random
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -55,6 +56,9 @@ internal sealed interface RealtimeCommand {
      * [fromAuthRefresh] marks a token minted because the server rejected the previous one — it earns
      * one reconnect attempt but does not re-arm the 4401 refresh hook. */
     data class IdentityChanged(val fromAuthRefresh: Boolean) : RealtimeCommand
+    /** The 4401 refresh installed no new token. Stamped with the credential generation, not the
+     * connection generation: backgrounding recycles the socket but must not discard the outcome. */
+    data class AuthRefreshFailed(val credentialGeneration: Long) : RealtimeCommand
     data class EndSession(val ack: CompletableDeferred<Unit>) : RealtimeCommand
 }
 
@@ -71,8 +75,9 @@ internal class RealtimeRuntime(
     private val urlProvider: () -> String?,
     /** Every decoded frame, after channel routing — feeds unread refresh triggers. */
     private val onAnyFrame: (DashXRealtimeMessage) -> Unit,
-    /** A terminal 4401 close: DashX asks the bound token provider for a fresh token, once. */
-    private val onAuthRejected: () -> Unit,
+    /** A terminal 4401 close: DashX asks the bound token provider for a fresh token, once, and
+     * reports whether one was installed. */
+    private val onAuthRejected: suspend () -> Boolean,
     /** State sink owned by DashX, which drops a detached runtime's late writes. */
     private val publishState: (ConnectionState) -> Unit,
     initialForeground: Boolean,
@@ -98,6 +103,8 @@ internal class RealtimeRuntime(
     /** One refresh per rejection cycle: set when 4401 fires the hook, re-armed only by an ack or an
      * external (non-refresh) identity change — a refreshed token that 4401s again stays terminal. */
     private var authRefreshAttempted = false
+    /** Advanced by every identity change; a refresh outcome from before it is stale. */
+    private var credentialGeneration = 0L
     private var reconnectAttempts = 0
     /** Channel → id of the SUBSCRIBE attempt still awaiting its acknowledgement. An entry is removed
      * by the ack (or the channel's unsubscribe) and overwritten by a newer attempt, so a deadline
@@ -205,6 +212,7 @@ internal class RealtimeRuntime(
                 // A new identity is a fresh intent: terminal auth failure no longer applies, and any
                 // socket — connected OR still connecting — carries the old token in its URL.
                 authFailed = false
+                credentialGeneration += 1
                 if (!command.fromAuthRefresh) authRefreshAttempted = false
                 reconnectAttempts = 0
                 closeSocket()
@@ -266,7 +274,19 @@ internal class RealtimeRuntime(
                     // that gets 4401'd again stays AuthenticationFailed instead of looping.
                     if (command.code == CLOSE_CODE_UNAUTHORIZED && !authRefreshAttempted) {
                         authRefreshAttempted = true
-                        onAuthRejected()
+                        val credentials = credentialGeneration
+                        scope.launch {
+                            val refreshed = try {
+                                onAuthRejected()
+                            } catch (t: CancellationException) {
+                                throw t
+                            } catch (t: Throwable) {
+                                false
+                            }
+                            if (!refreshed) commands.trySend(RealtimeCommand.AuthRefreshFailed(credentials))
+                        }
+                    } else {
+                        failSubscribers(command.code, command.reason)
                     }
                 } else {
                     scheduleReconnect()
@@ -282,6 +302,13 @@ internal class RealtimeRuntime(
                 DashXLog.e(TAG, "Realtime failure: ${command.cause.message ?: command.cause::class.java.simpleName}")
                 scheduleReconnect()
                 publishState()
+            }
+
+            is RealtimeCommand.AuthRefreshFailed -> {
+                // Fires only while the rejection that asked for the refresh still stands — including
+                // across a background/foreground cycle, which leaves [authFailed] blocking connect().
+                if (command.credentialGeneration != credentialGeneration || !authFailed) return
+                failSubscribers(CLOSE_CODE_UNAUTHORIZED, "token refresh did not recover")
             }
 
             is RealtimeCommand.RetryConnect -> {
@@ -316,6 +343,13 @@ internal class RealtimeRuntime(
                 scope.cancel()
             }
         }
+    }
+
+    /** A terminal close no refresh will fix: with the socket gone, no ack or deadline is coming, so
+     * waiting subscribers are told now. Handles stay registered; a new identity still recovers them. */
+    private fun failSubscribers(code: Int, reason: String) {
+        val error = DashXError.SubscriptionFailed("Realtime connection closed with code $code ($reason)")
+        subscriptions.values.forEach { handles -> handles.forEach { it.onSubscribeError(error) } }
     }
 
     /** Bumps the generation, so callbacks from the departing socket become stamped no-ops. */

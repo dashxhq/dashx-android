@@ -277,8 +277,8 @@ internal class ConversationSession(
     private var syncing = false
     private var resyncPending = false
     private var rebuildUsed = false
-    /** Transient failures of the FIRST load retry with backoff; a fresh acknowledgement resets it. */
-    private var initialSyncAttempts = 0
+    /** Consecutive transient sync failures; a completed cycle or a fresh acknowledgement resets it. */
+    private var syncAttempts = 0
     private var oldestFetchedPage = Int.MAX_VALUE
     /** Newest unconfirmed tail id a resync was already requested for — one request per tail. */
     private var resyncRequestedFor: String? = null
@@ -324,7 +324,7 @@ internal class ConversationSession(
     private fun onEstablished(isResubscribe: Boolean) {
         DashXLog.d(TAG, "Channel acknowledged for ${key.conversationId} (isResubscribe=$isResubscribe)")
         scope.launch(syncLane) {
-            initialSyncAttempts = 0
+            syncAttempts = 0
             if (syncing) {
                 // A reconnect acknowledged mid-cycle: the running fetch may predate the gap, so
                 // re-run once this cycle completes rather than assuming it covered everything.
@@ -367,28 +367,26 @@ internal class ConversationSession(
                 resyncPending = false
                 if (!snapshotDone || lastKnownMessageId == null) snapshotAndReplace() else cursorReconcile()
             } while (resyncPending)
+            syncAttempts = 0
         } catch (t: Throwable) {
             if (t is kotlinx.coroutines.CancellationException) throw t
             val error = (t as? com.dashx.android.DashXException)?.error
                 ?: DashXError.NetworkError(t.message ?: "chat synchronization failed")
-            when {
-                snapshotDone && keepsSnapshot(error) -> {
-                    // Keep the displayed snapshot on a transient failure; the next reconnect retries.
-                    DashXLog.e(TAG, "Reconciliation failed for ${key.conversationId}: ${error.message}")
+            if (keepsSnapshot(error) && (snapshotDone || syncAttempts < MAX_INITIAL_SYNC_RETRIES)) {
+                // The socket may stay connected, so no reconnect would re-run this: retry with
+                // backoff. An established snapshot stays on screen for as long as it takes (frames
+                // buffer until a cycle completes); before one exists, three attempts then Error.
+                syncAttempts += 1
+                val attempt = syncAttempts
+                val delayMs = cursorRetryDelay(attempt)
+                DashXLog.e(TAG, "Sync failed for ${key.conversationId} " +
+                    "(attempt $attempt, retrying in ${delayMs}ms): ${error.message}")
+                scope.launch(syncLane) {
+                    delay(delayMs)
+                    if (!syncing && syncAttempts == attempt) runSync() // no newer cycle ran meanwhile
                 }
-                !snapshotDone && keepsSnapshot(error) && initialSyncAttempts < MAX_INITIAL_SYNC_RETRIES -> {
-                    // Nothing is on screen yet and the socket may well stay connected, so no
-                    // reconnect would ever re-run this: retry a transient failure ourselves.
-                    initialSyncAttempts += 1
-                    val delayMs = cursorRetryDelay(initialSyncAttempts)
-                    DashXLog.e(TAG, "Initial load failed for ${key.conversationId} " +
-                        "(attempt $initialSyncAttempts, retrying in ${delayMs}ms): ${error.message}")
-                    scope.launch(syncLane) {
-                        delay(delayMs)
-                        if (!syncing && !snapshotDone) runSync()
-                    }
-                }
-                else -> publishState(ConversationState.Error(error))
+            } else {
+                publishState(ConversationState.Error(error))
             }
             // Buffering stays on: a partial live list must not follow the Error, and the next
             // acknowledged sync starts from a fresh buffer anyway.
@@ -442,7 +440,6 @@ internal class ConversationSession(
     /** Reconnect: fetch strictly after the high-water mark, page forward until a short page, then
      * merge the buffered frames. Never touches already-loaded history. */
     private suspend fun cursorReconcile() {
-        var retryAttempt = 0
         while (true) {
             startBuffering()
             var cursor = lastKnownMessageId ?: run { snapshotAndReplace(); return }
@@ -458,29 +455,17 @@ internal class ConversationSession(
             } catch (t: Throwable) {
                 if (t is kotlinx.coroutines.CancellationException) throw t
                 val error = (t as? com.dashx.android.DashXException)?.error
-                if (error is DashXError.GraphQLError) {
-                    // Only UNPROCESSABLE_ENTITY means the cursor itself was rejected (the retained
-                    // message is no longer a visible message of this conversation). Every other
-                    // GraphQL failure — token, permission, missing conversation, server fault — is
-                    // not a cursor problem: rebuilding would just fail again, so let [runSync]
-                    // decide whether the snapshot stays on screen.
-                    if (error.code != DashXError.GraphQLError.UNPROCESSABLE_ENTITY) throw t
-                    if (rebuildUsed) throw t // a rebuilt mark rejected again is terminal, not a loop
-                    // The server rejected the retained cursor (deleted message). Rebuild — never
-                    // merge, or the deleted id survives as the mark and rejects forever.
-                    rebuildUsed = true
-                    snapshotAndReplace()
-                    return
-                }
-                // Incomplete walk: merging the partial fetch or the buffer would advance the
-                // high-water mark past the unfetched gap and skip those messages forever. Discard
-                // both, keep the snapshot and the stable cursor, and retry the whole walk — every
-                // discarded message is still on the server, after the unchanged mark.
-                retryAttempt += 1
-                DashXLog.e(TAG, "Cursor walk failed for ${key.conversationId} " +
-                    "(attempt $retryAttempt): ${t.message}")
-                delay(cursorRetryDelay(retryAttempt))
-                continue
+                // Only UNPROCESSABLE_ENTITY means the cursor itself was rejected (deleted message):
+                // rebuild — never merge, or the deleted id survives as the mark and rejects forever;
+                // a rebuilt mark rejected again is terminal. Everything else goes to [runSync]. The
+                // incomplete walk is discarded whole either way: merging its partial fetch or the
+                // buffer would advance the high-water mark past the unfetched gap.
+                val cursorRejected = error is DashXError.GraphQLError &&
+                    error.code == DashXError.GraphQLError.UNPROCESSABLE_ENTITY
+                if (!cursorRejected || rebuildUsed) throw t
+                rebuildUsed = true
+                snapshotAndReplace()
+                return
             }
             val (bufferSnapshot, overflowed) = drainBufferAndResumeLive()
             if (overflowed) continue // restart from the unchanged cursor
@@ -556,7 +541,7 @@ internal class ConversationSession(
                 if (t is kotlinx.coroutines.CancellationException) throw t
                 val error = (t as? com.dashx.android.DashXException)?.error
                     ?: DashXError.NetworkError(t.message ?: "loadPreviousPage failed")
-                onError?.let { cb -> DashX.launchCallback { cb(error) } }
+                onError?.let { cb -> DashX.launchCallback { runCatching { cb(error) } } }
             }
         }
     }

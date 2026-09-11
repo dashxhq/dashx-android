@@ -885,10 +885,20 @@ class DashX {
                     null
                 }
 
-                val current = account.get()
-                val stale = current.sessionGeneration != requestSnapshot.sessionGeneration ||
-                    current.tokenEpoch != requestSnapshot.tokenEpoch ||
-                    boundProvider !== bound
+                fun matchesRequest(snapshot: AccountSnapshot) =
+                    snapshot.sessionGeneration == requestSnapshot.sessionGeneration &&
+                        snapshot.tokenEpoch == requestSnapshot.tokenEpoch
+
+                // Validate and install atomically: a switch between a separate check and the write
+                // would install this token under the new account's uid.
+                var installed = false
+                if (token != null && boundProvider === bound) {
+                    account.updateAndGet { current ->
+                        installed = matchesRequest(current)
+                        if (installed) current.copy(identityToken = token) else current // T1: generation unchanged
+                    }
+                }
+                val stale = !installed && (boundProvider !== bound || !matchesRequest(account.get()))
 
                 // Release the single-flight slot BEFORE completing the deferred. A waiter resumed
                 // by the completion may request another load at once; if the slot still held this
@@ -897,8 +907,7 @@ class DashX {
                 // for the cancellation paths that never get here.
                 tokenLoadInFlight.compareAndSet(result, null)
 
-                if (!stale && token != null) {
-                    account.updateAndGet { it.copy(identityToken = token) } // T1: generation unchanged
+                if (installed) {
                     saveToStorage()
                     realtimeRuntime?.onIdentityChanged(fromAuthRefresh = true) ?: run {
                         com.dashx.android.chat.ChatCoordinator.onIdentityAvailable()
@@ -950,14 +959,15 @@ class DashX {
         /** Era stamp for the GraphQL auth retry: never resend an old-era request with a new-era token. */
         internal fun currentSessionGeneration(): Long = account.get().sessionGeneration
 
-        /** A terminal 4401 close: ask the bound provider for a fresh token, once. */
-        private fun onRealtimeAuthRejected() {
+        /** A terminal 4401 close: ask the bound provider for a fresh token, once. Returns whether one
+         * was installed. */
+        private suspend fun onRealtimeAuthRejected(): Boolean {
             val bound = boundProvider
             if (bound == null || bound.uid != account.get().uid) {
                 publishAuthFailed(null)
-                return
+                return false
             }
-            requestTokenLoad(forceRefresh = true)
+            return awaitTokenRefresh()
         }
 
         private const val TOKEN_LOAD_TIMEOUT_MS = 30_000L
