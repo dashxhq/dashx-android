@@ -2,6 +2,14 @@
 
 All notable changes to `dashx-android` are documented in this file. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
+## [1.4.1] — 2026-09-11
+
+### Added
+
+- **`ConversationState.Ready.hasOlderMessages`** — whether `loadPreviousPage` still has
+  history to fetch. A conversation opens on its newest page, so the row count alone could
+  not tell a host when to offer "load older".
+
 ## [1.4.0] — 2026-09-11
 
 In-app chat. The SDK now manages a realtime WebSocket connection and exposes a

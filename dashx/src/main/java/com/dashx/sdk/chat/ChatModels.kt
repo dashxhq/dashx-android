@@ -71,7 +71,9 @@ data class ChatMessage(
 /** A conversation's synchronized state, exposed on every lease. */
 sealed interface ConversationState {
     data object Loading : ConversationState
-    data class Ready(val messages: List<ChatMessage>) : ConversationState
+    /** [hasOlderMessages] is true while history older than [messages] can still be paged in with
+     * [DashXConversationLease.loadPreviousPage]. */
+    data class Ready(val messages: List<ChatMessage>, val hasOlderMessages: Boolean = false) : ConversationState
     data class Error(val cause: DashXError) : ConversationState
 }
 

@@ -431,7 +431,7 @@ internal class ConversationSession(
             // out-of-order sibling may be missing, and a cursor set past that gap could never
             // recover it. The frames stay displayed and are re-fetched (deduped) on reconnect.
             lastKnownMessageId = candidate.lastOrNull()?.id
-            emitReady(replacement)
+            publishReady()
             maybeMarkRead()
             return
         }
@@ -501,11 +501,8 @@ internal class ConversationSession(
      * [lastKnownMessageId] — live frames reach here, and they are display-only until a fetch
      * confirms them. */
     private fun applyMerge(additions: List<ChatMessage>) {
-        if (additions.isEmpty()) return
-        val merged = mergeInto(messages, additions)
-        if (merged == messages) return // duplicates only → no state churn
-        messages = merged
-        emitReady(merged)
+        if (additions.isNotEmpty()) messages = mergeInto(messages, additions)
+        publishReady()
     }
 
     private fun mergeInto(base: List<ChatMessage>, additions: List<ChatMessage>): List<ChatMessage> {
@@ -516,8 +513,11 @@ internal class ConversationSession(
         return byId.values.sortedWith(ChatMessage.ORDER)
     }
 
-    private fun emitReady(list: List<ChatMessage>) {
-        publishState(ConversationState.Ready(list))
+    /** Publishes the current list and paging flag; a no-op when neither changed. */
+    private fun publishReady() {
+        val next = ConversationState.Ready(messages, hasOlderMessages = oldestFetchedPage > 1)
+        if (mutableState.value == next) return
+        publishState(next)
     }
 
     private fun publishState(state: ConversationState) {
