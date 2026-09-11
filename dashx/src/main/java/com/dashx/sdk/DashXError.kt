@@ -14,7 +14,7 @@ sealed class DashXError(val message: String) {
      * every error in the response carried the same one (`UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`,
      * `UNPROCESSABLE_ENTITY`, ...); null when the codes were mixed or absent.
      */
-    class GraphQLError(
+    class GraphQLError @JvmOverloads constructor(
         message: String,
         val code: String? = null
     ) : DashXError(message) {
