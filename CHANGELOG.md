@@ -4,48 +4,28 @@ All notable changes to `dashx-android` are documented in this file. Format loose
 
 ## [Unreleased]
 
-### Breaking
+### Added
 
-- **SDK-generated events are renamed** to the convention the DashX browser SDK uses (a `$`
-  prefix marks SDK-generated events; data keys are camelCase). The names are identical across
-  the Android, iOS and React Native SDKs. Update any dashboards, segments or automations that
-  match the old names:
-
-  | Old name | New name |
-  |---|---|
-  | `Screen Viewed` | `$screen` |
-  | `Application Installed` | `$app_installed` |
-  | `Application Updated` | `$app_updated` |
-  | `Application Opened` | `$app_opened` |
-  | `Application Backgrounded` | `$app_backgrounded` |
-  | `Application Crashed` | `$app_crashed` |
-  | `dx_deep_link_opened` | `$deep_link_opened` |
-  | `dx_notification_navigated` | `$notification_navigated` |
-
-- **Event data changes:**
-  - `$app_backgrounded`: `session_length` (seconds, as a string) is replaced by `durationMs`
-    (integer milliseconds in the foreground since the matching `$app_opened`).
-  - `$app_opened`: `from_background` (the string `"true"`, absent on a cold start) is replaced
-    by `fromBackground`, a boolean that is always present. `build` is now an integer.
-  - `$app_updated` now includes `previousBuild`.
-  - `$notification_navigated`: `notification_id`, `screen_name`, `screen_data` and
-    `click_action` are now `notificationId`, `screenName`, `screenData` and `clickAction`.
+- **`Application Updated`** now includes `previous_build`, the build the app was updated from.
 
 ### Fixed
 
 - **App lifecycle events are app-level, not per Activity.** `enableActivityLifecycleTracking`
-  previously tracked "Application Backgrounded" and "Application Opened" on every Activity
-  pause/resume, and a cold start tracked "Opened" twice. It now follows the process lifecycle
-  (`ProcessLifecycleOwner`): one `$app_opened` (or `$app_installed` / `$app_updated`) when the
-  app comes to the foreground and one `$app_backgrounded` when it leaves it. Moving between
-  Activities tracks nothing.
+  previously tracked `Application Backgrounded` and `Application Opened` on every Activity
+  pause/resume, and a cold start tracked `Application Opened` twice. It now follows the process
+  lifecycle (`ProcessLifecycleOwner`): a cold start tracks one event (`Application Installed`,
+  `Application Updated` or `Application Opened`), returning to the foreground tracks
+  `Application Opened` with `from_background`, and leaving it tracks `Application Backgrounded`.
+  Moving between Activities tracks nothing. Lifecycle events are no longer tracked before
+  `DashX.configure()`, so an install or update is reported on the next launch instead of lost.
 - **Enabling tracking is idempotent and independent.** Calling `enableActivityLifecycleTracking`
   or `enableScreenTracking` more than once no longer duplicates events, and enabling screen
   tracking alone no longer tracks an app open.
-- **Automatic screen tracking** now tracks `$screen` when an Activity resumes (so returning to
-  an Activity counts as a new view) instead of when it starts. The name is the Activity's own
-  `android:label`, falling back to its class name rather than the application label. Fragment
-  and Jetpack Compose navigation are not tracked automatically; call `DashX.screen()` for those.
+- **Automatic screen tracking** now tracks `Screen Viewed` when an Activity resumes (so returning
+  to an Activity counts as a new view) instead of when it starts. The name is the Activity's own
+  `android:label`, falling back to its class name rather than the application label, and the
+  SDK's notification-tap Activity is skipped. Fragment and Jetpack Compose navigation are not
+  tracked automatically; call `DashX.screen()` for those.
 - **`DashX.screen(name, null)`** dropped the screen name. `name` is now always sent, and the
   caller's properties map is no longer modified.
 

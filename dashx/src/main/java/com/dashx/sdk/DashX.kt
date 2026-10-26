@@ -1387,24 +1387,15 @@ class DashX {
             onSuccess: (() -> Unit)? = null,
             onError: ((DashXError) -> Unit)? = null
         ): Job {
-            val jsonData =
-                data?.toMap()?.let { Json.parseToJsonElement(JSONObject(it).toString()).jsonObject }
-            return trackJsonJob(event, jsonData, onSuccess, onError)
-        }
-
-        /** [track] for SDK-generated events whose data carries non-string JSON values. */
-        internal fun trackJsonJob(
-            event: String,
-            jsonData: JsonObject?,
-            onSuccess: (() -> Unit)? = null,
-            onError: ((DashXError) -> Unit)? = null
-        ): Job {
             if (!isConfigured()) {
                 DashXLog.e(tag, "track() called before configure(); dropping event '$event'")
                 // Signal onError or the trackAsync() suspend wrapper hangs forever awaiting a callback.
                 return coroutineScope.launch(callbackDispatcher) { onError?.invoke(DashXError.NotConfigured()) }
             }
             val snapshot = account.get()
+
+            val jsonData =
+                data?.toMap()?.let { Json.parseToJsonElement(JSONObject(it).toString()).jsonObject }
 
             val systemContext = SystemContextMapper.toSystemContextInput(
                 SystemContext.getInstance().fetchSystemContext()
@@ -1466,8 +1457,9 @@ class DashX {
         }
 
         /**
-         * Tracks `$app_opened`. A cold start (`fromBackground = false`) instead tracks
-         * `$app_installed` or `$app_updated` when the build differs from the last launch.
+         * Tracks "Application Opened". A cold start (`fromBackground = false`) instead tracks
+         * "Application Installed" or "Application Updated" when the build differs from the last
+         * launch.
          */
         fun trackAppStarted(fromBackground: Boolean = false) {
             val context = context
@@ -1487,16 +1479,12 @@ class DashX {
             if (!fromBackground && previousBuild != currentBuild) {
                 preferences.edit().putLong(SHARED_PREFERENCES_KEY_BUILD, currentBuild).apply()
             }
-            trackJsonJob(launch.name, launch.data)
+            track(launch.name, launch.data)
         }
 
-        /** Tracks `$app_backgrounded`; [elapsedTime] is the foreground time in milliseconds. */
+        /** Tracks "Application Backgrounded"; [elapsedTime] is the foreground time in milliseconds. */
         fun trackAppSession(elapsedTime: Double) {
-            trackAppBackgrounded(elapsedTime.toLong())
-        }
-
-        internal fun trackAppBackgrounded(durationMs: Long) {
-            trackJsonJob(INTERNAL_EVENT_APP_BACKGROUNDED, appBackgroundedData(durationMs))
+            track(INTERNAL_EVENT_APP_BACKGROUNDED, appBackgroundedData(elapsedTime))
         }
 
         fun trackAppCrashed(exception: Throwable?) {
@@ -1505,7 +1493,7 @@ class DashX {
             trackEventBlocking(INTERNAL_EVENT_APP_CRASHED, eventProperties)
         }
 
-        /** Tracks `$screen` with `name` = [screenName] plus [properties]. */
+        /** Tracks "Screen Viewed" with `name` = [screenName] plus [properties]. */
         fun screen(screenName: String, properties: HashMap<String, String>?) {
             track(INTERNAL_EVENT_APP_SCREEN_VIEWED, screenEventData(screenName, properties))
         }
@@ -1567,7 +1555,7 @@ class DashX {
             }
         }
 
-        /** Tracks `$notification_navigated` when configured, else persists it. See [trackMessageOrPersist]. */
+        /** Tracks `dx_notification_navigated` when configured, else persists it. See [trackMessageOrPersist]. */
         internal fun trackNotificationNavigationOrPersist(
             context: Context,
             action: NavigationAction?,
@@ -1582,7 +1570,7 @@ class DashX {
             }
         }
 
-        /** Builds the `$notification_navigated` event data; stamps tap time into `timestamp` so it
+        /** Builds the `dx_notification_navigated` event data; stamps tap time into `timestamp` so it
          *  survives a deferred replay. */
         private fun notificationNavigationData(
             action: NavigationAction?,
@@ -1592,7 +1580,7 @@ class DashX {
                 "timestamp" to DateTimeFormatter.ISO_INSTANT.format(Instant.now())
             )
             if (notificationId != null) {
-                data["notificationId"] = notificationId
+                data["notification_id"] = notificationId
             }
             when (action) {
                 is NavigationAction.DeepLink -> {
@@ -1601,8 +1589,8 @@ class DashX {
                 }
                 is NavigationAction.Screen -> {
                     data["type"] = "screen"
-                    data["screenName"] = action.name
-                    action.data?.let { data["screenData"] = JSONObject(it).toString() }
+                    data["screen_name"] = action.name
+                    action.data?.let { data["screen_data"] = JSONObject(it).toString() }
                 }
                 is NavigationAction.RichLanding -> {
                     data["type"] = "rich_landing"
@@ -1610,7 +1598,7 @@ class DashX {
                 }
                 is NavigationAction.ClickAction -> {
                     data["type"] = "click_action"
-                    data["clickAction"] = action.action
+                    data["click_action"] = action.action
                 }
                 null -> {
                     data["type"] = "default"
@@ -1629,7 +1617,7 @@ class DashX {
         }
 
         /**
-         * Records a `$deep_link_opened` analytics event. Call when a deep link is opened (for example from a
+         * Records a `dx_deep_link_opened` analytics event. Call when a deep link is opened (for example from a
          * push notification tap or an App Link); notification taps are tracked automatically by the SDK when
          * the default handling opens a URL.
          */
@@ -1637,7 +1625,7 @@ class DashX {
             track(EVENT_DEEP_LINK_OPENED, deepLinkData(uri, source))
         }
 
-        /** Tracks `$deep_link_opened` when configured, else persists it. See [trackMessageOrPersist]. */
+        /** Tracks `dx_deep_link_opened` when configured, else persists it. See [trackMessageOrPersist]. */
         internal fun processDeepLinkOrPersist(context: Context, uri: Uri, source: String?) {
             val data = deepLinkData(uri, source)
             if (isConfigured()) {

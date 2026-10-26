@@ -3,11 +3,7 @@ package com.dashx.android
 import com.dashx.android.utils.INTERNAL_EVENT_APP_INSTALLED
 import com.dashx.android.utils.INTERNAL_EVENT_APP_OPENED
 import com.dashx.android.utils.INTERNAL_EVENT_APP_UPDATED
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Test
 
 class AppLifecycleTrackerTest {
@@ -58,7 +54,7 @@ class AppLifecycleTrackerTest {
         val event = appLaunchEvent("2.0.0", 20, previousBuild = null, fromBackground = false)
 
         assertEquals(INTERNAL_EVENT_APP_INSTALLED, event.name)
-        assertEquals(buildJsonObject { put("version", "2.0.0"); put("build", 20) }, event.data)
+        assertEquals(hashMapOf("version" to "2.0.0", "build" to "20"), event.data)
     }
 
     @Test
@@ -67,17 +63,25 @@ class AppLifecycleTrackerTest {
 
         assertEquals(INTERNAL_EVENT_APP_UPDATED, event.name)
         assertEquals(
-            buildJsonObject { put("version", "2.0.0"); put("build", 20); put("previousBuild", 19) },
+            hashMapOf("version" to "2.0.0", "build" to "20", "previous_build" to "19"),
             event.data
         )
     }
 
     @Test
-    fun launchEvent_coldStartOnSameBuildIsOpenNotFromBackground() {
+    fun launchEvent_coldStartOnSameBuildIsOpenWithoutFromBackground() {
         val event = appLaunchEvent("2.0.0", 20, previousBuild = 20, fromBackground = false)
 
         assertEquals(INTERNAL_EVENT_APP_OPENED, event.name)
-        assertEquals(JsonPrimitive(false), event.data["fromBackground"])
+        assertEquals(hashMapOf("version" to "2.0.0", "build" to "20"), event.data)
+    }
+
+    @Test
+    fun launchEvent_downgradeIsOpen() {
+        val event = appLaunchEvent("1.0.0", 10, previousBuild = 20, fromBackground = false)
+
+        assertEquals(INTERNAL_EVENT_APP_OPENED, event.name)
+        assertEquals(hashMapOf("version" to "1.0.0", "build" to "10"), event.data)
     }
 
     @Test
@@ -86,19 +90,14 @@ class AppLifecycleTrackerTest {
 
         assertEquals(INTERNAL_EVENT_APP_OPENED, event.name)
         assertEquals(
-            buildJsonObject { put("version", "2.0.0"); put("build", 20); put("fromBackground", true) },
+            hashMapOf("version" to "2.0.0", "build" to "20", "from_background" to "true"),
             event.data
         )
     }
 
     @Test
-    fun lifecycleData_usesNativeJsonTypes() {
-        val opened = appLaunchEvent("1.0", 7, previousBuild = 7, fromBackground = false).data
-        val backgrounded = appBackgroundedData(1500)
-
-        assertFalse((opened["fromBackground"] as JsonPrimitive).isString)
-        assertFalse((opened["build"] as JsonPrimitive).isString)
-        assertEquals("{\"durationMs\":1500}", backgrounded.toString())
+    fun backgroundedData_reportsSessionLengthInSeconds() {
+        assertEquals(hashMapOf("session_length" to "1.5"), appBackgroundedData(1500.0))
     }
 
     @Test

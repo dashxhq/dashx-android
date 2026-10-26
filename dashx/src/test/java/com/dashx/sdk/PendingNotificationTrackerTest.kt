@@ -1,7 +1,6 @@
 package com.dashx.android
 
 import com.dashx.android.graphql.generated.type.TrackMessageStatus
-import com.dashx.android.utils.EVENT_NOTIFICATION_NAVIGATED
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import org.junit.After
@@ -61,13 +60,13 @@ class PendingNotificationTrackerTest {
     fun `flush replays and clears once configured`() {
         val store = InMemoryStore()
         PendingNotificationTracker.enqueueMessage(store, "m1", TrackMessageStatus.OPENED)
-        PendingNotificationTracker.enqueueEvent(store, EVENT_NOTIFICATION_NAVIGATED, hashMapOf())
+        PendingNotificationTracker.enqueueEvent(store, "dx_notification_navigated", hashMapOf())
 
         configured = true
         PendingNotificationTracker.flush(store)
 
         assertEquals(listOf("m1"), replayedMessages.toList())
-        assertEquals(listOf(EVENT_NOTIFICATION_NAVIGATED), replayedEvents.toList())
+        assertEquals(listOf("dx_notification_navigated"), replayedEvents.toList())
         assertEquals(0, store.size())
     }
 

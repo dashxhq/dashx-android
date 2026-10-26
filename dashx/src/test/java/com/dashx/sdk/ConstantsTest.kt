@@ -16,17 +16,17 @@ class ConstantsTest {
         assertTrue(SHARED_PREFERENCES_KEY_BUILD.startsWith(prefix))
     }
 
-    /** Wire contract shared with the browser, iOS and React Native SDKs. */
+    /** Wire contract: existing app versions, customer analytics and the public docs use these names. */
     @Test
-    fun sdkEventNames_matchCrossPlatformConvention() {
-        assertEquals("\$app_installed", INTERNAL_EVENT_APP_INSTALLED)
-        assertEquals("\$app_updated", INTERNAL_EVENT_APP_UPDATED)
-        assertEquals("\$app_opened", INTERNAL_EVENT_APP_OPENED)
-        assertEquals("\$app_backgrounded", INTERNAL_EVENT_APP_BACKGROUNDED)
-        assertEquals("\$app_crashed", INTERNAL_EVENT_APP_CRASHED)
-        assertEquals("\$screen", INTERNAL_EVENT_APP_SCREEN_VIEWED)
-        assertEquals("\$deep_link_opened", EVENT_DEEP_LINK_OPENED)
-        assertEquals("\$notification_navigated", EVENT_NOTIFICATION_NAVIGATED)
+    fun sdkEventNames_keepTheirPublishedNames() {
+        assertEquals("Application Installed", INTERNAL_EVENT_APP_INSTALLED)
+        assertEquals("Application Updated", INTERNAL_EVENT_APP_UPDATED)
+        assertEquals("Application Opened", INTERNAL_EVENT_APP_OPENED)
+        assertEquals("Application Backgrounded", INTERNAL_EVENT_APP_BACKGROUNDED)
+        assertEquals("Application Crashed", INTERNAL_EVENT_APP_CRASHED)
+        assertEquals("Screen Viewed", INTERNAL_EVENT_APP_SCREEN_VIEWED)
+        assertEquals("dx_deep_link_opened", EVENT_DEEP_LINK_OPENED)
+        assertEquals("dx_notification_navigated", EVENT_NOTIFICATION_NAVIGATED)
     }
 
     @Test

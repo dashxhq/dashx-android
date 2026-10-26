@@ -44,11 +44,8 @@ dependencies {
 
 ## Automatic events
 
-The SDK can track some events for you. Their names start with `$` to mark them as
-SDK-generated, and their data keys are camelCase; both match the DashX browser, iOS and
-React Native SDKs.
-
-Enable them once, for example in `Application.onCreate()` after `DashX.configure(...)`:
+The SDK can track some events for you. Enable them once, for example in
+`Application.onCreate()` after `DashX.configure(...)`:
 
 ```kotlin
 DashXActivityLifecycleCallbacks.enableActivityLifecycleTracking(this)
@@ -57,17 +54,17 @@ DashXActivityLifecycleCallbacks.enableScreenTracking(this)
 
 | Event | When | Data |
 |---|---|---|
-| `$app_installed` | First launch after install | `version`, `build` |
-| `$app_updated` | First launch after the build changes | `version`, `build`, `previousBuild` |
-| `$app_opened` | The app comes to the foreground (other launches) | `version`, `build`, `fromBackground` |
-| `$app_backgrounded` | The app leaves the foreground | `durationMs` |
-| `$screen` | An Activity resumes (screen tracking) | `name` |
-| `$app_crashed` | An uncaught exception (`DashXExceptionHandler.enable()`) | `exception` |
-| `$deep_link_opened` | `DashX.processDeepLink(uri)` or a notification tap that opens a URL | `url`, `timestamp`, `source` |
-| `$notification_navigated` | A DashX notification is tapped | `type`, `timestamp`, `notificationId`, and `url`, `screenName`, `screenData` or `clickAction` |
+| `Application Installed` | First launch after install | `version`, `build` |
+| `Application Updated` | First launch after the build changes | `version`, `build`, `previous_build` |
+| `Application Opened` | Other launches, and each return to the foreground | `version`, `build`, `from_background` (`"true"` on a return to the foreground) |
+| `Application Backgrounded` | The app leaves the foreground | `session_length` (seconds in the foreground) |
+| `Screen Viewed` | An Activity resumes (screen tracking) | `name` |
+| `Application Crashed` | An uncaught exception (`DashXExceptionHandler.enable()`) | `exception` |
+| `dx_deep_link_opened` | `DashX.processDeepLink(uri)` or a notification tap that opens a URL | `url`, `timestamp`, `source` |
+| `dx_notification_navigated` | A DashX notification is tapped | `type`, `timestamp`, `notification_id`, and `url`, `screen_name`, `screen_data` or `click_action` |
 
-Lifecycle events are app-level: moving between Activities does not track an open or a
-background. `durationMs` is the time in the foreground since the matching open.
+All values are strings. Lifecycle events are app-level: moving between Activities does not
+track an open or a background.
 
 Automatic screen tracking names each screen after the Activity's `android:label`, falling back
 to its class name. Apps that navigate inside a single Activity (Fragments, Jetpack Compose

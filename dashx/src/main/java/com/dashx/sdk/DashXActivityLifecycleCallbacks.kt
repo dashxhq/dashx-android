@@ -14,8 +14,8 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 
 /**
- * Automatic screen tracking: tracks `$screen` each time an Activity resumes. App open/background
- * tracking is process-level; see [enableActivityLifecycleTracking].
+ * Automatic screen tracking: tracks "Screen Viewed" each time an Activity resumes. App
+ * open/background tracking is process-level; see [enableActivityLifecycleTracking].
  */
 class DashXActivityLifecycleCallbacks : Application.ActivityLifecycleCallbacks {
 
@@ -60,8 +60,9 @@ class DashXActivityLifecycleCallbacks : Application.ActivityLifecycleCallbacks {
         }
 
         /**
-         * Tracks `$app_opened` / `$app_installed` / `$app_updated` when the app comes to the
-         * foreground and `$app_backgrounded` when it leaves it. Safe to call more than once.
+         * Tracks "Application Opened" / "Application Installed" / "Application Updated" when the
+         * app comes to the foreground and "Application Backgrounded" when it leaves it. Safe to
+         * call more than once.
          */
         @Suppress("UNUSED_PARAMETER")
         fun enableActivityLifecycleTracking(context: Context) {
@@ -75,7 +76,7 @@ class DashXActivityLifecycleCallbacks : Application.ActivityLifecycleCallbacks {
         }
 
         /**
-         * Tracks `$screen` each time an Activity resumes. Single-Activity apps (Fragments, Jetpack
+         * Tracks "Screen Viewed" each time an Activity resumes. Single-Activity apps (Fragments, Jetpack
          * Compose navigation) should call [DashX.screen] from their navigation instead.
          */
         fun enableScreenTracking(context: Context) {
@@ -128,7 +129,7 @@ class DashXActivityLifecycleCallbacks : Application.ActivityLifecycleCallbacks {
         private fun defaultAppLifecycleTracker() = AppLifecycleTracker(
             clock = { SystemClock.elapsedRealtime() },
             onAppStarted = { fromBackground -> DashX.trackAppStarted(fromBackground) },
-            onAppBackgrounded = { durationMs -> DashX.trackAppBackgrounded(durationMs) }
+            onAppBackgrounded = { durationMs -> DashX.trackAppSession(durationMs.toDouble()) }
         )
 
         private fun addProcessObserverOnMain(observer: DefaultLifecycleObserver) {
