@@ -23,16 +23,18 @@ const val SHARED_PREFERENCES_KEY_SUBSCRIBED_LIBRARY_VERSION =
 /// [getAdvertisingInfo] fetch.
 const val SHARED_PREFERENCES_KEY_SUBSCRIBED_AD_INFO_VERSION =
     "$SHARED_PREFERENCES_PREFIX.$DEFAULT_INSTANCE.subscribed_ad_info_version"
-const val INTERNAL_EVENT_APP_INSTALLED = "Application Installed"
-const val INTERNAL_EVENT_APP_UPDATED = "Application Updated"
-const val INTERNAL_EVENT_APP_OPENED = "Application Opened"
-const val INTERNAL_EVENT_APP_BACKGROUNDED = "Application Backgrounded"
-const val INTERNAL_EVENT_APP_CRASHED = "Application Crashed"
-const val INTERNAL_EVENT_APP_SCREEN_VIEWED = "Screen Viewed"
+// The `$` prefix marks SDK-generated events; names and camelCase data keys are shared with the
+// browser, iOS and React Native SDKs, so keep them in sync.
+const val INTERNAL_EVENT_APP_INSTALLED = "\$app_installed"
+const val INTERNAL_EVENT_APP_UPDATED = "\$app_updated"
+const val INTERNAL_EVENT_APP_OPENED = "\$app_opened"
+const val INTERNAL_EVENT_APP_BACKGROUNDED = "\$app_backgrounded"
+const val INTERNAL_EVENT_APP_CRASHED = "\$app_crashed"
+const val INTERNAL_EVENT_APP_SCREEN_VIEWED = "\$screen"
 /** Emitted when a deep link URI is processed (push, app links, etc.). */
-const val EVENT_DEEP_LINK_OPENED = "dx_deep_link_opened"
+const val EVENT_DEEP_LINK_OPENED = "\$deep_link_opened"
 /** Emitted on every notification tap regardless of navigation type (deep link, screen, click action, etc.). */
-const val EVENT_NOTIFICATION_NAVIGATED = "dx_notification_navigated"
+const val EVENT_NOTIFICATION_NAVIGATED = "\$notification_navigated"
 
 const val DATA = "data"
 

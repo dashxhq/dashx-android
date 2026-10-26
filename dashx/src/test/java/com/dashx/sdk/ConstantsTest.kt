@@ -16,15 +16,17 @@ class ConstantsTest {
         assertTrue(SHARED_PREFERENCES_KEY_BUILD.startsWith(prefix))
     }
 
+    /** Wire contract shared with the browser, iOS and React Native SDKs. */
     @Test
-    fun internalEventNames_areNotEmpty() {
-        assertTrue(INTERNAL_EVENT_APP_INSTALLED.isNotEmpty())
-        assertTrue(INTERNAL_EVENT_APP_UPDATED.isNotEmpty())
-        assertTrue(INTERNAL_EVENT_APP_OPENED.isNotEmpty())
-        assertTrue(INTERNAL_EVENT_APP_BACKGROUNDED.isNotEmpty())
-        assertTrue(INTERNAL_EVENT_APP_CRASHED.isNotEmpty())
-        assertTrue(INTERNAL_EVENT_APP_SCREEN_VIEWED.isNotEmpty())
-        assertTrue(EVENT_DEEP_LINK_OPENED.isNotEmpty())
+    fun sdkEventNames_matchCrossPlatformConvention() {
+        assertEquals("\$app_installed", INTERNAL_EVENT_APP_INSTALLED)
+        assertEquals("\$app_updated", INTERNAL_EVENT_APP_UPDATED)
+        assertEquals("\$app_opened", INTERNAL_EVENT_APP_OPENED)
+        assertEquals("\$app_backgrounded", INTERNAL_EVENT_APP_BACKGROUNDED)
+        assertEquals("\$app_crashed", INTERNAL_EVENT_APP_CRASHED)
+        assertEquals("\$screen", INTERNAL_EVENT_APP_SCREEN_VIEWED)
+        assertEquals("\$deep_link_opened", EVENT_DEEP_LINK_OPENED)
+        assertEquals("\$notification_navigated", EVENT_NOTIFICATION_NAVIGATED)
     }
 
     @Test
