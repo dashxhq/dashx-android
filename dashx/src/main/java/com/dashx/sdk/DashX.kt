@@ -1386,7 +1386,8 @@ class DashX {
             event: String,
             data: HashMap<String, String>? = hashMapOf(),
             onSuccess: (() -> Unit)? = null,
-            onError: ((DashXError) -> Unit)? = null
+            onError: ((DashXError) -> Unit)? = null,
+            occurredAt: Long = System.currentTimeMillis()
         ): Job {
             if (!isConfigured()) {
                 DashXLog.e(tag, "track() called before configure(); dropping event '$event'")
@@ -1396,7 +1397,6 @@ class DashX {
             // Captured on the caller's thread so a setIdentity() or reset() right after track()
             // does not change whose event this is, and the event keeps the time track() was called.
             val snapshot = account.get()
-            val occurredAt = System.currentTimeMillis()
             val properties = data?.toMap()
 
             return coroutineScope.launch {
@@ -1491,6 +1491,8 @@ class DashX {
                 return
             }
 
+            // Taken before the background work so the launch event is not timestamped after the first screen.
+            val startedAt = System.currentTimeMillis()
             coroutineScope.launch {
                 val launch = try {
                     val packageInfo = getPackageInfo(context)
@@ -1512,7 +1514,7 @@ class DashX {
                     DashXLog.e(tag, "Failed to build the app launch event: ${t.message}")
                     return@launch
                 }
-                track(launch.name, launch.data)
+                trackJob(launch.name, launch.data, occurredAt = startedAt)
             }
         }
 
