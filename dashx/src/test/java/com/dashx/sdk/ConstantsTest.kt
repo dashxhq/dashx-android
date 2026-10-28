@@ -16,15 +16,17 @@ class ConstantsTest {
         assertTrue(SHARED_PREFERENCES_KEY_BUILD.startsWith(prefix))
     }
 
+    /** Wire contract: existing app versions, customer analytics and the public docs use these names. */
     @Test
-    fun internalEventNames_areNotEmpty() {
-        assertTrue(INTERNAL_EVENT_APP_INSTALLED.isNotEmpty())
-        assertTrue(INTERNAL_EVENT_APP_UPDATED.isNotEmpty())
-        assertTrue(INTERNAL_EVENT_APP_OPENED.isNotEmpty())
-        assertTrue(INTERNAL_EVENT_APP_BACKGROUNDED.isNotEmpty())
-        assertTrue(INTERNAL_EVENT_APP_CRASHED.isNotEmpty())
-        assertTrue(INTERNAL_EVENT_APP_SCREEN_VIEWED.isNotEmpty())
-        assertTrue(EVENT_DEEP_LINK_OPENED.isNotEmpty())
+    fun sdkEventNames_keepTheirPublishedNames() {
+        assertEquals("Application Installed", INTERNAL_EVENT_APP_INSTALLED)
+        assertEquals("Application Updated", INTERNAL_EVENT_APP_UPDATED)
+        assertEquals("Application Opened", INTERNAL_EVENT_APP_OPENED)
+        assertEquals("Application Backgrounded", INTERNAL_EVENT_APP_BACKGROUNDED)
+        assertEquals("Application Crashed", INTERNAL_EVENT_APP_CRASHED)
+        assertEquals("\$screen", INTERNAL_EVENT_APP_SCREEN_VIEWED)
+        assertEquals("Deep Link Opened", EVENT_DEEP_LINK_OPENED)
+        assertEquals("Push Notification Tapped", EVENT_NOTIFICATION_NAVIGATED)
     }
 
     @Test

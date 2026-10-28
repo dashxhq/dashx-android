@@ -1,7 +1,12 @@
 package com.dashx.android
 
+import com.dashx.android.utils.trackTimestamp
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
@@ -9,6 +14,11 @@ import org.junit.Test
 class EventQueueTest {
 
     private val json = Json { ignoreUnknownKeys = true }
+
+    @After
+    fun tearDown() {
+        EventQueue.resetForTesting()
+    }
 
     // --- QueuedEvent serialization ---
 
@@ -68,6 +78,29 @@ class EventQueueTest {
         assertEquals("u1", deserialized[0].accountUid)
         assertEquals("event_2", deserialized[1].event)
         assertEquals("""{"a":"b"}""", deserialized[1].dataJson)
+    }
+
+    // --- Event time ---
+
+    @Test
+    fun enqueue_keepsOccurredAt_andReplaysIt() = runBlocking {
+        val queue = EventQueue.shared()
+        val replayedAt = CompletableDeferred<Long>()
+        queue.trackFunction = { _, _, _, _, enqueuedAt ->
+            replayedAt.complete(enqueuedAt)
+            true
+        }
+
+        queue.enqueue("button_click", occurredAt = 1700000000123)
+        queue.flush()
+
+        assertEquals(1700000000123, withTimeout(5000) { replayedAt.await() })
+    }
+
+    @Test
+    fun trackTimestamp_isIsoInstantInUtc() {
+        assertEquals("2023-11-14T22:13:20Z", trackTimestamp(1700000000000))
+        assertEquals("2023-11-14T22:13:20.123Z", trackTimestamp(1700000000123))
     }
 
     // --- Backoff calculation ---

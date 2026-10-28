@@ -6,106 +6,157 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
+import java.util.concurrent.ConcurrentHashMap
 
+/**
+ * Automatic screen tracking: tracks "$screen" each time an Activity resumes. App
+ * open/background tracking is process-level; see [enableActivityLifecycleTracking].
+ */
 class DashXActivityLifecycleCallbacks : Application.ActivityLifecycleCallbacks {
-    private val dashXClient = DashX
-    private var startSession = System.currentTimeMillis().toDouble()
-
-    init {
-        dashXClient.trackAppStarted()
-    }
-
-    override fun onActivityPaused(activity: Activity) {
-        if (!lifecycleTrackingEnabled) {
-            return
-        }
-
-        dashXClient.trackAppSession(System.currentTimeMillis().toDouble() - startSession)
-    }
 
     override fun onActivityResumed(activity: Activity) {
-        if (!lifecycleTrackingEnabled) {
-            return
-        }
-
-        startSession = System.currentTimeMillis().toDouble()
-        dashXClient.trackAppStarted(fromBackground = true)
-    }
-
-    override fun onActivityStarted(activity: Activity) {
         if (!screenTrackingEnabled) {
             return
         }
 
-        val packageManager = activity.packageManager
-        val info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            packageManager.getActivityInfo(
-                activity.componentName,
-                PackageManager.ComponentInfoFlags.of(PackageManager.GET_META_DATA.toLong())
-            )
-        } else {
-            packageManager.getActivityInfo(activity.componentName, PackageManager.GET_META_DATA)
-        }
-        val activityLabel = info.loadLabel(packageManager)
-        dashXClient.screen(activityLabel.toString(), hashMapOf())
+        val name = screenName(activity) ?: return
+        screenSink(name)
     }
 
-    override fun onActivityDestroyed(activity: Activity) {
+    override fun onActivityPaused(activity: Activity) {}
 
-    }
+    override fun onActivityStarted(activity: Activity) {}
 
-    override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {
+    override fun onActivityStopped(activity: Activity) {}
 
-    }
+    override fun onActivityDestroyed(activity: Activity) {}
 
-    override fun onActivityStopped(activity: Activity) {
+    override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
 
-    }
-
-    override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {
-
-    }
+    override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
 
     companion object {
-        private var dashXActivityLifecycleCallbacks: DashXActivityLifecycleCallbacks? = null
-        private var screenTrackingEnabled = false
-        private var lifecycleTrackingEnabled = false
+        private const val TAG = "DashXActivityLifecycleCallbacks"
 
-        private fun registerCallbacks(context: Context) {
-            // Callers may pass an Activity/Service/ContextWrapper; only an
-            // Application can register lifecycle callbacks. Resolve via
-            // applicationContext and no-op (don't crash) if unavailable —
-            // leaving the field null so a later enable call can retry.
-            val application = context.applicationContext as? Application
-            if (application == null) {
-                DashXLog.e(
-                    "DashXActivityLifecycleCallbacks",
-                    "Lifecycle/screen tracking requires an Application context; skipping registration."
-                )
-                return
-            }
-            dashXActivityLifecycleCallbacks = DashXActivityLifecycleCallbacks()
-            application.registerActivityLifecycleCallbacks(dashXActivityLifecycleCallbacks)
+        private val lock = Any()
+        @Volatile private var screenTrackingEnabled = false
+        private var screenCallbacks: DashXActivityLifecycleCallbacks? = null
+        private var processObserverRegistered = false
+
+        internal var screenSink: (String) -> Unit = { DashX.screen(it, null) }
+        internal var registerActivityCallbacks: (Application, Application.ActivityLifecycleCallbacks) -> Unit =
+            { application, callbacks -> application.registerActivityLifecycleCallbacks(callbacks) }
+        internal var registerProcessObserver: (DefaultLifecycleObserver) -> Unit = ::addProcessObserverOnMain
+        internal var appLifecycleTracker = defaultAppLifecycleTracker()
+
+        private val processObserver = object : DefaultLifecycleObserver {
+            override fun onStart(owner: LifecycleOwner) = appLifecycleTracker.onStart()
+            override fun onStop(owner: LifecycleOwner) = appLifecycleTracker.onStop()
         }
 
+        /**
+         * Tracks "Application Opened" / "Application Installed" / "Application Updated" when the
+         * app comes to the foreground and "Application Backgrounded" when it leaves it. Safe to
+         * call more than once.
+         */
+        @Suppress("UNUSED_PARAMETER")
         fun enableActivityLifecycleTracking(context: Context) {
-            lifecycleTrackingEnabled = true
-
-            if (dashXActivityLifecycleCallbacks != null) {
-                return
+            synchronized(lock) {
+                if (processObserverRegistered) {
+                    return
+                }
+                processObserverRegistered = true
             }
-
-            registerCallbacks(context)
+            registerProcessObserver(processObserver)
         }
 
+        /**
+         * Tracks "$screen" each time an Activity resumes. Single-Activity apps (Fragments, Jetpack
+         * Compose navigation) should call [DashX.screen] from their navigation instead.
+         */
         fun enableScreenTracking(context: Context) {
-            screenTrackingEnabled = true
+            synchronized(lock) {
+                screenTrackingEnabled = true
 
-            if (dashXActivityLifecycleCallbacks != null) {
-                return
+                if (screenCallbacks != null) {
+                    return
+                }
+
+                // Left unregistered on failure so a later enable call can retry.
+                val application = (context as? Application) ?: (context.applicationContext as? Application)
+                if (application == null) {
+                    DashXLog.e(TAG, "Screen tracking requires an Application context; skipping registration.")
+                    return
+                }
+                val callbacks = DashXActivityLifecycleCallbacks()
+                registerActivityCallbacks(application, callbacks)
+                screenCallbacks = callbacks
             }
+        }
 
-            registerCallbacks(context)
+        internal fun screenName(activity: Activity): String? {
+            // The SDK's invisible notification-tap trampoline, not a screen.
+            if (activity is NotificationReceiver) {
+                return null
+            }
+            // getActivityInfo() is a binder call; resolve each Activity class once, not on every resume.
+            return screenNames.getOrPut(activity.javaClass.name) {
+                activityLabel(activity) ?: activity.javaClass.simpleName.ifBlank { activity.javaClass.name }
+            }
+        }
+
+        private val screenNames = ConcurrentHashMap<String, String>()
+
+        private fun activityLabel(activity: Activity): String? {
+            return try {
+                val packageManager = activity.packageManager ?: return null
+                val componentName = activity.componentName ?: return null
+                val info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    packageManager.getActivityInfo(componentName, PackageManager.ComponentInfoFlags.of(0))
+                } else {
+                    packageManager.getActivityInfo(componentName, 0)
+                }
+                // loadLabel() falls back to the application label, which would name every unlabeled screen alike.
+                if (info.labelRes == 0 && info.nonLocalizedLabel == null) {
+                    return null
+                }
+                info.loadLabel(packageManager).toString().takeIf { it.isNotBlank() }
+            } catch (_: Exception) {
+                null
+            }
+        }
+
+        private fun defaultAppLifecycleTracker() = AppLifecycleTracker(
+            clock = { SystemClock.elapsedRealtime() },
+            onAppStarted = { fromBackground -> DashX.trackAppStarted(fromBackground) },
+            onAppBackgrounded = { durationMs -> DashX.trackAppSession(durationMs.toDouble()) }
+        )
+
+        private fun addProcessObserverOnMain(observer: DefaultLifecycleObserver) {
+            val mainLooper = Looper.getMainLooper()
+            if (Looper.myLooper() == mainLooper) {
+                ProcessLifecycleOwner.get().lifecycle.addObserver(observer)
+            } else {
+                Handler(mainLooper).post { ProcessLifecycleOwner.get().lifecycle.addObserver(observer) }
+            }
+        }
+
+        internal fun resetForTesting() {
+            synchronized(lock) {
+                screenTrackingEnabled = false
+                screenCallbacks = null
+                processObserverRegistered = false
+            }
+            screenSink = { DashX.screen(it, null) }
+            registerActivityCallbacks = { application, callbacks -> application.registerActivityLifecycleCallbacks(callbacks) }
+            registerProcessObserver = ::addProcessObserverOnMain
+            appLifecycleTracker = defaultAppLifecycleTracker()
         }
     }
 }

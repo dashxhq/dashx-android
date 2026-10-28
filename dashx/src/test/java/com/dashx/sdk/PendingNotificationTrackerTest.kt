@@ -60,13 +60,13 @@ class PendingNotificationTrackerTest {
     fun `flush replays and clears once configured`() {
         val store = InMemoryStore()
         PendingNotificationTracker.enqueueMessage(store, "m1", TrackMessageStatus.OPENED)
-        PendingNotificationTracker.enqueueEvent(store, "dx_notification_navigated", hashMapOf())
+        PendingNotificationTracker.enqueueEvent(store, "Push Notification Tapped", hashMapOf())
 
         configured = true
         PendingNotificationTracker.flush(store)
 
         assertEquals(listOf("m1"), replayedMessages.toList())
-        assertEquals(listOf("dx_notification_navigated"), replayedEvents.toList())
+        assertEquals(listOf("Push Notification Tapped"), replayedEvents.toList())
         assertEquals(0, store.size())
     }
 
