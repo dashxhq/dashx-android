@@ -2,6 +2,54 @@
 
 All notable changes to `dashx-android` are documented in this file. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
+## [1.5.0] — 2026-10-28
+
+### Breaking
+
+- **Screen, deep link and notification tap events are renamed.** `Screen Viewed` is now
+  `$screen`, with the screen name in `$screen_name` instead of `name`, `dx_deep_link_opened` is
+  now `Deep Link Opened` and `dx_notification_navigated` is now `Push Notification Tapped` (data
+  unchanged for both). Reports, flows or filters on the old names or the `name` key need updating.
+  The `INTERNAL_EVENT_APP_SCREEN_VIEWED`, `EVENT_DEEP_LINK_OPENED` and
+  `EVENT_NOTIFICATION_NAVIGATED` constant names are unchanged; only their values are. Lifecycle
+  event names and keys are unchanged.
+
+### Added
+
+- **`Application Updated`** now includes `previous_build` and `previous_version`, the build and
+  version the app was updated from. The version is recorded from this release on, so the first
+  update after upgrading the SDK has no `previous_version`.
+
+### Fixed
+
+- **App lifecycle events are app-level, not per Activity.** `enableActivityLifecycleTracking`
+  previously tracked `Application Backgrounded` and `Application Opened` on every Activity
+  pause/resume, and a cold start tracked `Application Opened` twice. It now follows the process
+  lifecycle (`ProcessLifecycleOwner`): a cold start tracks one event (`Application Installed`,
+  `Application Updated` or `Application Opened`), returning to the foreground tracks
+  `Application Opened` with `from_background`, and leaving it tracks `Application Backgrounded`.
+  Moving between Activities tracks nothing. Lifecycle events are no longer tracked before
+  `DashX.configure()`, so an install or update is reported on the next launch instead of lost.
+- **`track()`, lifecycle and screen events no longer do work on the calling thread.** Building an
+  event read device details and opened the encrypted preferences (an Android Keystore round trip)
+  several times per event on the caller's thread, which is the main thread for lifecycle and screen
+  events. Events are now built and sent in the background, the encrypted preferences are opened
+  once per process, and each Activity's screen name is looked up once. The crash event is still
+  sent synchronously so it can finish before the process exits.
+- **Events keep the time `track()` was called.** Track events now send it as `timestamp` instead
+  of leaving the server to stamp them on arrival, and events queued while offline or after a
+  failed send are replayed with that time rather than the time they were sent.
+- **Enabling tracking is idempotent and independent.** Calling `enableActivityLifecycleTracking`
+  or `enableScreenTracking` more than once no longer duplicates events, and enabling screen
+  tracking alone no longer tracks an app open.
+- **Automatic screen tracking** now tracks `$screen` when an Activity resumes (so returning
+  to an Activity counts as a new view) instead of when it starts. The name is the Activity's own
+  `android:label`, falling back to its class name rather than the application label, and the
+  SDK's notification-tap Activity is skipped. Fragment and Jetpack Compose navigation are not
+  tracked automatically; call `DashX.screen()` for those.
+- **`DashX.screen(name, null)`** dropped the screen name. `$screen_name` is now always sent, and the
+  caller's properties map is no longer modified.
+
 ## [1.4.1] — 2026-09-11
 
 ### Added

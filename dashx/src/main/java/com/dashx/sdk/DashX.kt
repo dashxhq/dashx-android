@@ -1,7 +1,6 @@
 package com.dashx.android
 
 import android.content.Context
-import android.content.SharedPreferences
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
@@ -387,7 +386,7 @@ class DashX {
         private fun configureEventQueue(context: Context) {
             val eventQueue = EventQueue.shared()
             eventQueue.configure(context)
-            eventQueue.trackFunction = { event, dataJson, queuedUid, queuedAnonymousUid ->
+            eventQueue.trackFunction = { event, dataJson, queuedUid, queuedAnonymousUid, enqueuedAt ->
                 try {
                     val snapshot = account.get()
                     val jsonData = dataJson?.let {
@@ -402,6 +401,7 @@ class DashX {
                             accountUid = (queuedUid ?: snapshot.uid)?.let { Optional.Present(it) } ?: Optional.Absent,
                             accountAnonymousUid = (queuedAnonymousUid ?: snapshot.anonymousUid)?.let { Optional.Present(it) } ?: Optional.Absent,
                             data = jsonData?.let { Optional.Present(it) } ?: Optional.Absent,
+                            timestamp = Optional.Present(trackTimestamp(enqueuedAt)),
                             systemContext = Optional.Present(systemContext)
                         )
                     )
@@ -1386,39 +1386,59 @@ class DashX {
             event: String,
             data: HashMap<String, String>? = hashMapOf(),
             onSuccess: (() -> Unit)? = null,
-            onError: ((DashXError) -> Unit)? = null
+            onError: ((DashXError) -> Unit)? = null,
+            occurredAt: Long = System.currentTimeMillis()
         ): Job {
             if (!isConfigured()) {
                 DashXLog.e(tag, "track() called before configure(); dropping event '$event'")
                 // Signal onError or the trackAsync() suspend wrapper hangs forever awaiting a callback.
                 return coroutineScope.launch(callbackDispatcher) { onError?.invoke(DashXError.NotConfigured()) }
             }
+            // Captured on the caller's thread so a setIdentity() or reset() right after track()
+            // does not change whose event this is, and the event keeps the time track() was called.
             val snapshot = account.get()
+            val properties = data?.toMap()
 
-            val jsonData =
-                data?.toMap()?.let { Json.parseToJsonElement(JSONObject(it).toString()).jsonObject }
+            return coroutineScope.launch {
+                val jsonData = try {
+                    properties?.let { Json.parseToJsonElement(JSONObject(it).toString()).jsonObject }
+                } catch (t: Throwable) {
+                    null.also { DashXLog.e(tag, "Dropping unserializable data for track event '$event': ${t.message}") }
+                }
+                val mutation = try {
+                    val systemContext = SystemContextMapper.toSystemContextInput(
+                        SystemContext.getInstance().fetchSystemContext()
+                    )
+                    TrackEventMutation(
+                        input = TrackEventInput(
+                            event = event,
+                            accountUid = snapshot.uid?.let { Optional.Present(it) } ?: Optional.Absent,
+                            accountAnonymousUid = snapshot.anonymousUid?.let { Optional.Present(it) } ?: Optional.Absent,
+                            data = jsonData?.let { Optional.Present(it) } ?: Optional.Absent,
+                            timestamp = Optional.Present(trackTimestamp(occurredAt)),
+                            systemContext = Optional.Present(systemContext)
+                        )
+                    )
+                } catch (t: Throwable) {
+                    if (t is CancellationException) throw t
+                    val errorMsg = "Failed to build track event '$event': ${t.message ?: t::class.java.simpleName}"
+                    DashXLog.e(tag, errorMsg)
+                    withContext(callbackDispatcher) {
+                        hostCallback { onError?.invoke(DashXError.NetworkError(errorMsg)) }
+                    }
+                    return@launch
+                }
 
-            val systemContext = SystemContextMapper.toSystemContextInput(
-                SystemContext.getInstance().fetchSystemContext()
-            )
-
-            val mutation = TrackEventMutation(
-                input = TrackEventInput(
-                    event = event,
-                    accountUid = snapshot.uid?.let { Optional.Present(it) } ?: Optional.Absent,
-                    accountAnonymousUid = snapshot.anonymousUid?.let { Optional.Present(it) } ?: Optional.Absent,
-                    data = jsonData?.let { Optional.Present(it) } ?: Optional.Absent,
-                    systemContext = Optional.Present(systemContext)
-                )
-            )
-
-            return executeMutation(mutation, onError = { error ->
-                val dataJsonStr = jsonData?.toString()
-                EventQueue.shared().enqueue(event, dataJsonStr, snapshot.uid, snapshot.anonymousUid)
-                onError?.invoke(error)
-            }) { result ->
-                DashXLog.d(tag, result.data?.trackEvent?.toString())
-                onSuccess?.invoke()
+                executeMutation(mutation, onError = { error ->
+                    val dataJsonStr = jsonData?.toString()
+                    coroutineScope.launch {
+                        EventQueue.shared().enqueue(event, dataJsonStr, snapshot.uid, snapshot.anonymousUid, occurredAt)
+                    }
+                    onError?.invoke(error)
+                }) { result ->
+                    DashXLog.d(tag, result.data?.trackEvent?.toString())
+                    onSuccess?.invoke()
+                }.join()
             }
         }
 
@@ -1442,6 +1462,7 @@ class DashX {
                     accountUid = snapshot.uid?.let { Optional.Present(it) } ?: Optional.Absent,
                     accountAnonymousUid = snapshot.anonymousUid?.let { Optional.Present(it) } ?: Optional.Absent,
                     data = jsonData?.let { Optional.Present(it) } ?: Optional.Absent,
+                    timestamp = Optional.Present(trackTimestamp(System.currentTimeMillis())),
                     systemContext = Optional.Present(systemContext)
                 )
             )
@@ -1457,48 +1478,49 @@ class DashX {
             }
         }
 
+        /**
+         * Tracks "Application Opened". A cold start (`fromBackground = false`) instead tracks
+         * "Application Installed" or "Application Updated" when the build differs from the last
+         * launch.
+         */
         fun trackAppStarted(fromBackground: Boolean = false) {
-            val context = context ?: return
-
-            val packageInfo = getPackageInfo(context)
-
-            val currentBuild = PackageInfoCompat.getLongVersionCode(packageInfo)
-
-            fun saveBuildInPreferences() {
-                val editor: SharedPreferences.Editor = getDashXSharedPreferences(context).edit()
-                editor.putLong(SHARED_PREFERENCES_KEY_BUILD, currentBuild)
-                editor.apply()
+            val context = context
+            if (context == null || !isConfigured()) {
+                // Leaves the stored build untouched so the install/update is reported next launch.
+                DashXLog.e(tag, "trackAppStarted() called before configure(); dropping event")
+                return
             }
 
-            val eventProperties = hashMapOf(
-                "version" to packageInfo.versionName.toString(), "build" to currentBuild.toString()
-            )
+            // Taken before the background work so the launch event is not timestamped after the first screen.
+            val startedAt = System.currentTimeMillis()
+            coroutineScope.launch {
+                val launch = try {
+                    val packageInfo = getPackageInfo(context)
+                    val currentBuild = PackageInfoCompat.getLongVersionCode(packageInfo)
+                    val preferences = getDashXSharedPreferences(context)
+                    val previousBuild = preferences.getLong(SHARED_PREFERENCES_KEY_BUILD, Long.MIN_VALUE)
+                        .takeIf { it != Long.MIN_VALUE }
+                    val previousVersion = preferences.getString(SHARED_PREFERENCES_KEY_VERSION, null)
 
-            if (fromBackground) eventProperties["from_background"] = true.toString()
-
-            when {
-                getDashXSharedPreferences(context).getLong(
-                    SHARED_PREFERENCES_KEY_BUILD, Long.MIN_VALUE
-                ) == Long.MIN_VALUE -> {
-                    track(INTERNAL_EVENT_APP_INSTALLED, eventProperties)
-                    saveBuildInPreferences()
+                    if (!fromBackground) {
+                        preferences.edit()
+                            .putLong(SHARED_PREFERENCES_KEY_BUILD, currentBuild)
+                            .putString(SHARED_PREFERENCES_KEY_VERSION, packageInfo.versionName)
+                            .apply()
+                    }
+                    appLaunchEvent(packageInfo.versionName, currentBuild, previousBuild, previousVersion, fromBackground)
+                } catch (t: Throwable) {
+                    if (t is CancellationException) throw t
+                    DashXLog.e(tag, "Failed to build the app launch event: ${t.message}")
+                    return@launch
                 }
-
-                getDashXSharedPreferences(context).getLong(
-                    SHARED_PREFERENCES_KEY_BUILD, Long.MIN_VALUE
-                ) < currentBuild -> {
-                    track(INTERNAL_EVENT_APP_UPDATED, eventProperties)
-                    saveBuildInPreferences()
-                }
-
-                else -> track(INTERNAL_EVENT_APP_OPENED, eventProperties)
+                trackJob(launch.name, launch.data, occurredAt = startedAt)
             }
         }
 
+        /** Tracks "Application Backgrounded"; [elapsedTime] is the foreground time in milliseconds. */
         fun trackAppSession(elapsedTime: Double) {
-            val elapsedTimeRounded = elapsedTime / 1000
-            val eventProperties = hashMapOf("session_length" to elapsedTimeRounded.toString())
-            track(INTERNAL_EVENT_APP_BACKGROUNDED, eventProperties)
+            track(INTERNAL_EVENT_APP_BACKGROUNDED, appBackgroundedData(elapsedTime))
         }
 
         fun trackAppCrashed(exception: Throwable?) {
@@ -1507,9 +1529,9 @@ class DashX {
             trackEventBlocking(INTERNAL_EVENT_APP_CRASHED, eventProperties)
         }
 
+        /** Tracks "$screen" with `$screen_name` = [screenName] plus [properties]. */
         fun screen(screenName: String, properties: HashMap<String, String>?) {
-            properties?.set("name", screenName)
-            track(INTERNAL_EVENT_APP_SCREEN_VIEWED, properties)
+            track(INTERNAL_EVENT_APP_SCREEN_VIEWED, screenEventData(screenName, properties))
         }
 
         fun trackMessage(
@@ -1569,7 +1591,7 @@ class DashX {
             }
         }
 
-        /** Tracks `dx_notification_navigated` when configured, else persists it. See [trackMessageOrPersist]. */
+        /** Tracks `Push Notification Tapped` when configured, else persists it. See [trackMessageOrPersist]. */
         internal fun trackNotificationNavigationOrPersist(
             context: Context,
             action: NavigationAction?,
@@ -1584,7 +1606,7 @@ class DashX {
             }
         }
 
-        /** Builds the `dx_notification_navigated` event data; stamps tap time into `timestamp` so it
+        /** Builds the `Push Notification Tapped` event data; stamps tap time into `timestamp` so it
          *  survives a deferred replay. */
         private fun notificationNavigationData(
             action: NavigationAction?,
@@ -1631,7 +1653,7 @@ class DashX {
         }
 
         /**
-         * Records a `dx_deep_link_opened` analytics event. Call when a deep link is opened (for example from a
+         * Records a `Deep Link Opened` analytics event. Call when a deep link is opened (for example from a
          * push notification tap or an App Link); notification taps are tracked automatically by the SDK when
          * the default handling opens a URL.
          */
@@ -1639,7 +1661,7 @@ class DashX {
             track(EVENT_DEEP_LINK_OPENED, deepLinkData(uri, source))
         }
 
-        /** Tracks `dx_deep_link_opened` when configured, else persists it. See [trackMessageOrPersist]. */
+        /** Tracks `Deep Link Opened` when configured, else persists it. See [trackMessageOrPersist]. */
         internal fun processDeepLinkOrPersist(context: Context, uri: Uri, source: String?) {
             val data = deepLinkData(uri, source)
             if (isConfigured()) {
