@@ -28,6 +28,12 @@ All notable changes to `dashx-android` are documented in this file. Format loose
   `Application Opened` with `from_background`, and leaving it tracks `Application Backgrounded`.
   Moving between Activities tracks nothing. Lifecycle events are no longer tracked before
   `DashX.configure()`, so an install or update is reported on the next launch instead of lost.
+- **`track()`, lifecycle and screen events no longer do work on the calling thread.** Building an
+  event read device details and opened the encrypted preferences (an Android Keystore round trip)
+  several times per event on the caller's thread, which is the main thread for lifecycle and screen
+  events. Events are now built and sent in the background, the encrypted preferences are opened
+  once per process, and each Activity's screen name is looked up once. The crash event is still
+  sent synchronously so it can finish before the process exits.
 - **Enabling tracking is idempotent and independent.** Calling `enableActivityLifecycleTracking`
   or `enableScreenTracking` more than once no longer duplicates events, and enabling screen
   tracking alone no longer tracks an app open.
