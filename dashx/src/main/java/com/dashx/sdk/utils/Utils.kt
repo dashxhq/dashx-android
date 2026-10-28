@@ -12,6 +12,8 @@ import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKeys
 import java.io.File
 import java.io.InputStream
+import java.time.Instant
+import java.time.format.DateTimeFormatter
 
 fun getPackageInfo(context: Context): PackageInfo =
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -93,3 +95,7 @@ fun getFileContentType(context: Context?, file: File): String {
 fun generateMuxVideoUrl(playbackId: String?): String {
     return "https://stream.mux.com/$playbackId.m3u8"
 }
+
+/** Formats an event time (epoch milliseconds) as the ISO 8601 `timestamp` sent with a track event. */
+internal fun trackTimestamp(epochMillis: Long): String =
+    DateTimeFormatter.ISO_INSTANT.format(Instant.ofEpochMilli(epochMillis))

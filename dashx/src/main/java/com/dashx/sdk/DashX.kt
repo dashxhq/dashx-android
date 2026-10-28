@@ -386,7 +386,7 @@ class DashX {
         private fun configureEventQueue(context: Context) {
             val eventQueue = EventQueue.shared()
             eventQueue.configure(context)
-            eventQueue.trackFunction = { event, dataJson, queuedUid, queuedAnonymousUid ->
+            eventQueue.trackFunction = { event, dataJson, queuedUid, queuedAnonymousUid, enqueuedAt ->
                 try {
                     val snapshot = account.get()
                     val jsonData = dataJson?.let {
@@ -401,6 +401,7 @@ class DashX {
                             accountUid = (queuedUid ?: snapshot.uid)?.let { Optional.Present(it) } ?: Optional.Absent,
                             accountAnonymousUid = (queuedAnonymousUid ?: snapshot.anonymousUid)?.let { Optional.Present(it) } ?: Optional.Absent,
                             data = jsonData?.let { Optional.Present(it) } ?: Optional.Absent,
+                            timestamp = Optional.Present(trackTimestamp(enqueuedAt)),
                             systemContext = Optional.Present(systemContext)
                         )
                     )
@@ -1393,8 +1394,9 @@ class DashX {
                 return coroutineScope.launch(callbackDispatcher) { onError?.invoke(DashXError.NotConfigured()) }
             }
             // Captured on the caller's thread so a setIdentity() or reset() right after track()
-            // does not change whose event this is.
+            // does not change whose event this is, and the event keeps the time track() was called.
             val snapshot = account.get()
+            val occurredAt = System.currentTimeMillis()
             val properties = data?.toMap()
 
             return coroutineScope.launch {
@@ -1413,6 +1415,7 @@ class DashX {
                             accountUid = snapshot.uid?.let { Optional.Present(it) } ?: Optional.Absent,
                             accountAnonymousUid = snapshot.anonymousUid?.let { Optional.Present(it) } ?: Optional.Absent,
                             data = jsonData?.let { Optional.Present(it) } ?: Optional.Absent,
+                            timestamp = Optional.Present(trackTimestamp(occurredAt)),
                             systemContext = Optional.Present(systemContext)
                         )
                     )
@@ -1429,7 +1432,7 @@ class DashX {
                 executeMutation(mutation, onError = { error ->
                     val dataJsonStr = jsonData?.toString()
                     coroutineScope.launch {
-                        EventQueue.shared().enqueue(event, dataJsonStr, snapshot.uid, snapshot.anonymousUid)
+                        EventQueue.shared().enqueue(event, dataJsonStr, snapshot.uid, snapshot.anonymousUid, occurredAt)
                     }
                     onError?.invoke(error)
                 }) { result ->
@@ -1459,6 +1462,7 @@ class DashX {
                     accountUid = snapshot.uid?.let { Optional.Present(it) } ?: Optional.Absent,
                     accountAnonymousUid = snapshot.anonymousUid?.let { Optional.Present(it) } ?: Optional.Absent,
                     data = jsonData?.let { Optional.Present(it) } ?: Optional.Absent,
+                    timestamp = Optional.Present(trackTimestamp(System.currentTimeMillis())),
                     systemContext = Optional.Present(systemContext)
                 )
             )

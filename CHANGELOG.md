@@ -34,6 +34,9 @@ All notable changes to `dashx-android` are documented in this file. Format loose
   events. Events are now built and sent in the background, the encrypted preferences are opened
   once per process, and each Activity's screen name is looked up once. The crash event is still
   sent synchronously so it can finish before the process exits.
+- **Events keep the time `track()` was called.** Track events now send it as `timestamp` instead
+  of leaving the server to stamp them on arrival, and events queued while offline or after a
+  failed send are replayed with that time rather than the time they were sent.
 - **Enabling tracking is idempotent and independent.** Calling `enableActivityLifecycleTracking`
   or `enableScreenTracking` more than once no longer duplicates events, and enabling screen
   tracking alone no longer tracks an app open.

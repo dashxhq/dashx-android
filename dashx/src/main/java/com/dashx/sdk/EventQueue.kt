@@ -17,7 +17,7 @@ import kotlin.math.pow
  * They are persisted to SharedPreferences so they survive app restarts.
  * On flush (called after configure or when network becomes available), events are
  * replayed one-at-a-time through [trackFunction] preserving the original identity
- * captured at enqueue time.
+ * and time captured when track() was called.
  */
 class EventQueue private constructor() {
 
@@ -52,6 +52,7 @@ class EventQueue private constructor() {
         val dataJson: String? = null,
         val accountUid: String? = null,
         val accountAnonymousUid: String? = null,
+        /** When track() was called, sent as the event's timestamp on replay. Named for the stored key. */
         val enqueuedAt: Long = System.currentTimeMillis(),
         var retryCount: Int = 0
     )
@@ -64,9 +65,9 @@ class EventQueue private constructor() {
 
     /**
      * The function used to replay events. Set by [DashX.configure].
-     * Signature: (event, dataJson, accountUid, accountAnonymousUid) -> success
+     * Signature: (event, dataJson, accountUid, accountAnonymousUid, enqueuedAt) -> success
      */
-    var trackFunction: (suspend (String, String?, String?, String?) -> Boolean)? = null
+    var trackFunction: (suspend (String, String?, String?, String?, Long) -> Boolean)? = null
 
     /** Must be called once from [DashX.configure] to enable persistence. */
     fun configure(context: Context) {
@@ -78,7 +79,8 @@ class EventQueue private constructor() {
         event: String,
         dataJson: String? = null,
         accountUid: String? = null,
-        accountAnonymousUid: String? = null
+        accountAnonymousUid: String? = null,
+        occurredAt: Long = System.currentTimeMillis()
     ) {
         if (pendingEvents.size >= MAX_QUEUE_SIZE) {
             pendingEvents.removeAt(0) // drop oldest (FIFO eviction)
@@ -88,7 +90,8 @@ class EventQueue private constructor() {
                 event = event,
                 dataJson = dataJson,
                 accountUid = accountUid,
-                accountAnonymousUid = accountAnonymousUid
+                accountAnonymousUid = accountAnonymousUid,
+                enqueuedAt = occurredAt
             )
         )
         saveToDisk()
@@ -127,7 +130,7 @@ class EventQueue private constructor() {
             }
 
             val success = try {
-                fn(head.event, head.dataJson, head.accountUid, head.accountAnonymousUid)
+                fn(head.event, head.dataJson, head.accountUid, head.accountAnonymousUid, head.enqueuedAt)
             } catch (_: Throwable) {
                 false
             }
