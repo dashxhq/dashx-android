@@ -1591,7 +1591,7 @@ class DashX {
             }
         }
 
-        /** Tracks `dx_notification_navigated` when configured, else persists it. See [trackMessageOrPersist]. */
+        /** Tracks `Push Notification Tapped` when configured, else persists it. See [trackMessageOrPersist]. */
         internal fun trackNotificationNavigationOrPersist(
             context: Context,
             action: NavigationAction?,
@@ -1606,7 +1606,7 @@ class DashX {
             }
         }
 
-        /** Builds the `dx_notification_navigated` event data; stamps tap time into `timestamp` so it
+        /** Builds the `Push Notification Tapped` event data; stamps tap time into `timestamp` so it
          *  survives a deferred replay. */
         private fun notificationNavigationData(
             action: NavigationAction?,

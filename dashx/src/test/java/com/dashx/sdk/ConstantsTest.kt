@@ -26,7 +26,7 @@ class ConstantsTest {
         assertEquals("Application Crashed", INTERNAL_EVENT_APP_CRASHED)
         assertEquals("\$screen", INTERNAL_EVENT_APP_SCREEN_VIEWED)
         assertEquals("Deep Link Opened", EVENT_DEEP_LINK_OPENED)
-        assertEquals("dx_notification_navigated", EVENT_NOTIFICATION_NAVIGATED)
+        assertEquals("Push Notification Tapped", EVENT_NOTIFICATION_NAVIGATED)
     }
 
     @Test

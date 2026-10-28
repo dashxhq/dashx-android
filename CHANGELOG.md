@@ -6,11 +6,13 @@ All notable changes to `dashx-android` are documented in this file. Format loose
 
 ### Breaking
 
-- **Screen and deep link events are renamed.** `Screen Viewed` is now `$screen`, with the screen
-  name in `$screen_name` instead of `name`, and `dx_deep_link_opened` is now `Deep Link Opened`
-  (data unchanged). Reports, flows or filters on the old names or the `name` key need updating.
-  The `INTERNAL_EVENT_APP_SCREEN_VIEWED` and `EVENT_DEEP_LINK_OPENED` constant names are
-  unchanged; only their values are. Lifecycle event names and keys are unchanged.
+- **Screen, deep link and notification tap events are renamed.** `Screen Viewed` is now
+  `$screen`, with the screen name in `$screen_name` instead of `name`, `dx_deep_link_opened` is
+  now `Deep Link Opened` and `dx_notification_navigated` is now `Push Notification Tapped` (data
+  unchanged for both). Reports, flows or filters on the old names or the `name` key need updating.
+  The `INTERNAL_EVENT_APP_SCREEN_VIEWED`, `EVENT_DEEP_LINK_OPENED` and
+  `EVENT_NOTIFICATION_NAVIGATED` constant names are unchanged; only their values are. Lifecycle
+  event names and keys are unchanged.
 
 ### Added
 

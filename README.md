@@ -61,7 +61,7 @@ DashXActivityLifecycleCallbacks.enableScreenTracking(this)
 | `$screen` | An Activity resumes (screen tracking), or you call `DashX.screen()` | `$screen_name` plus any properties you pass |
 | `Application Crashed` | An uncaught exception (`DashXExceptionHandler.enable()`) | `exception` |
 | `Deep Link Opened` | `DashX.processDeepLink(uri)` or a notification tap that opens a URL | `url`, `timestamp`, `source` |
-| `dx_notification_navigated` | A DashX notification is tapped | `type`, `timestamp`, `notification_id`, and `url`, `screen_name`, `screen_data` or `click_action` |
+| `Push Notification Tapped` | A DashX notification is tapped | `type`, `timestamp`, `notification_id`, and `url`, `screen_name`, `screen_data` or `click_action` |
 
 All values are strings. Lifecycle events are app-level: moving between Activities does not
 track an open or a background.

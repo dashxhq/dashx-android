@@ -33,7 +33,7 @@ const val INTERNAL_EVENT_APP_SCREEN_VIEWED = "\$screen"
 /** Emitted when a deep link URI is processed (push, app links, etc.). */
 const val EVENT_DEEP_LINK_OPENED = "Deep Link Opened"
 /** Emitted on every notification tap regardless of navigation type (deep link, screen, click action, etc.). */
-const val EVENT_NOTIFICATION_NAVIGATED = "dx_notification_navigated"
+const val EVENT_NOTIFICATION_NAVIGATED = "Push Notification Tapped"
 
 const val DATA = "data"
 
