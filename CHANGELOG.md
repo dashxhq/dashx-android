@@ -4,9 +4,19 @@ All notable changes to `dashx-android` are documented in this file. Format loose
 
 ## [Unreleased]
 
+### Breaking
+
+- **Screen and deep link events are renamed.** `Screen Viewed` is now `$screen`, with the screen
+  name in `$screen_name` instead of `name`, and `dx_deep_link_opened` is now `Deep Link Opened`
+  (data unchanged). Reports, flows or filters on the old names or the `name` key need updating.
+  The `INTERNAL_EVENT_APP_SCREEN_VIEWED` and `EVENT_DEEP_LINK_OPENED` constant names are
+  unchanged; only their values are. Lifecycle event names and keys are unchanged.
+
 ### Added
 
-- **`Application Updated`** now includes `previous_build`, the build the app was updated from.
+- **`Application Updated`** now includes `previous_build` and `previous_version`, the build and
+  version the app was updated from. The version is recorded from this release on, so the first
+  update after upgrading the SDK has no `previous_version`.
 
 ### Fixed
 
@@ -21,12 +31,12 @@ All notable changes to `dashx-android` are documented in this file. Format loose
 - **Enabling tracking is idempotent and independent.** Calling `enableActivityLifecycleTracking`
   or `enableScreenTracking` more than once no longer duplicates events, and enabling screen
   tracking alone no longer tracks an app open.
-- **Automatic screen tracking** now tracks `Screen Viewed` when an Activity resumes (so returning
+- **Automatic screen tracking** now tracks `$screen` when an Activity resumes (so returning
   to an Activity counts as a new view) instead of when it starts. The name is the Activity's own
   `android:label`, falling back to its class name rather than the application label, and the
   SDK's notification-tap Activity is skipped. Fragment and Jetpack Compose navigation are not
   tracked automatically; call `DashX.screen()` for those.
-- **`DashX.screen(name, null)`** dropped the screen name. `name` is now always sent, and the
+- **`DashX.screen(name, null)`** dropped the screen name. `$screen_name` is now always sent, and the
   caller's properties map is no longer modified.
 
 ## [1.4.1] — 2026-09-11

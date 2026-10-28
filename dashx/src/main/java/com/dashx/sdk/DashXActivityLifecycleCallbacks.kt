@@ -14,7 +14,7 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 
 /**
- * Automatic screen tracking: tracks "Screen Viewed" each time an Activity resumes. App
+ * Automatic screen tracking: tracks "$screen" each time an Activity resumes. App
  * open/background tracking is process-level; see [enableActivityLifecycleTracking].
  */
 class DashXActivityLifecycleCallbacks : Application.ActivityLifecycleCallbacks {
@@ -76,7 +76,7 @@ class DashXActivityLifecycleCallbacks : Application.ActivityLifecycleCallbacks {
         }
 
         /**
-         * Tracks "Screen Viewed" each time an Activity resumes. Single-Activity apps (Fragments, Jetpack
+         * Tracks "$screen" each time an Activity resumes. Single-Activity apps (Fragments, Jetpack
          * Compose navigation) should call [DashX.screen] from their navigation instead.
          */
         fun enableScreenTracking(context: Context) {

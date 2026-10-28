@@ -15,6 +15,7 @@ const val SHARED_PREFERENCES_KEY_IDENTITY_TOKEN =
 const val SHARED_PREFERENCES_KEY_DEVICE_TOKEN =
     "$SHARED_PREFERENCES_PREFIX.$DEFAULT_INSTANCE.device_token"
 const val SHARED_PREFERENCES_KEY_BUILD = "$SHARED_PREFERENCES_PREFIX.$DEFAULT_INSTANCE.build"
+const val SHARED_PREFERENCES_KEY_VERSION = "$SHARED_PREFERENCES_PREFIX.$DEFAULT_INSTANCE.version"
 const val SHARED_PREFERENCES_KEY_SUBSCRIBED_LIBRARY_VERSION =
     "$SHARED_PREFERENCES_PREFIX.$DEFAULT_INSTANCE.subscribed_library_version"
 /// SDK version for which the contact's advertising info was last synced.
@@ -28,9 +29,9 @@ const val INTERNAL_EVENT_APP_UPDATED = "Application Updated"
 const val INTERNAL_EVENT_APP_OPENED = "Application Opened"
 const val INTERNAL_EVENT_APP_BACKGROUNDED = "Application Backgrounded"
 const val INTERNAL_EVENT_APP_CRASHED = "Application Crashed"
-const val INTERNAL_EVENT_APP_SCREEN_VIEWED = "Screen Viewed"
+const val INTERNAL_EVENT_APP_SCREEN_VIEWED = "\$screen"
 /** Emitted when a deep link URI is processed (push, app links, etc.). */
-const val EVENT_DEEP_LINK_OPENED = "dx_deep_link_opened"
+const val EVENT_DEEP_LINK_OPENED = "Deep Link Opened"
 /** Emitted on every notification tap regardless of navigation type (deep link, screen, click action, etc.). */
 const val EVENT_NOTIFICATION_NAVIGATED = "dx_notification_navigated"
 

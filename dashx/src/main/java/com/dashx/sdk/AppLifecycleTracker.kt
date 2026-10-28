@@ -49,6 +49,7 @@ internal fun appLaunchEvent(
     version: String?,
     build: Long,
     previousBuild: Long?,
+    previousVersion: String?,
     fromBackground: Boolean
 ): AppLaunchEvent {
     val data = hashMapOf("version" to version.toString(), "build" to build.toString())
@@ -60,6 +61,10 @@ internal fun appLaunchEvent(
         previousBuild == null -> AppLaunchEvent(INTERNAL_EVENT_APP_INSTALLED, data)
         previousBuild < build -> {
             data["previous_build"] = previousBuild.toString()
+            // Builds stored before the version was recorded have no previous version.
+            if (previousVersion != null) {
+                data["previous_version"] = previousVersion
+            }
             AppLaunchEvent(INTERNAL_EVENT_APP_UPDATED, data)
         }
         else -> AppLaunchEvent(INTERNAL_EVENT_APP_OPENED, data)
@@ -71,6 +76,6 @@ internal fun appBackgroundedData(elapsedMs: Double): HashMap<String, String> =
 
 internal fun screenEventData(screenName: String, properties: Map<String, String>?): HashMap<String, String> {
     val data = HashMap(properties ?: emptyMap())
-    data["name"] = screenName
+    data["\$screen_name"] = screenName
     return data
 }

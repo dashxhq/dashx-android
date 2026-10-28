@@ -51,17 +51,27 @@ class AppLifecycleTrackerTest {
 
     @Test
     fun launchEvent_firstInstall() {
-        val event = appLaunchEvent("2.0.0", 20, previousBuild = null, fromBackground = false)
+        val event = appLaunchEvent("2.0.0", 20, previousBuild = null, previousVersion = null, fromBackground = false)
 
         assertEquals(INTERNAL_EVENT_APP_INSTALLED, event.name)
         assertEquals(hashMapOf("version" to "2.0.0", "build" to "20"), event.data)
     }
 
     @Test
-    fun launchEvent_updateCarriesPreviousBuild() {
-        val event = appLaunchEvent("2.0.0", 20, previousBuild = 19, fromBackground = false)
+    fun launchEvent_updateCarriesPreviousBuildAndVersion() {
+        val event = appLaunchEvent("2.0.0", 20, previousBuild = 19, previousVersion = "1.9.0", fromBackground = false)
 
         assertEquals(INTERNAL_EVENT_APP_UPDATED, event.name)
+        assertEquals(
+            hashMapOf("version" to "2.0.0", "build" to "20", "previous_build" to "19", "previous_version" to "1.9.0"),
+            event.data
+        )
+    }
+
+    @Test
+    fun launchEvent_updateWithoutAStoredVersionOmitsPreviousVersion() {
+        val event = appLaunchEvent("2.0.0", 20, previousBuild = 19, previousVersion = null, fromBackground = false)
+
         assertEquals(
             hashMapOf("version" to "2.0.0", "build" to "20", "previous_build" to "19"),
             event.data
@@ -70,7 +80,7 @@ class AppLifecycleTrackerTest {
 
     @Test
     fun launchEvent_coldStartOnSameBuildIsOpenWithoutFromBackground() {
-        val event = appLaunchEvent("2.0.0", 20, previousBuild = 20, fromBackground = false)
+        val event = appLaunchEvent("2.0.0", 20, previousBuild = 20, previousVersion = "2.0.0", fromBackground = false)
 
         assertEquals(INTERNAL_EVENT_APP_OPENED, event.name)
         assertEquals(hashMapOf("version" to "2.0.0", "build" to "20"), event.data)
@@ -78,7 +88,7 @@ class AppLifecycleTrackerTest {
 
     @Test
     fun launchEvent_downgradeIsOpen() {
-        val event = appLaunchEvent("1.0.0", 10, previousBuild = 20, fromBackground = false)
+        val event = appLaunchEvent("1.0.0", 10, previousBuild = 20, previousVersion = "2.0.0", fromBackground = false)
 
         assertEquals(INTERNAL_EVENT_APP_OPENED, event.name)
         assertEquals(hashMapOf("version" to "1.0.0", "build" to "10"), event.data)
@@ -86,7 +96,7 @@ class AppLifecycleTrackerTest {
 
     @Test
     fun launchEvent_returnFromBackgroundIsAlwaysOpen() {
-        val event = appLaunchEvent("2.0.0", 20, previousBuild = null, fromBackground = true)
+        val event = appLaunchEvent("2.0.0", 20, previousBuild = null, previousVersion = null, fromBackground = true)
 
         assertEquals(INTERNAL_EVENT_APP_OPENED, event.name)
         assertEquals(
@@ -101,17 +111,17 @@ class AppLifecycleTrackerTest {
     }
 
     @Test
-    fun screenData_alwaysIncludesName() {
-        assertEquals(hashMapOf("name" to "Checkout"), screenEventData("Checkout", null))
+    fun screenData_alwaysIncludesScreenName() {
+        assertEquals(hashMapOf("\$screen_name" to "Checkout"), screenEventData("Checkout", null))
     }
 
     @Test
     fun screenData_keepsCallerPropertiesWithoutMutatingThem() {
-        val properties = hashMapOf("plan" to "pro", "name" to "stale")
+        val properties = hashMapOf("plan" to "pro", "\$screen_name" to "stale")
 
         val data = screenEventData("Checkout", properties)
 
-        assertEquals(hashMapOf("plan" to "pro", "name" to "Checkout"), data)
-        assertEquals("stale", properties["name"])
+        assertEquals(hashMapOf("plan" to "pro", "\$screen_name" to "Checkout"), data)
+        assertEquals("stale", properties["\$screen_name"])
     }
 }

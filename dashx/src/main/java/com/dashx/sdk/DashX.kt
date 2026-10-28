@@ -1475,9 +1475,14 @@ class DashX {
             val previousBuild = preferences.getLong(SHARED_PREFERENCES_KEY_BUILD, Long.MIN_VALUE)
                 .takeIf { it != Long.MIN_VALUE }
 
-            val launch = appLaunchEvent(packageInfo.versionName, currentBuild, previousBuild, fromBackground)
-            if (!fromBackground && previousBuild != currentBuild) {
-                preferences.edit().putLong(SHARED_PREFERENCES_KEY_BUILD, currentBuild).apply()
+            val previousVersion = preferences.getString(SHARED_PREFERENCES_KEY_VERSION, null)
+
+            val launch = appLaunchEvent(packageInfo.versionName, currentBuild, previousBuild, previousVersion, fromBackground)
+            if (!fromBackground) {
+                preferences.edit()
+                    .putLong(SHARED_PREFERENCES_KEY_BUILD, currentBuild)
+                    .putString(SHARED_PREFERENCES_KEY_VERSION, packageInfo.versionName)
+                    .apply()
             }
             track(launch.name, launch.data)
         }
@@ -1493,7 +1498,7 @@ class DashX {
             trackEventBlocking(INTERNAL_EVENT_APP_CRASHED, eventProperties)
         }
 
-        /** Tracks "Screen Viewed" with `name` = [screenName] plus [properties]. */
+        /** Tracks "$screen" with `$screen_name` = [screenName] plus [properties]. */
         fun screen(screenName: String, properties: HashMap<String, String>?) {
             track(INTERNAL_EVENT_APP_SCREEN_VIEWED, screenEventData(screenName, properties))
         }
@@ -1617,7 +1622,7 @@ class DashX {
         }
 
         /**
-         * Records a `dx_deep_link_opened` analytics event. Call when a deep link is opened (for example from a
+         * Records a `Deep Link Opened` analytics event. Call when a deep link is opened (for example from a
          * push notification tap or an App Link); notification taps are tracked automatically by the SDK when
          * the default handling opens a URL.
          */
@@ -1625,7 +1630,7 @@ class DashX {
             track(EVENT_DEEP_LINK_OPENED, deepLinkData(uri, source))
         }
 
-        /** Tracks `dx_deep_link_opened` when configured, else persists it. See [trackMessageOrPersist]. */
+        /** Tracks `Deep Link Opened` when configured, else persists it. See [trackMessageOrPersist]. */
         internal fun processDeepLinkOrPersist(context: Context, uri: Uri, source: String?) {
             val data = deepLinkData(uri, source)
             if (isConfigured()) {
