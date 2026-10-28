@@ -27,7 +27,20 @@ fun getPrefKey(context: Context) = "$PACKAGE_NAME.$DEFAULT_INSTANCE.packageName"
 
 private const val ENCRYPTED_PREFS_FILE = "$PACKAGE_NAME.$DEFAULT_INSTANCE.secure"
 
-fun getDashXSharedPreferences(context: Context): SharedPreferences {
+private val dashXSharedPreferencesLock = Any()
+
+@Volatile
+private var dashXSharedPreferences: SharedPreferences? = null
+
+// Opening the encrypted preferences goes through the Android Keystore, which is too slow to repeat
+// for every event on the caller's thread.
+fun getDashXSharedPreferences(context: Context): SharedPreferences =
+    dashXSharedPreferences ?: synchronized(dashXSharedPreferencesLock) {
+        dashXSharedPreferences ?: openDashXSharedPreferences(context.applicationContext ?: context)
+            .also { dashXSharedPreferences = it }
+    }
+
+private fun openDashXSharedPreferences(context: Context): SharedPreferences {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
         try {
             val masterKeyAlias = MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC)

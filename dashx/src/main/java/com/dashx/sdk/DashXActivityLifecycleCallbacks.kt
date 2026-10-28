@@ -12,6 +12,7 @@ import android.os.SystemClock
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Automatic screen tracking: tracks "$screen" each time an Activity resumes. App
@@ -104,8 +105,13 @@ class DashXActivityLifecycleCallbacks : Application.ActivityLifecycleCallbacks {
             if (activity is NotificationReceiver) {
                 return null
             }
-            return activityLabel(activity) ?: activity.javaClass.simpleName.ifBlank { activity.javaClass.name }
+            // getActivityInfo() is a binder call; resolve each Activity class once, not on every resume.
+            return screenNames.getOrPut(activity.javaClass.name) {
+                activityLabel(activity) ?: activity.javaClass.simpleName.ifBlank { activity.javaClass.name }
+            }
         }
+
+        private val screenNames = ConcurrentHashMap<String, String>()
 
         private fun activityLabel(activity: Activity): String? {
             return try {

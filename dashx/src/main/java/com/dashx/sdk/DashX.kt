@@ -1392,32 +1392,50 @@ class DashX {
                 // Signal onError or the trackAsync() suspend wrapper hangs forever awaiting a callback.
                 return coroutineScope.launch(callbackDispatcher) { onError?.invoke(DashXError.NotConfigured()) }
             }
+            // Captured on the caller's thread so a setIdentity() or reset() right after track()
+            // does not change whose event this is.
             val snapshot = account.get()
+            val properties = data?.toMap()
 
-            val jsonData =
-                data?.toMap()?.let { Json.parseToJsonElement(JSONObject(it).toString()).jsonObject }
+            return coroutineScope.launch {
+                val jsonData = try {
+                    properties?.let { Json.parseToJsonElement(JSONObject(it).toString()).jsonObject }
+                } catch (t: Throwable) {
+                    null.also { DashXLog.e(tag, "Dropping unserializable data for track event '$event': ${t.message}") }
+                }
+                val mutation = try {
+                    val systemContext = SystemContextMapper.toSystemContextInput(
+                        SystemContext.getInstance().fetchSystemContext()
+                    )
+                    TrackEventMutation(
+                        input = TrackEventInput(
+                            event = event,
+                            accountUid = snapshot.uid?.let { Optional.Present(it) } ?: Optional.Absent,
+                            accountAnonymousUid = snapshot.anonymousUid?.let { Optional.Present(it) } ?: Optional.Absent,
+                            data = jsonData?.let { Optional.Present(it) } ?: Optional.Absent,
+                            systemContext = Optional.Present(systemContext)
+                        )
+                    )
+                } catch (t: Throwable) {
+                    if (t is CancellationException) throw t
+                    val errorMsg = "Failed to build track event '$event': ${t.message ?: t::class.java.simpleName}"
+                    DashXLog.e(tag, errorMsg)
+                    withContext(callbackDispatcher) {
+                        hostCallback { onError?.invoke(DashXError.NetworkError(errorMsg)) }
+                    }
+                    return@launch
+                }
 
-            val systemContext = SystemContextMapper.toSystemContextInput(
-                SystemContext.getInstance().fetchSystemContext()
-            )
-
-            val mutation = TrackEventMutation(
-                input = TrackEventInput(
-                    event = event,
-                    accountUid = snapshot.uid?.let { Optional.Present(it) } ?: Optional.Absent,
-                    accountAnonymousUid = snapshot.anonymousUid?.let { Optional.Present(it) } ?: Optional.Absent,
-                    data = jsonData?.let { Optional.Present(it) } ?: Optional.Absent,
-                    systemContext = Optional.Present(systemContext)
-                )
-            )
-
-            return executeMutation(mutation, onError = { error ->
-                val dataJsonStr = jsonData?.toString()
-                EventQueue.shared().enqueue(event, dataJsonStr, snapshot.uid, snapshot.anonymousUid)
-                onError?.invoke(error)
-            }) { result ->
-                DashXLog.d(tag, result.data?.trackEvent?.toString())
-                onSuccess?.invoke()
+                executeMutation(mutation, onError = { error ->
+                    val dataJsonStr = jsonData?.toString()
+                    coroutineScope.launch {
+                        EventQueue.shared().enqueue(event, dataJsonStr, snapshot.uid, snapshot.anonymousUid)
+                    }
+                    onError?.invoke(error)
+                }) { result ->
+                    DashXLog.d(tag, result.data?.trackEvent?.toString())
+                    onSuccess?.invoke()
+                }.join()
             }
         }
 
@@ -1469,22 +1487,29 @@ class DashX {
                 return
             }
 
-            val packageInfo = getPackageInfo(context)
-            val currentBuild = PackageInfoCompat.getLongVersionCode(packageInfo)
-            val preferences = getDashXSharedPreferences(context)
-            val previousBuild = preferences.getLong(SHARED_PREFERENCES_KEY_BUILD, Long.MIN_VALUE)
-                .takeIf { it != Long.MIN_VALUE }
+            coroutineScope.launch {
+                val launch = try {
+                    val packageInfo = getPackageInfo(context)
+                    val currentBuild = PackageInfoCompat.getLongVersionCode(packageInfo)
+                    val preferences = getDashXSharedPreferences(context)
+                    val previousBuild = preferences.getLong(SHARED_PREFERENCES_KEY_BUILD, Long.MIN_VALUE)
+                        .takeIf { it != Long.MIN_VALUE }
+                    val previousVersion = preferences.getString(SHARED_PREFERENCES_KEY_VERSION, null)
 
-            val previousVersion = preferences.getString(SHARED_PREFERENCES_KEY_VERSION, null)
-
-            val launch = appLaunchEvent(packageInfo.versionName, currentBuild, previousBuild, previousVersion, fromBackground)
-            if (!fromBackground) {
-                preferences.edit()
-                    .putLong(SHARED_PREFERENCES_KEY_BUILD, currentBuild)
-                    .putString(SHARED_PREFERENCES_KEY_VERSION, packageInfo.versionName)
-                    .apply()
+                    if (!fromBackground) {
+                        preferences.edit()
+                            .putLong(SHARED_PREFERENCES_KEY_BUILD, currentBuild)
+                            .putString(SHARED_PREFERENCES_KEY_VERSION, packageInfo.versionName)
+                            .apply()
+                    }
+                    appLaunchEvent(packageInfo.versionName, currentBuild, previousBuild, previousVersion, fromBackground)
+                } catch (t: Throwable) {
+                    if (t is CancellationException) throw t
+                    DashXLog.e(tag, "Failed to build the app launch event: ${t.message}")
+                    return@launch
+                }
+                track(launch.name, launch.data)
             }
-            track(launch.name, launch.data)
         }
 
         /** Tracks "Application Backgrounded"; [elapsedTime] is the foreground time in milliseconds. */
