@@ -1,4 +1,4 @@
 [versions]
 group = "com.dashx"
-dashxAndroid = "1.5.2"
+dashxAndroid = "1.5.3"
 dashxAndroidArtifactId = "dashx-android"
