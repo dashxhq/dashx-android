@@ -2,6 +2,30 @@
 
 All notable changes to `dashx-android` are documented in this file. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
+## [1.5.1] — 2026-10-30
+
+### Fixed
+
+- **An unreadable stored subscription no longer crashes the app.** When the encrypted
+  preferences held a value they could not decrypt (`SecurityException: Could not decrypt value`),
+  `subscribe(token)` threw from Firebase's token callback on the main thread or from
+  `onNewToken`, where neither the SDK nor the host could catch it. The saved device token and
+  subscription markers are now treated as missing when unreadable and removed, so the next
+  subscribe sends the token again and rewrites them. `unsubscribe()` treats an unreadable token as
+  not subscribed and reports `false`.
+- **Events that fail to send are retried during the session.** The offline queue was only flushed
+  by `DashX.configure()`, so an event that failed mid-session waited for the next app launch.
+  Queuing an event now starts the retry worker when none is running. A running worker keeps its
+  backoff, so events tracked during an outage do not each trigger an immediate retry.
+- **The offline queue is safe under concurrent use.** Queuing an event while the queue was full and
+  being sent could throw `ArrayIndexOutOfBoundsException`, concurrent failed sends could grow the
+  queue past its 1,000-event cap, a sent event could remove a different, unsent one, and the saved
+  queue could be overwritten by an older copy.
+- **Offline delivery resumes after `shutdown()` and `configure()`.** `shutdown()` stopped the
+  offline queue for the rest of the process, so after reconfiguring, events that failed to send
+  were saved but never retried until the app restarted. `configure()` now restarts the queue, and
+  events queued while it was stopped are sent.
+
 ## [1.5.0] — 2026-10-28
 
 ### Breaking

@@ -10,6 +10,7 @@ import android.net.Uri
 import android.os.Build
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKeys
+import com.dashx.android.DashXLog
 import java.io.File
 import java.io.InputStream
 import java.time.Instant
@@ -40,6 +41,21 @@ fun getDashXSharedPreferences(context: Context): SharedPreferences =
     dashXSharedPreferences ?: synchronized(dashXSharedPreferencesLock) {
         dashXSharedPreferences ?: openDashXSharedPreferences(context.applicationContext ?: context)
             .also { dashXSharedPreferences = it }
+    }
+
+/**
+ * Reads [key], or null when the stored value cannot be decrypted. EncryptedSharedPreferences throws
+ * `SecurityException: Could not decrypt value` for a value sealed under another keyset, and the
+ * subscribe path reads on Firebase and coroutine callback threads, where a throw crashes the host.
+ * The unreadable entry is removed so the next successful write replaces it.
+ */
+internal fun SharedPreferences.getStringOrNull(key: String): String? =
+    try {
+        getString(key, null)
+    } catch (e: Exception) {
+        DashXLog.e(logText = "Dropping unreadable preference '$key': ${e.message}")
+        runCatching { edit().remove(key).apply() }
+        null
     }
 
 private fun openDashXSharedPreferences(context: Context): SharedPreferences {
