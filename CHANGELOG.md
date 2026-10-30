@@ -2,6 +2,15 @@
 
 All notable changes to `dashx-android` are documented in this file. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
+## [1.5.3] — 2026-10-30
+
+### Fixed
+
+- **A replayed event keeps the identity it was queued with.** An event that failed to send while
+  signed out was retried with the account uid of whoever had signed in by then, crediting their
+  account with it. Replay now sends the queued account uid as it was, null included, and only an
+  event queued before identities were stored takes the current identity.
+
 ## [1.5.2] — 2026-10-30
 
 ### Fixed

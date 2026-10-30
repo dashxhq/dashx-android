@@ -387,6 +387,19 @@ class DashX {
             registerLifecycleObserver()
         }
 
+        /**
+         * A replayed event keeps the identity it was queued with, a null account uid included: an event
+         * tracked signed out must not be credited to whoever signs in before it is sent. Only an event
+         * queued before identities were stored, with neither id, takes the current identity.
+         */
+        internal fun replayIdentity(
+            queuedUid: String?,
+            queuedAnonymousUid: String?,
+            current: AccountSnapshot
+        ): Pair<String?, String?> =
+            if (queuedUid == null && queuedAnonymousUid == null) current.uid to current.anonymousUid
+            else queuedUid to queuedAnonymousUid
+
         private fun configureEventQueue(context: Context) {
             val eventQueue = EventQueue.shared()
             eventQueue.configure(context)
@@ -399,11 +412,12 @@ class DashX {
                     val systemContext = SystemContextMapper.toSystemContextInput(
                         SystemContext.getInstance().fetchSystemContext()
                     )
+                    val (accountUid, accountAnonymousUid) = replayIdentity(queuedUid, queuedAnonymousUid, snapshot)
                     val mutation = TrackEventMutation(
                         input = TrackEventInput(
                             event = event,
-                            accountUid = (queuedUid ?: snapshot.uid)?.let { Optional.Present(it) } ?: Optional.Absent,
-                            accountAnonymousUid = (queuedAnonymousUid ?: snapshot.anonymousUid)?.let { Optional.Present(it) } ?: Optional.Absent,
+                            accountUid = accountUid?.let { Optional.Present(it) } ?: Optional.Absent,
+                            accountAnonymousUid = accountAnonymousUid?.let { Optional.Present(it) } ?: Optional.Absent,
                             data = jsonData?.let { Optional.Present(it) } ?: Optional.Absent,
                             timestamp = Optional.Present(trackTimestamp(enqueuedAt)),
                             systemContext = Optional.Present(systemContext)
