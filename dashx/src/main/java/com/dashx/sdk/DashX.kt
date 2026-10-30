@@ -1728,10 +1728,9 @@ class DashX {
             }
 
             val sharedPrefs = getDashXSharedPreferences(ctx)
-            val savedToken = sharedPrefs.getString(SHARED_PREFERENCES_KEY_DEVICE_TOKEN, null)
-            val savedLibraryVersion = sharedPrefs.getString(
-                SHARED_PREFERENCES_KEY_SUBSCRIBED_LIBRARY_VERSION, null
-            )
+            val savedToken = sharedPrefs.getStringOrNull(SHARED_PREFERENCES_KEY_DEVICE_TOKEN)
+            val savedLibraryVersion =
+                sharedPrefs.getStringOrNull(SHARED_PREFERENCES_KEY_SUBSCRIBED_LIBRARY_VERSION)
 
             // Cache-hit gate. Skip only when both token AND library version
             // match — otherwise an SDK upgrade never refreshes the contact's
@@ -1800,11 +1799,9 @@ class DashX {
             if (isUnsubscribeInFlight.get()) return
             val ctx = context ?: return
             val sharedPrefs = getDashXSharedPreferences(ctx)
-            val savedToken =
-                sharedPrefs.getString(SHARED_PREFERENCES_KEY_DEVICE_TOKEN, null) ?: return
-            val syncedAdInfoVersion = sharedPrefs.getString(
-                SHARED_PREFERENCES_KEY_SUBSCRIBED_AD_INFO_VERSION, null
-            )
+            val savedToken = sharedPrefs.getStringOrNull(SHARED_PREFERENCES_KEY_DEVICE_TOKEN) ?: return
+            val syncedAdInfoVersion =
+                sharedPrefs.getStringOrNull(SHARED_PREFERENCES_KEY_SUBSCRIBED_AD_INFO_VERSION)
             if (syncedAdInfoVersion == BuildConfig.VERSION_NAME) {
                 return
             }
@@ -2002,9 +1999,8 @@ class DashX {
                 return
             }
 
-            val savedToken = getDashXSharedPreferences(ctx).getString(
-                SHARED_PREFERENCES_KEY_DEVICE_TOKEN, null
-            )
+            val savedToken =
+                getDashXSharedPreferences(ctx).getStringOrNull(SHARED_PREFERENCES_KEY_DEVICE_TOKEN)
 
             if (savedToken == null) {
                 // Legitimate "nothing to unsubscribe" — same semantics as the
