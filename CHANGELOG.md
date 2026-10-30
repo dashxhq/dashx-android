@@ -2,6 +2,35 @@
 
 All notable changes to `dashx-android` are documented in this file. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
+## [1.5.2] — 2026-10-30
+
+### Fixed
+
+- **Unreadable encrypted preferences no longer crash the app or disable the SDK.** 1.5.1 covered
+  the subscribe path only. The advertising info refresh, which runs at configure and on every
+  event in a background coroutine, read the stored advertising ID and ad tracking flag without a
+  guard, so a value the encrypted preferences could not decrypt (`SecurityException: Could not
+  decrypt value`) reached the default exception handler and crashed the app. Every read of the
+  encrypted preferences now treats an unreadable value as missing and removes it, so the next
+  write replaces it, and the refresh can no longer throw out of its coroutine. This also covers:
+  - `configure()`, which threw on every launch when the stored user ID, anonymous ID or identity
+    token was unreadable. The user is now anonymous until the next `identify`.
+  - Events, which failed to build while the stored advertising details were unreadable.
+  - `Application Installed` and `Application Updated`, which stopped being reported when the
+    stored build or version was unreadable.
+  - The permission request flow.
+- **Large push images no longer risk running out of memory.** `image` and `large_icon` were
+  decoded at full resolution, so a small compressed image with large dimensions (8192×8192 is about
+  256 MiB of pixels) could throw `OutOfMemoryError`, which the existing error handling did not catch.
+  Images are now downsampled to at most about 1024 px on the longer side (256 px for `large_icon`)
+  before the pixels are allocated, downloads over 10 MiB are skipped, and a notification whose image
+  cannot be loaded still shows its text.
+- **A notification listener that throws no longer crashes the app on tap or dismiss.**
+  `onNotificationClicked` and `onNotificationDismissed` ran unguarded in the tap and dismiss
+  receivers. Each listener is now called on its own, as `onNotificationReceived` already was: a
+  failure is logged, the remaining listeners still run, and a click listener that throws leaves the
+  default handling on.
+
 ## [1.5.1] — 2026-10-30
 
 ### Fixed

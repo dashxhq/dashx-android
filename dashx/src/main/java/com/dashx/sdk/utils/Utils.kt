@@ -43,19 +43,36 @@ fun getDashXSharedPreferences(context: Context): SharedPreferences =
             .also { dashXSharedPreferences = it }
     }
 
-/**
- * Reads [key], or null when the stored value cannot be decrypted. EncryptedSharedPreferences throws
- * `SecurityException: Could not decrypt value` for a value sealed under another keyset, and the
- * subscribe path reads on Firebase and coroutine callback threads, where a throw crashes the host.
- * The unreadable entry is removed so the next successful write replaces it.
- */
+/** Visible for testing — drops the cached preferences so the next read opens them again. */
+internal fun resetDashXSharedPreferencesForTesting() {
+    dashXSharedPreferences = null
+}
+
+/** Reads [key], or null when the stored value cannot be decrypted; see [readOrDrop]. */
 internal fun SharedPreferences.getStringOrNull(key: String): String? =
+    readOrDrop(key, null) { getString(key, null) }
+
+/** Reads [key], or [default] when the stored value cannot be decrypted; see [readOrDrop]. */
+internal fun SharedPreferences.getBooleanOrDefault(key: String, default: Boolean): Boolean =
+    readOrDrop(key, default) { getBoolean(key, default) }
+
+/** Reads [key], or [default] when the stored value cannot be decrypted; see [readOrDrop]. */
+internal fun SharedPreferences.getLongOrDefault(key: String, default: Long): Long =
+    readOrDrop(key, default) { getLong(key, default) }
+
+/**
+ * EncryptedSharedPreferences throws `SecurityException: Could not decrypt value` for a value sealed
+ * under another keyset. The SDK reads on Firebase and coroutine callback threads, where a throw
+ * crashes the host, so an unreadable entry falls back to [fallback] and is removed for the next write
+ * to replace.
+ */
+private inline fun <T> SharedPreferences.readOrDrop(key: String, fallback: T, read: () -> T): T =
     try {
-        getString(key, null)
+        read()
     } catch (e: Exception) {
         DashXLog.e(logText = "Dropping unreadable preference '$key': ${e.message}")
         runCatching { edit().remove(key).apply() }
-        null
+        fallback
     }
 
 private fun openDashXSharedPreferences(context: Context): SharedPreferences {

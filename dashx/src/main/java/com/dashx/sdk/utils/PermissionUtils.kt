@@ -89,8 +89,7 @@ object PermissionUtils {
     }
 
     private fun hasAskedForPermissionTwice(activity: Activity, permission: String): Boolean {
-        return getDashXSharedPreferences(activity)
-            .getBoolean(permission, false)
+        return getDashXSharedPreferences(activity).getBooleanOrDefault(permission, false)
     }
 
     private fun markPermissionAsAskedTwice(activity: Activity, permission: String) {

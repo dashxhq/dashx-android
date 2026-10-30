@@ -305,16 +305,20 @@ class DashX {
         ): Boolean {
             var suppressDefault = false
             for (listener in notificationListeners) {
-                if (listener.onNotificationClicked(payload, action, actionIdentifier)) {
-                    suppressDefault = true
-                }
+                // Runs from NotificationReceiver; a listener that throws counts as not handling the
+                // click, so the default handling still opens the notification.
+                runCatching { listener.onNotificationClicked(payload, action, actionIdentifier) }
+                    .onSuccess { if (it) suppressDefault = true }
+                    .onFailure { DashXLog.e(tag, "onNotificationClicked threw: ${it.message}") }
             }
             return suppressDefault
         }
 
         internal fun dispatchNotificationDismissed(payload: DashXPayload) {
             for (listener in notificationListeners) {
-                listener.onNotificationDismissed(payload)
+                // Runs from a BroadcastReceiver, where a throw kills the process.
+                runCatching { listener.onNotificationDismissed(payload) }
+                    .onFailure { DashXLog.e(tag, "onNotificationDismissed threw: ${it.message}") }
             }
         }
 
@@ -420,11 +424,12 @@ class DashX {
                 return
             }
             val dashXSharedPreferences = getDashXSharedPreferences(ctx)
-            val uid = dashXSharedPreferences.getString(SHARED_PREFERENCES_KEY_ACCOUNT_UID, null)
+            // An unreadable value counts as missing: an unreadable uid leaves the user anonymous until
+            // the next identify, rather than failing configure() on every launch.
+            val uid = dashXSharedPreferences.getStringOrNull(SHARED_PREFERENCES_KEY_ACCOUNT_UID)
             var anonymousUid =
-                dashXSharedPreferences.getString(SHARED_PREFERENCES_KEY_ACCOUNT_ANONYMOUS_UID, null)
-            val token =
-                dashXSharedPreferences.getString(SHARED_PREFERENCES_KEY_IDENTITY_TOKEN, null)
+                dashXSharedPreferences.getStringOrNull(SHARED_PREFERENCES_KEY_ACCOUNT_ANONYMOUS_UID)
+            val token = dashXSharedPreferences.getStringOrNull(SHARED_PREFERENCES_KEY_IDENTITY_TOKEN)
 
             val regenerated = anonymousUid.isNullOrEmpty()
             if (regenerated) anonymousUid = generateAccountAnonymousUid()
@@ -1498,9 +1503,9 @@ class DashX {
                     val packageInfo = getPackageInfo(context)
                     val currentBuild = PackageInfoCompat.getLongVersionCode(packageInfo)
                     val preferences = getDashXSharedPreferences(context)
-                    val previousBuild = preferences.getLong(SHARED_PREFERENCES_KEY_BUILD, Long.MIN_VALUE)
+                    val previousBuild = preferences.getLongOrDefault(SHARED_PREFERENCES_KEY_BUILD, Long.MIN_VALUE)
                         .takeIf { it != Long.MIN_VALUE }
-                    val previousVersion = preferences.getString(SHARED_PREFERENCES_KEY_VERSION, null)
+                    val previousVersion = preferences.getStringOrNull(SHARED_PREFERENCES_KEY_VERSION)
 
                     if (!fromBackground) {
                         preferences.edit()
