@@ -22,8 +22,6 @@ android {
     defaultConfig {
         minSdk 26
         targetSdk 34
-        versionCode 100500000 // 1.4.0 -> 100400000, 1.5.4 -> 100500400 and so on...
-        versionName sdkVersion
 
         buildConfigField 'String', 'VERSION_NAME', "\"$sdkVersion\""
         buildConfigField 'String', 'LIBRARY_NAME', "\"dashx-android\""

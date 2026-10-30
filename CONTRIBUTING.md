@@ -56,11 +56,14 @@ coroutineScope.launch {
 
 ## Publishing
 
-DashX Android SDK uses [Maven](https://mvnrepository.com/) to serve build artifacts. This repository uses [GitHub Actions](https://github.com/features/actions) and any push to **main** will automatically publish to Maven. Here are the rough steps:
+DashX Android SDK is published to [Maven Central](https://central.sonatype.com/artifact/com.dashx/dashx-android) as `com.dashx:dashx-android`. Every push to **main** runs [publish.yml](.github/workflows/publish.yml), which builds and runs `./gradlew publishAndReleaseToMavenCentral`; signing and Maven Central credentials come from the repository's secrets.
 
-- Bump up the `version`, `versionCode` and `versionName` in **dashx/build.gradle**
-- Commit the version bump to **develop** (`git push origin develop`)
-- Merge the latest **develop** branch into **main** branch
+To release:
+
+- Set `dashxAndroid` in **gradle/libs.versions.toml** to the new version. The published version and `BuildConfig.VERSION_NAME` both come from it.
+- Add the version's entry to **CHANGELOG.md** and update the version in **README.md**'s install snippet.
+- Merge the changes into **develop**, then merge **develop** into **main**. The push to **main** publishes.
+- Tag the merge commit on **main** with the bare version and push the tag (`git tag 1.5.1 && git push origin 1.5.1`).
 
 ## Testing Locally
 
