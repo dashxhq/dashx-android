@@ -2,6 +2,8 @@ package com.dashx.android
 
 import com.dashx.android.utils.trackTimestamp
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.encodeToString
@@ -10,6 +12,10 @@ import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.atomic.AtomicInteger
+import kotlin.concurrent.thread
 
 class EventQueueTest {
 
@@ -95,6 +101,118 @@ class EventQueueTest {
         queue.flush()
 
         assertEquals(1700000000123, withTimeout(5000) { replayedAt.await() })
+    }
+
+    // --- Retry worker ---
+
+    @Test
+    fun enqueue_startsTheWorker_withoutAnExplicitFlush() = runBlocking {
+        val queue = EventQueue.shared()
+        val replayed = CompletableDeferred<String>()
+        queue.trackFunction = { event, _, _, _, _ ->
+            replayed.complete(event)
+            true
+        }
+
+        queue.enqueue("screen_view")
+
+        assertEquals("screen_view", withTimeout(5000) { replayed.await() })
+        withTimeout(5000) { while (queue.size() > 0) delay(10) }
+    }
+
+    @Test
+    fun enqueue_duringBackoff_doesNotRestartTheWorker() = runBlocking {
+        val queue = EventQueue.shared()
+        val attempts = AtomicInteger(0)
+        val firstAttempt = CompletableDeferred<Unit>()
+        queue.trackFunction = { _, _, _, _, _ ->
+            attempts.incrementAndGet()
+            firstAttempt.complete(Unit)
+            false
+        }
+
+        queue.enqueue("first")
+        withTimeout(5000) { firstAttempt.await() }
+        repeat(5) { queue.enqueue("during_outage_$it") }
+        delay(500)
+
+        // The first retry is at least 2s out; a restarted worker would have retried at once.
+        assertEquals(1, attempts.get())
+        assertEquals(6, queue.size())
+    }
+
+    @Test
+    fun enqueue_afterTheQueueDrains_startsANewWorker() = runBlocking {
+        val queue = EventQueue.shared()
+        val replayed = Channel<String>(Channel.UNLIMITED)
+        queue.trackFunction = { event, _, _, _, _ ->
+            replayed.send(event)
+            true
+        }
+
+        queue.enqueue("first")
+        assertEquals("first", withTimeout(5000) { replayed.receive() })
+        withTimeout(5000) { while (queue.size() > 0) delay(10) }
+
+        queue.enqueue("second")
+        assertEquals("second", withTimeout(5000) { replayed.receive() })
+    }
+
+    @Test
+    fun enqueue_atCapacity_whileTheWorkerDrains_neverThrows() {
+        val queue = EventQueue.shared()
+        val failures = CopyOnWriteArrayList<Throwable>()
+        repeat(200) {
+            val gate = CompletableDeferred<Unit>()
+            queue.trackFunction = { _, _, _, _, _ ->
+                gate.await()
+                true
+            }
+            repeat(EventQueue.MAX_QUEUE_SIZE) { queue.enqueue("fill") }
+
+            val start = CountDownLatch(1)
+            val producers = (1..8).map {
+                thread {
+                    start.await()
+                    repeat(20) {
+                        try {
+                            queue.enqueue("burst")
+                        } catch (t: Throwable) {
+                            failures.add(t)
+                        }
+                    }
+                }
+            }
+            start.countDown()
+            gate.complete(Unit)
+            producers.forEach { it.join() }
+            runBlocking { withTimeout(10_000) { while (queue.size() > 0) delay(5) } }
+        }
+        assertEquals(emptyList<Throwable>(), failures)
+    }
+
+    @Test
+    fun enqueue_concurrently_atCapacity_keepsTheQueueAtItsCap() {
+        val queue = EventQueue.shared()
+        val gate = CompletableDeferred<Unit>()
+        queue.trackFunction = { _, _, _, _, _ ->
+            gate.await()
+            true
+        }
+        repeat(EventQueue.MAX_QUEUE_SIZE) { queue.enqueue("fill") }
+
+        val start = CountDownLatch(1)
+        val producers = (1..8).map {
+            thread {
+                start.await()
+                repeat(200) { queue.enqueue("burst") }
+            }
+        }
+        start.countDown()
+        producers.forEach { it.join() }
+
+        assertEquals(EventQueue.MAX_QUEUE_SIZE, queue.size())
+        gate.complete(Unit)
     }
 
     @Test

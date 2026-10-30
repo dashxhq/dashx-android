@@ -6,7 +6,6 @@ import kotlinx.coroutines.*
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.math.min
 import kotlin.math.pow
 
@@ -57,7 +56,12 @@ class EventQueue private constructor() {
         var retryCount: Int = 0
     )
 
-    private val pendingEvents = CopyOnWriteArrayList<QueuedEvent>()
+    /**
+     * Guards [pendingEvents], [retryJob], each event's retryCount and every disk write. Insertion,
+     * eviction, the worker's removal and reload never interleave, and the last write is the latest state.
+     */
+    private val lock = Any()
+    private val pendingEvents = ArrayList<QueuedEvent>()
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var retryJob: Job? = null
     private var prefs: SharedPreferences? = null
@@ -71,8 +75,10 @@ class EventQueue private constructor() {
 
     /** Must be called once from [DashX.configure] to enable persistence. */
     fun configure(context: Context) {
-        prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        loadFromDisk()
+        synchronized(lock) {
+            prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            loadFromDisk()
+        }
     }
 
     fun enqueue(
@@ -82,44 +88,67 @@ class EventQueue private constructor() {
         accountAnonymousUid: String? = null,
         occurredAt: Long = System.currentTimeMillis()
     ) {
-        if (pendingEvents.size >= MAX_QUEUE_SIZE) {
-            pendingEvents.removeAt(0) // drop oldest (FIFO eviction)
-        }
-        pendingEvents.add(
-            QueuedEvent(
-                event = event,
-                dataJson = dataJson,
-                accountUid = accountUid,
-                accountAnonymousUid = accountAnonymousUid,
-                enqueuedAt = occurredAt
+        synchronized(lock) {
+            if (pendingEvents.size >= MAX_QUEUE_SIZE) {
+                pendingEvents.removeAt(0) // drop oldest (FIFO eviction)
+            }
+            pendingEvents.add(
+                QueuedEvent(
+                    event = event,
+                    dataJson = dataJson,
+                    accountUid = accountUid,
+                    accountAnonymousUid = accountAnonymousUid,
+                    enqueuedAt = occurredAt
+                )
             )
-        )
-        saveToDisk()
+            saveToDisk()
+            ensureFlushing()
+        }
     }
 
     /** Attempt to send all queued events, one at a time. */
     fun flush() {
-        retryJob?.cancel()
-        retryJob = scope.launch { flushSequentially() }
+        synchronized(lock) {
+            retryJob?.cancel()
+            retryJob = scope.launch { flushSequentially() }
+        }
     }
 
-    fun size(): Int = pendingEvents.size
+    fun size(): Int = synchronized(lock) { pendingEvents.size }
 
     fun stop() {
-        retryJob?.cancel()
+        synchronized(lock) { retryJob?.cancel() }
         scope.cancel()
     }
 
     // ---- Internal ----
 
+    /**
+     * Starts the worker unless one is running. A running worker keeps its backoff: restarting it per
+     * enqueue would retry immediately for every event tracked during an outage.
+     */
+    private fun ensureFlushing() {
+        synchronized(lock) {
+            if (retryJob?.isActive == true) return
+            retryJob = scope.launch { flushSequentially() }
+        }
+    }
+
     private suspend fun flushSequentially() {
-        while (pendingEvents.isNotEmpty()) {
-            val head = pendingEvents.firstOrNull() ?: break
+        val self = currentCoroutineContext()[Job]
+        while (true) {
+            // Finding the queue empty and giving up the worker slot happen under one lock, so an
+            // event enqueued as the worker drains always finds either this worker or no worker.
+            val head = synchronized(lock) {
+                pendingEvents.firstOrNull().also { if (it == null && retryJob === self) retryJob = null }
+            } ?: return
 
             if (head.retryCount >= MAX_RETRIES) {
                 DashXLog.e("EventQueue", "Dropping event '${head.event}' after $MAX_RETRIES retries")
-                pendingEvents.removeAt(0)
-                saveToDisk()
+                synchronized(lock) {
+                    pendingEvents.removeIf { it === head }
+                    saveToDisk()
+                }
                 continue
             }
 
@@ -135,14 +164,15 @@ class EventQueue private constructor() {
                 false
             }
 
-            if (success) {
-                pendingEvents.removeAt(0)
+            val attempt = synchronized(lock) {
+                // By identity: a concurrent enqueue's FIFO eviction may already have removed the head.
+                if (success) pendingEvents.removeIf { it === head } else head.retryCount++
                 saveToDisk()
-            } else {
-                head.retryCount++
-                saveToDisk()
-                val delayMs = calculateBackoff(head.retryCount)
-                DashXLog.d("EventQueue", "Retrying '${head.event}' in ${delayMs}ms (attempt ${head.retryCount})")
+                head.retryCount
+            }
+            if (!success) {
+                val delayMs = calculateBackoff(attempt)
+                DashXLog.d("EventQueue", "Retrying '${head.event}' in ${delayMs}ms (attempt $attempt)")
                 delay(delayMs)
                 // Loop will re-check head (which may now exceed MAX_RETRIES)
             }
@@ -155,6 +185,7 @@ class EventQueue private constructor() {
         return min(delay.toLong() + jitter, MAX_DELAY_MS)
     }
 
+    /** Caller holds [lock]. */
     private fun loadFromDisk() {
         val raw = prefs?.getString(PREFS_KEY_EVENTS, null) ?: return
         try {
@@ -166,6 +197,7 @@ class EventQueue private constructor() {
         }
     }
 
+    /** Caller holds [lock], so writes land in the order the queue changed. */
     private fun saveToDisk() {
         val p = prefs ?: return
         try {
