@@ -110,10 +110,8 @@ class SystemContext {
     private fun setDeviceInfo() {
         val ctx = context ?: return
         val device = HashMap<String, Any>()
-        device[AD_TRACKING_ENABLED] =
-            getDashXSharedPreferences(ctx).getBoolean(AD_TRACKING_ENABLED, false)
-        device[ADVERTISING_ID] =
-            getDashXSharedPreferences(ctx).getString(ADVERTISING_ID, "") ?: ""
+        device[AD_TRACKING_ENABLED] = isAdTrackingEnabled(ctx)
+        device[ADVERTISING_ID] = getStoredAdvertisingId(ctx)
         device[ID] = getDeviceId(ctx)
         device[KIND] = getDeviceKind()
         device[MANUFACTURER] = getDeviceManufacturer()

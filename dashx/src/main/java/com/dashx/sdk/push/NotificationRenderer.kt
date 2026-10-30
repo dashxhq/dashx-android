@@ -8,6 +8,7 @@ import android.content.ContentResolver
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.media.AudioAttributes
@@ -21,6 +22,8 @@ import com.dashx.android.DashXLog
 import com.dashx.android.DashXPayload
 import com.dashx.android.NotificationDismissedReceiver
 import com.dashx.android.NotificationReceiver
+import java.io.ByteArrayOutputStream
+import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import kotlinx.serialization.json.Json
@@ -34,6 +37,15 @@ internal object NotificationRenderer {
     private const val CHANNEL_NAME = "Default Channel"
     private const val CHANNEL_DESCRIPTION = "Default notification channel"
     internal const val CHANNEL_ID = "default_dashx_notification_channel"
+
+    /** Longest side a big picture is decoded at; notifications draw it far smaller. */
+    private const val BIG_PICTURE_MAX_PX = 1024
+
+    /** Longest side a large icon is decoded at; it is drawn at about 64dp. */
+    private const val LARGE_ICON_MAX_PX = 256
+
+    /** A push image is buffered to read its size before decoding, so a larger download is skipped. */
+    internal const val IMAGE_MAX_BYTES = 10 * 1024 * 1024
 
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -77,6 +89,77 @@ internal object NotificationRenderer {
         notificationManager.createNotificationChannel(channel)
     }
 
+    /**
+     * Loads [source], a URL or a drawable name, with its longer side scaled down to about [maxPx].
+     * Null when it cannot be loaded, so the notification still shows its text. The size is read before
+     * the pixels are allocated: a small compressed image can decode to hundreds of MiB, and the
+     * resulting OutOfMemoryError is not an Exception.
+     */
+    private fun loadBitmap(context: Context, source: String, maxPx: Int): Bitmap? =
+        try {
+            if (URLUtil.isValidUrl(source)) {
+                download(source)?.let { bytes ->
+                    decodeScaled(maxPx) { options -> BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options) }
+                }
+            } else {
+                val resourceId = context.resources.getIdentifier(source, "drawable", context.packageName)
+                if (resourceId == 0) {
+                    DashXLog.e(TAG, "Drawable '$source' not found")
+                    null
+                } else {
+                    decodeScaled(maxPx) { options -> BitmapFactory.decodeResource(context.resources, resourceId, options) }
+                }
+            }
+        } catch (e: Exception) {
+            DashXLog.e(TAG, "Failed to load '$source': $e")
+            null
+        } catch (e: OutOfMemoryError) {
+            DashXLog.e(TAG, "Not enough memory to load '$source'")
+            null
+        }
+
+    private inline fun decodeScaled(maxPx: Int, decode: (BitmapFactory.Options) -> Bitmap?): Bitmap? {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        decode(bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+        val sampleSize = sampleSizeFor(bounds.outWidth, bounds.outHeight, maxPx)
+        return decode(BitmapFactory.Options().apply { inSampleSize = sampleSize })
+    }
+
+    /** The largest power of two that keeps the longer side at or above [maxPx]; 1 when it already fits. */
+    internal fun sampleSizeFor(width: Int, height: Int, maxPx: Int): Int {
+        val longerSide = maxOf(width, height)
+        var sampleSize = 1
+        while (longerSide / (sampleSize * 2) >= maxPx) sampleSize *= 2
+        return sampleSize
+    }
+
+    private fun download(url: String): ByteArray? {
+        val connection = URL(url).openConnection() as HttpURLConnection
+        try {
+            connection.doInput = true
+            connection.connectTimeout = DashX.imageDownloadTimeoutMs
+            connection.readTimeout = DashX.imageDownloadTimeoutMs
+            connection.connect()
+            return connection.inputStream.use { readAtMost(it, IMAGE_MAX_BYTES) }
+                ?: null.also { DashXLog.e(TAG, "Skipped '$url': over $IMAGE_MAX_BYTES bytes") }
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    /** All of [input], or null once it exceeds [maxBytes]. */
+    internal fun readAtMost(input: InputStream, maxBytes: Int): ByteArray? {
+        val output = ByteArrayOutputStream()
+        val buffer = ByteArray(8 * 1024)
+        while (true) {
+            val read = input.read(buffer)
+            if (read == -1) return output.toByteArray()
+            if (output.size() + read > maxBytes) return null
+            output.write(buffer, 0, read)
+        }
+    }
+
     fun createNotification(context: Context, dashXData: DashXPayload): Notification {
         val id = dashXData.id
         val channelId = dashXData.channelId ?: CHANNEL_ID
@@ -88,38 +171,9 @@ internal object NotificationRenderer {
             .setAutoCancel(true)
 
         dashXData.image?.let { image ->
-            try {
-                if (URLUtil.isValidUrl(image)) {
-                    val url = URL(image)
-                    val connection = url.openConnection() as HttpURLConnection
-                    try {
-                        connection.doInput = true
-                        connection.connectTimeout = DashX.imageDownloadTimeoutMs
-                        connection.readTimeout = DashX.imageDownloadTimeoutMs
-                        connection.connect()
-                        connection.inputStream.use { input ->
-                            val imageBitmap = BitmapFactory.decodeStream(input)
-                            notificationBuilder.setStyle(
-                                NotificationCompat.BigPictureStyle().bigPicture(imageBitmap)
-                            )
-                        }
-                    } finally {
-                        connection.disconnect()
-                    }
-                } else {
-                    val resourceId = context.resources.getIdentifier(image, "drawable", context.packageName)
-                    if (resourceId != 0) {
-                        val imageBitmap = BitmapFactory.decodeResource(context.resources, resourceId)
-                        notificationBuilder.setStyle(
-                            NotificationCompat.BigPictureStyle().bigPicture(imageBitmap)
-                        )
-                    } else {
-                        DashXLog.e(TAG, "Image resource not found for notification $id")
-                    }
-                }
-            } catch (e: Exception) {
-                DashXLog.e(TAG, e.toString())
-            }
+            loadBitmap(context, image, BIG_PICTURE_MAX_PX)?.let {
+                notificationBuilder.setStyle(NotificationCompat.BigPictureStyle().bigPicture(it))
+            } ?: DashXLog.e(TAG, "Image not shown for notification $id")
         }
 
         dashXData.smallIcon?.let { smallIcon ->
@@ -135,34 +189,8 @@ internal object NotificationRenderer {
         }
 
         dashXData.largeIcon?.let { largeIcon ->
-            try {
-                if (URLUtil.isValidUrl(largeIcon)) {
-                    val url = URL(largeIcon)
-                    val connection = url.openConnection() as HttpURLConnection
-                    try {
-                        connection.doInput = true
-                        connection.connectTimeout = DashX.imageDownloadTimeoutMs
-                        connection.readTimeout = DashX.imageDownloadTimeoutMs
-                        connection.connect()
-                        connection.inputStream.use { input ->
-                            val largeIconBitmap = BitmapFactory.decodeStream(input)
-                            notificationBuilder.setLargeIcon(largeIconBitmap)
-                        }
-                    } finally {
-                        connection.disconnect()
-                    }
-                } else {
-                    val resourceId = context.resources.getIdentifier(largeIcon, "drawable", context.packageName)
-                    if (resourceId != 0) {
-                        val largeIconBitmap = BitmapFactory.decodeResource(context.resources, resourceId)
-                        notificationBuilder.setLargeIcon(largeIconBitmap)
-                    } else {
-                        DashXLog.e(TAG, "Large icon resource not found for notification $id")
-                    }
-                }
-            } catch (e: Exception) {
-                DashXLog.e(TAG, e.toString())
-            }
+            loadBitmap(context, largeIcon, LARGE_ICON_MAX_PX)?.let { notificationBuilder.setLargeIcon(it) }
+                ?: DashXLog.e(TAG, "Large icon not shown for notification $id")
         }
 
         dashXData.sound?.let { sound ->
