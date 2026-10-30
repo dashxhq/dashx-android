@@ -56,7 +56,7 @@ coroutineScope.launch {
 
 ## Publishing
 
-DashX Android SDK is published to [Maven Central](https://central.sonatype.com/artifact/com.dashx/dashx-android) as `com.dashx:dashx-android`. Every push to **main** runs [publish.yml](.github/workflows/publish.yml), which builds and runs `./gradlew publishAndReleaseToMavenCentral`; signing and Maven Central credentials come from the repository's secrets.
+DashX Android SDK is published to [Maven Central](https://central.sonatype.com/artifact/com.dashx/dashx-android) as `com.dashx:dashx-android`. Every push to **main** will automatically publish the new version.
 
 To release:
 
