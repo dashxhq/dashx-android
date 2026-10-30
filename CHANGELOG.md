@@ -21,6 +21,10 @@ All notable changes to `dashx-android` are documented in this file. Format loose
   being sent could throw `ArrayIndexOutOfBoundsException`, concurrent failed sends could grow the
   queue past its 1,000-event cap, a sent event could remove a different, unsent one, and the saved
   queue could be overwritten by an older copy.
+- **Offline delivery resumes after `shutdown()` and `configure()`.** `shutdown()` stopped the
+  offline queue for the rest of the process, so after reconfiguring, events that failed to send
+  were saved but never retried until the app restarted. `configure()` now restarts the queue, and
+  events queued while it was stopped are sent.
 
 ## [1.5.0] — 2026-10-28
 

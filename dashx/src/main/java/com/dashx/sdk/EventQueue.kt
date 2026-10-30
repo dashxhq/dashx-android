@@ -57,12 +57,12 @@ class EventQueue private constructor() {
     )
 
     /**
-     * Guards [pendingEvents], [retryJob], each event's retryCount and every disk write. Insertion,
+     * Guards [pendingEvents], [scope], [retryJob], each event's retryCount and every disk write. Insertion,
      * eviction, the worker's removal and reload never interleave, and the last write is the latest state.
      */
     private val lock = Any()
     private val pendingEvents = ArrayList<QueuedEvent>()
-    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private var scope = newScope()
     private var retryJob: Job? = null
     private var prefs: SharedPreferences? = null
     private val json = Json { ignoreUnknownKeys = true }
@@ -75,8 +75,14 @@ class EventQueue private constructor() {
 
     /** Must be called once from [DashX.configure] to enable persistence. */
     fun configure(context: Context) {
+        configure(context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE))
+    }
+
+    internal fun configure(preferences: SharedPreferences) {
         synchronized(lock) {
-            prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            // [DashX.shutdown] stops the queue and documents configure() as the way back.
+            if (!scope.isActive) scope = newScope()
+            prefs = preferences
             loadFromDisk()
         }
     }
@@ -116,12 +122,17 @@ class EventQueue private constructor() {
 
     fun size(): Int = synchronized(lock) { pendingEvents.size }
 
+    /** Stops sending until the next [configure]. Events queued meanwhile are kept and saved. */
     fun stop() {
-        synchronized(lock) { retryJob?.cancel() }
-        scope.cancel()
+        synchronized(lock) {
+            retryJob?.cancel()
+            scope.cancel()
+        }
     }
 
     // ---- Internal ----
+
+    private fun newScope() = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     /**
      * Starts the worker unless one is running. A running worker keeps its backoff: restarting it per

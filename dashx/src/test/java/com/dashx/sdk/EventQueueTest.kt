@@ -158,6 +158,48 @@ class EventQueueTest {
         assertEquals("second", withTimeout(5000) { replayed.receive() })
     }
 
+    // --- Reconfiguration (DashX.shutdown() stops the queue, configure() follows) ---
+
+    @Test
+    fun configure_afterStop_resumesDelivery() = runBlocking {
+        val queue = EventQueue.shared()
+        val prefs = InMemorySharedPreferences()
+        queue.configure(prefs)
+        queue.stop()
+        queue.configure(prefs)
+        val replayed = CompletableDeferred<String>()
+        queue.trackFunction = { event, _, _, _, _ ->
+            replayed.complete(event)
+            true
+        }
+
+        queue.enqueue("after_reconfigure")
+
+        assertEquals("after_reconfigure", withTimeout(5000) { replayed.await() })
+    }
+
+    @Test
+    fun eventsQueuedWhileStopped_waitForConfigure_thenSend() = runBlocking {
+        val queue = EventQueue.shared()
+        val prefs = InMemorySharedPreferences()
+        queue.configure(prefs)
+        queue.stop()
+        val replayed = CompletableDeferred<String>()
+        queue.trackFunction = { event, _, _, _, _ ->
+            replayed.complete(event)
+            true
+        }
+
+        queue.enqueue("while_stopped")
+        delay(300)
+        assertFalse("A stopped queue must not send", replayed.isCompleted)
+
+        queue.configure(prefs)
+        queue.flush()
+
+        assertEquals("while_stopped", withTimeout(5000) { replayed.await() })
+    }
+
     @Test
     fun enqueue_atCapacity_whileTheWorkerDrains_neverThrows() {
         val queue = EventQueue.shared()
