@@ -855,6 +855,87 @@ class ConversationSessionTest {
     }
 
     @Test
+    fun liveReplyDuringATimeoutFetch_showsWithoutWaitingForIt() {
+        val backend = FakeBackend()
+        val (session, lease) = openReady(
+            backend, listOf(msg("m1", 1)), ReplyStreamTimeouts(idleMs = 200, storedReplyGraceMs = 30_000)
+        )
+        lease.setVisible(true)
+        val gate = CompletableDeferred<Unit>()
+        backend.afterGate = gate
+        backend.after = { cursor -> if (cursor == "m1") listOf(msg("r2", 2)) else emptyList() }
+
+        deliver(backend, stream(2, seq = 0, text = "Checking"))
+        awaitUntil(what = "timeout fetch in flight") { backend.fetchAfterCursors.toList() == listOf("m1") }
+        deliver(backend, frame("r2", 2))
+        awaitUntil(what = "live reply shown during the fetch") { readyIds(lease) == listOf("m1", "r2") }
+        assertNull(streamingReply(lease))
+        Thread.sleep(600)
+        assertTrue("marked an unconfirmed message read", "r2" !in backend.markReadIds)
+
+        gate.complete(Unit)
+        awaitUntil(what = "confirmed reply marked read") { "r2" in backend.markReadIds }
+        assertEquals(listOf("m1", "r2"), readyIds(lease))
+        session.endSession()
+    }
+
+    @Test
+    fun reconnectDuringATimeoutFetch_holdsLiveMessagesUntilAFetchAfterItSucceeds() {
+        val backend = FakeBackend()
+        val (session, lease) = openReady(
+            backend, listOf(msg("m1", 1)), ReplyStreamTimeouts(idleMs = 200, storedReplyGraceMs = 30_000)
+        )
+        val beforeDrop = CompletableDeferred<Unit>()
+        backend.afterGate = beforeDrop
+
+        deliver(backend, stream(2, seq = 0, text = "Checking"))
+        awaitUntil(what = "timeout fetch in flight") { backend.fetchAfterCursors.toList() == listOf("m1") }
+        // The socket drops, missing m2, and reconnects; m3 arrives on the new connection.
+        backend.handles[0].onEstablished(true)
+        deliver(backend, frame("m3", 3))
+        Thread.sleep(150)
+        val afterReconnect = CompletableDeferred<Unit>()
+        backend.afterGate = afterReconnect
+        beforeDrop.complete(Unit)
+
+        awaitUntil(what = "refetch in flight") { backend.fetchAfterCursors.size == 2 }
+        backend.after = { cursor -> if (cursor == "m1") listOf(msg("m2", 2), msg("m3", 3)) else emptyList() }
+        Thread.sleep(150)
+        assertEquals("a live message showed past the gap", listOf("m1"), readyIds(lease))
+
+        afterReconnect.complete(Unit)
+        awaitUntil(what = "gap filled") { readyIds(lease) == listOf("m1", "m2", "m3") }
+        Thread.sleep(150)
+        assertEquals("the repeat is the rerun", listOf("m1", "m1"), backend.fetchAfterCursors.toList())
+        session.endSession()
+    }
+
+    @Test
+    fun liveMessageDuringAReconnectSync_waitsForItEvenAfterAStreamTimeout() {
+        val backend = FakeBackend()
+        val (session, lease) = openReady(
+            backend, listOf(msg("m1", 1)), ReplyStreamTimeouts(idleMs = 200, storedReplyGraceMs = 30_000)
+        )
+        val gate = CompletableDeferred<Unit>()
+        backend.afterGate = gate
+        backend.after = { cursor -> if (cursor == "m1") listOf(msg("m2", 2), msg("r3", 3)) else emptyList() }
+
+        // m2 was sent while the socket was down.
+        backend.handles[0].onEstablished(true)
+        awaitUntil(what = "reconnect fetch in flight") { backend.fetchAfterCursors.toList() == listOf("m1") }
+        deliver(backend, stream(3, seq = 0, text = "Checking"))
+        awaitUntil(what = "preview") { streamingReply(lease)?.text == "Checking" }
+        awaitUntil(what = "quiet preview hidden") { streamingReply(lease) == null }
+        deliver(backend, frame("r3", 3))
+        Thread.sleep(300)
+        assertEquals("a live message showed past the gap", listOf("m1"), readyIds(lease))
+
+        gate.complete(Unit)
+        awaitUntil(what = "gap filled") { readyIds(lease) == listOf("m1", "m2", "r3") }
+        session.endSession()
+    }
+
+    @Test
     fun endWithoutAStoredReply_clearsTheStreamAndIgnoresItsLateFrames() {
         val backend = FakeBackend()
         val (session, lease) = openReady(backend, listOf(msg("m1", 1)))

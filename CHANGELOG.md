@@ -22,6 +22,11 @@ All notable changes to `dashx-android` are documented in this file. Format loose
     is dropped, and either one reconciles history. Both checks still run after a later turn or
     a newer run has dropped the preview, unless the stored reply has arrived. A run's `END`
     replaces its quiet check, so a run that stored nothing fetches nothing.
+  - While such a history check runs on a loaded conversation, live messages keep appearing in
+    `messages` instead of waiting for the fetch, so a reply that arrives meanwhile shows at
+    once. They are still marked read only once the server confirms them. After a reconnect,
+    including one during that fetch, live messages wait until a fetch started after it
+    succeeds, so none shows past messages missed while disconnected.
   - A stream never replaces a `Loading` or `Error` state.
 - `DashXRealtimeMessage.InAppChatStream` and `DashXRealtimeChatStream`, the decoded frame.
 

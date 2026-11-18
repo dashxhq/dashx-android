@@ -289,6 +289,17 @@ internal class ConversationSession(
      * arrive out of order, and a frame-advanced cursor would leap past a lost sibling that no
      * `afterMessageId` walk could ever return. */
     private var lastKnownMessageId: String? = null
+    /** An acknowledgement's sync has not completed: frames sent while disconnected may be
+     * missing, so live messages wait for it rather than show past the gap. */
+    private var reconnectGap = false
+    /** A stream timeout's sync is running on a loaded conversation. Live messages keep showing
+     * meanwhile, so a reply that arrives over the socket is not held back behind the fetch. */
+    private var showLiveDuringSync = false
+    /** Channel acknowledgements so far; a pass that sees this change during its fetch was
+     * overtaken by a reconnect. */
+    private var acknowledgements = 0
+    /** Set by a pass a reconnect overtook: its buffer carries, unshown, into the pass after. */
+    private var carryBuffer = false
 
     // ---- read marking ----
     private var markedMessageId: String? = null
@@ -353,6 +364,8 @@ internal class ConversationSession(
                 // Now, not after the reconcile: a failing fetch would otherwise keep it on screen.
                 publishReadyIfShown()
             }
+            reconnectGap = true
+            acknowledgements += 1
             syncAttempts = 0
             if (syncing) {
                 // A reconnect acknowledged mid-cycle: the running fetch may predate the gap, so
@@ -382,11 +395,17 @@ internal class ConversationSession(
     private fun mergeLive(message: ChatMessage) {
         if (buffering) {
             if (buffer.size >= BUFFER_LIMIT) bufferOverflowed = true else buffer.add(message)
+            // Shown as well as buffered: the fetch still merges it by id. Read marking waits for
+            // the cycle, which marks only through the server-confirmed cursor.
+            if (showsLiveDuringSync()) applyMerge(listOf(message))
             return
         }
         applyMerge(listOf(message))
         maybeMarkRead()
     }
+
+    private fun showsLiveDuringSync() =
+        showLiveDuringSync && !reconnectGap && mutableState.value is ConversationState.Ready
 
     private suspend fun runSync() {
         syncing = true
@@ -397,6 +416,8 @@ internal class ConversationSession(
                 if (!snapshotDone || lastKnownMessageId == null) snapshotAndReplace() else cursorReconcile()
             } while (resyncPending)
             syncAttempts = 0
+            reconnectGap = false
+            showLiveDuringSync = false
         } catch (t: Throwable) {
             if (t is kotlinx.coroutines.CancellationException) throw t
             val error = (t as? com.dashx.android.DashXException)?.error
@@ -446,10 +467,12 @@ internal class ConversationSession(
     private suspend fun snapshotAndReplace() {
         while (true) {
             startBuffering()
+            val acks = acknowledgements
             val count = backend.summarizeMessages(key.conversationId)
             val lastPage = maxOf(1, (count + PAGE_SIZE - 1) / PAGE_SIZE)
             val candidate = backend.fetchPage(key.conversationId, PAGE_SIZE, lastPage)
                 .sortedWith(ChatMessage.ORDER)
+            if (overtakenByReconnect(acks)) continue
             val (bufferSnapshot, overflowed) = drainBufferAndResumeLive()
             if (overflowed) continue // discard the candidate; repeat with a fresh buffer
             val replacement = mergeInto(candidate, bufferSnapshot)
@@ -471,6 +494,7 @@ internal class ConversationSession(
     private suspend fun cursorReconcile() {
         while (true) {
             startBuffering()
+            val acks = acknowledgements
             var cursor = lastKnownMessageId ?: run { snapshotAndReplace(); return }
             val fetched = ArrayList<ChatMessage>()
             try {
@@ -496,6 +520,7 @@ internal class ConversationSession(
                 snapshotAndReplace()
                 return
             }
+            if (overtakenByReconnect(acks)) continue
             val (bufferSnapshot, overflowed) = drainBufferAndResumeLive()
             if (overflowed) continue // restart from the unchanged cursor
             applyMerge(fetched + bufferSnapshot)
@@ -511,8 +536,25 @@ internal class ConversationSession(
     private fun cursorRetryDelay(attempt: Int): Long =
         (CURSOR_RETRY_BASE_MS shl (attempt - 1).coerceAtMost(5)).coerceAtMost(CURSOR_RETRY_MAX_MS)
 
+    /**
+     * A reconnect acknowledged during this pass's fetch: the fetch may predate messages the drop
+     * lost, so neither its rows nor the buffer is shown. The pass repeats from a fetch started
+     * after the acknowledgement, which is the rerun it queued, and the buffer carries into it,
+     * since frames can hold rows a cursor walk does not return.
+     */
+    private fun overtakenByReconnect(acksAtStart: Int): Boolean {
+        if (acknowledgements == acksAtStart) return false
+        carryBuffer = true
+        resyncPending = false
+        return true
+    }
+
     private fun startBuffering() {
         buffering = true
+        if (carryBuffer) {
+            carryBuffer = false
+            return
+        }
         buffer.clear()
         bufferOverflowed = false
     }
@@ -626,6 +668,7 @@ internal class ConversationSession(
     }
 
     private fun reconcileAfterStreamTimeout() {
+        if (mutableState.value is ConversationState.Ready) showLiveDuringSync = true
         // A first load still in flight may predate the stored reply, so it is followed by a
         // reconcile too. One not yet started fetches everything when it runs.
         if (snapshotDone || syncing) requestResync()
