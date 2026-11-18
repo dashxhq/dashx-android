@@ -3,6 +3,7 @@ package com.dashx.android.chat
 import com.dashx.android.DashXError
 import com.dashx.android.DashXException
 import com.dashx.android.realtime.DashXRealtimeChatMessage
+import com.dashx.android.realtime.DashXRealtimeChatStream
 import com.dashx.android.realtime.DashXRealtimeMessage
 import com.dashx.android.realtime.DashXRealtimeSubscription
 import com.dashx.android.realtime.SubscriberHandle
@@ -12,6 +13,7 @@ import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.serialization.json.JsonObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
@@ -134,13 +136,17 @@ class ConversationSessionTest {
     private fun readyIds(lease: DashXConversationLease): List<String>? =
         (lease.state.value as? ConversationState.Ready)?.messages?.map { it.id }
 
-    private fun openReady(backend: FakeBackend, history: List<ChatMessage>): Pair<ConversationSession, DashXConversationLease> {
+    private fun openReady(
+        backend: FakeBackend,
+        history: List<ChatMessage>,
+        streamTimeouts: ReplyStreamTimeouts = ReplyStreamTimeouts()
+    ): Pair<ConversationSession, DashXConversationLease> {
         backend.count = history.size
         backend.pages = mapOf(maxOf(1, (history.size + 49) / 50) to history.takeLast(50))
         if (history.size > 50) {
             backend.pages = backend.pages + (1 to history.take(50))
         }
-        val session = ConversationSession(key, backend)
+        val session = ConversationSession(key, backend, streamTimeouts)
         val lease = session.newLease()!!
         backend.handles[0].onEstablished(false)
         awaitUntil(what = "initial Ready") { readyIds(lease) == history.takeLast(50).map { it.id } || readyIds(lease) == history.map { it.id } }
@@ -644,5 +650,304 @@ class ConversationSessionTest {
         gate.complete(Unit)
         awaitUntil(what = "gap healed") { readyIds(lease) == listOf("m1", "m2", "m3") }
         awaitUntil(what = "confirmed tail marked") { backend.markReadIds == listOf("m1", "m3") }
+    }
+
+    // ---- streamed replies ----
+
+    private val delta = DashXRealtimeChatStream.Kind.DELTA
+    private val end = DashXRealtimeChatStream.Kind.END
+
+    private fun stream(
+        turn: Long,
+        run: Long = 1,
+        seq: Int,
+        kind: DashXRealtimeChatStream.Kind = delta,
+        text: String? = null,
+        responseId: String? = "resp-1",
+        persisted: Boolean? = null
+    ) = DashXRealtimeMessage.InAppChatStream(
+        DashXRealtimeChatStream(
+            conversationId = "c1", turnSeq = turn, run = run, seq = seq, kind = kind,
+            responseId = if (kind == delta) responseId else null, text = text, persisted = persisted
+        )
+    )
+
+    private fun streamingReply(lease: DashXConversationLease): ChatStreamingReply? =
+        (lease.state.value as? ConversationState.Ready)?.streamingReply
+
+    private fun deliver(backend: FakeBackend, vararg frames: DashXRealtimeMessage) {
+        frames.forEach { backend.handles[0].onFrame(it) }
+    }
+
+    @Test
+    fun streamedReply_growsThenGivesWayToTheStoredReply() {
+        val backend = FakeBackend()
+        val (session, lease) = openReady(backend, listOf(msg("m1", 1)))
+
+        deliver(backend, stream(2, seq = 0, text = "Hel"), stream(2, seq = 1, text = "lo"))
+        awaitUntil(what = "streamed text") {
+            streamingReply(lease) == ChatStreamingReply(turnSeq = 2, text = "Hello", isComplete = false)
+        }
+
+        deliver(backend, stream(2, seq = 2, kind = end, persisted = true))
+        awaitUntil(what = "stream complete") { streamingReply(lease)?.isComplete == true }
+
+        deliver(backend, frame("r2", 2))
+        awaitUntil(what = "stored reply replaces the stream") { readyIds(lease) == listOf("m1", "r2") }
+        assertNull(streamingReply(lease))
+        session.endSession()
+    }
+
+    @Test
+    fun storedReplyArrivingFirst_suppressesTheTurnsLateFrames() {
+        val backend = FakeBackend()
+        val (session, lease) = openReady(backend, listOf(msg("m1", 1)))
+
+        deliver(backend, frame("r2", 2))
+        awaitUntil(what = "stored reply") { readyIds(lease) == listOf("m1", "r2") }
+        deliver(backend, stream(2, seq = 0, text = "late"), stream(2, seq = 1, kind = end, persisted = true))
+        Thread.sleep(150)
+        assertNull("a turn already answered must not show a stream", streamingReply(lease))
+        session.endSession()
+    }
+
+    @Test
+    fun visitorMessageOfTheSameTurn_doesNotEndTheStream() {
+        val backend = FakeBackend()
+        val (session, lease) = openReady(backend, listOf(msg("m1", 1)))
+        backend.sendResult = { msg("v2", 2).copy(externalUid = "in_app_chat:abc", aiRole = "USER") }
+        lease.sendMessage(JsonObject(emptyMap()), {}, {})
+        awaitUntil(what = "visitor row") { readyIds(lease) == listOf("m1", "v2") }
+
+        deliver(backend, stream(2, seq = 0, text = "Answer"))
+        awaitUntil(what = "stream for the visitor's turn") { streamingReply(lease)?.text == "Answer" }
+        session.endSession()
+    }
+
+    @Test
+    fun endWithoutAStoredReply_clearsTheStreamAndIgnoresItsLateFrames() {
+        val backend = FakeBackend()
+        val (session, lease) = openReady(backend, listOf(msg("m1", 1)))
+
+        deliver(backend, stream(2, seq = 0, text = "partial"))
+        awaitUntil(what = "stream") { streamingReply(lease)?.text == "partial" }
+        deliver(backend, stream(2, seq = 1, kind = end, persisted = false), stream(2, seq = 2, text = "late"))
+        awaitUntil(what = "stream cleared") { streamingReply(lease) == null }
+        Thread.sleep(150)
+        assertNull(streamingReply(lease))
+        session.endSession()
+    }
+
+    @Test
+    fun retriedRun_replacesTheAbandonedOneWhoseLateFramesAreIgnored() {
+        val backend = FakeBackend()
+        val (session, lease) = openReady(backend, listOf(msg("m1", 1)))
+
+        deliver(backend, stream(2, run = 4, seq = 0, text = "abandoned"))
+        awaitUntil(what = "first run") { streamingReply(lease)?.text == "abandoned" }
+        deliver(backend, stream(2, run = 5, seq = 0, text = "retry"), stream(2, run = 4, seq = 1, text = " late"))
+        awaitUntil(what = "retry shown") { streamingReply(lease)?.text == "retry" }
+        Thread.sleep(150)
+        assertEquals("retry", streamingReply(lease)?.text)
+        session.endSession()
+    }
+
+    @Test
+    fun onlyTheLastModelResponseIsShown_andAMissingFrameHidesWhatFollows() {
+        val backend = FakeBackend()
+        val (session, lease) = openReady(backend, listOf(msg("m1", 1)))
+
+        deliver(
+            backend,
+            stream(2, seq = 0, text = "Let me check.", responseId = "before-tool"),
+            stream(2, seq = 1, text = "It is", responseId = "answer"),
+            stream(2, seq = 3, text = " sunny", responseId = "answer")
+        )
+        awaitUntil(what = "answer text") { streamingReply(lease)?.text == "It is" }
+        deliver(backend, stream(2, seq = 2, text = " warm and", responseId = "answer"))
+        awaitUntil(what = "gap filled") { streamingReply(lease)?.text == "It is warm and sunny" }
+        session.endSession()
+    }
+
+    @Test
+    fun reconnect_dropsAnUnfinishedStreamButKeepsAFinishedOne() {
+        val backend = FakeBackend()
+        val (session, lease) = openReady(backend, listOf(msg("m1", 1)))
+
+        deliver(backend, stream(2, seq = 0, text = "cut off"))
+        awaitUntil(what = "stream") { streamingReply(lease)?.text == "cut off" }
+        backend.handles[0].onEstablished(true)
+        awaitUntil(what = "unfinished stream dropped") { streamingReply(lease) == null }
+
+        deliver(backend, stream(3, seq = 0, text = "done"), stream(3, seq = 1, kind = end, persisted = true))
+        awaitUntil(what = "finished stream") { streamingReply(lease)?.isComplete == true }
+        backend.handles[0].onEstablished(true)
+        awaitUntil(what = "reconnect reconciled") { backend.fetchAfterCursors.size == 2 }
+        Thread.sleep(150)
+        assertEquals("a finished stream waits for its stored reply", "done", streamingReply(lease)?.text)
+        session.endSession()
+    }
+
+    @Test
+    fun streamFrame_neverReplacesAConversationError() {
+        val backend = FakeBackend()
+        val (session, lease) = openReady(backend, listOf(msg("m1", 1)))
+
+        backend.after = { throw DashXException(DashXError.GraphQLError("no access", DashXError.GraphQLError.FORBIDDEN)) }
+        backend.handles[0].onEstablished(true)
+        awaitUntil(what = "error state") { lease.state.value is ConversationState.Error }
+
+        deliver(backend, stream(2, seq = 0, text = "hello"), stream(2, seq = 1, kind = end, persisted = true))
+        Thread.sleep(150)
+        assertTrue("a stream frame restored a stale list", lease.state.value is ConversationState.Error)
+        session.endSession()
+    }
+
+    @Test
+    fun reconnect_clearsAnUnfinishedPreviewBeforeTheReconcileFinishes() {
+        val backend = FakeBackend()
+        val (session, lease) = openReady(backend, listOf(msg("m1", 1)))
+        deliver(backend, stream(2, seq = 0, text = "cut off"))
+        awaitUntil(what = "stream") { streamingReply(lease)?.text == "cut off" }
+
+        val gate = CompletableDeferred<Unit>()
+        backend.afterGate = gate
+        backend.handles[0].onEstablished(true)
+        awaitUntil(what = "reconcile stalled") { backend.fetchAfterCursors.size == 1 }
+        awaitUntil(what = "preview cleared while the reconcile is stalled") {
+            readyIds(lease) == listOf("m1") && streamingReply(lease) == null
+        }
+        gate.complete(Unit)
+        session.endSession()
+    }
+
+    @Test
+    fun quietPreview_isHiddenThenShownAgainWhenItsRunResumes() {
+        val backend = FakeBackend()
+        val (session, lease) = openReady(
+            backend, listOf(msg("m1", 1)), ReplyStreamTimeouts(idleMs = 200, storedReplyGraceMs = 5_000)
+        )
+
+        deliver(backend, stream(2, seq = 0, text = "Checking", responseId = "before-tool"))
+        awaitUntil(what = "stream") { streamingReply(lease)?.text == "Checking" }
+        awaitUntil(what = "quiet preview hidden") { readyIds(lease) == listOf("m1") && streamingReply(lease) == null }
+        awaitUntil(what = "history reconciled") { backend.fetchAfterCursors.toList() == listOf("m1") }
+
+        deliver(backend, stream(2, seq = 1, text = "Sunny", responseId = "answer"))
+        awaitUntil(what = "resumed run shown") { streamingReply(lease)?.text == "Sunny" }
+        session.endSession()
+    }
+
+    @Test
+    fun finishedPreview_whoseStoredReplyFrameIsLost_givesWayToTheFetchedReply() {
+        val backend = FakeBackend()
+        val (session, lease) = openReady(
+            backend, listOf(msg("m1", 1)), ReplyStreamTimeouts(idleMs = 5_000, storedReplyGraceMs = 200)
+        )
+        backend.after = { cursor -> if (cursor == "m1") listOf(msg("r2", 2)) else emptyList() }
+
+        deliver(backend, stream(2, seq = 0, text = "Done"), stream(2, seq = 1, kind = end, persisted = true))
+        awaitUntil(what = "finished preview") { streamingReply(lease)?.isComplete == true }
+        assertTrue("reconciled before the grace period", backend.fetchAfterCursors.isEmpty())
+
+        awaitUntil(what = "fetched reply replaces the preview") {
+            readyIds(lease) == listOf("m1", "r2") && streamingReply(lease) == null
+        }
+        deliver(backend, stream(2, seq = 2, text = " late"))
+        Thread.sleep(150)
+        assertNull("a dropped run came back", streamingReply(lease))
+        session.endSession()
+    }
+
+    @Test
+    fun timeoutDuringTheFirstLoad_reconcilesOnceItCompletes() {
+        val backend = FakeBackend()
+        backend.count = 1
+        backend.pages = mapOf(1 to listOf(msg("m1", 1)))
+        val gate = CompletableDeferred<Unit>()
+        backend.pageGate = gate
+        val session = ConversationSession(
+            key, backend, ReplyStreamTimeouts(idleMs = 5_000, storedReplyGraceMs = 200)
+        )
+        val lease = session.newLease()!!
+        backend.handles[0].onEstablished(false)
+        awaitUntil(what = "first load in flight") { backend.fetchPageCalls.toList() == listOf(1) }
+
+        // The stored reply's frame is lost; the in-flight page predates the reply.
+        deliver(backend, stream(2, seq = 0, text = "Done"), stream(2, seq = 1, kind = end, persisted = true))
+        Thread.sleep(400)
+        backend.after = { cursor -> if (cursor == "m1") listOf(msg("r2", 2)) else emptyList() }
+        gate.complete(Unit)
+
+        awaitUntil(what = "reply reconciled after the first load") { readyIds(lease) == listOf("m1", "r2") }
+        assertEquals(listOf("m1"), backend.fetchAfterCursors.toList())
+        assertNull(streamingReply(lease))
+        session.endSession()
+    }
+
+    @Test
+    fun endAfterALostDelta_neverPresentsTruncatedTextAsComplete() {
+        val backend = FakeBackend()
+        val (session, lease) = openReady(
+            backend, listOf(msg("m1", 1)), ReplyStreamTimeouts(idleMs = 5_000, storedReplyGraceMs = 300)
+        )
+        backend.after = { cursor -> if (cursor == "m1") listOf(msg("r2", 2)) else emptyList() }
+
+        deliver(backend, stream(2, seq = 0, text = "Let me check.", responseId = "before-tool"))
+        awaitUntil(what = "pre-tool text") { streamingReply(lease)?.text == "Let me check." }
+        // seq 1, the answer, is lost.
+        deliver(backend, stream(2, seq = 2, kind = end, persisted = true))
+        awaitUntil(what = "truncated preview hidden") { readyIds(lease) == listOf("m1") && streamingReply(lease) == null }
+
+        awaitUntil(what = "stored reply fetched") { readyIds(lease) == listOf("m1", "r2") }
+        assertNull(streamingReply(lease))
+        session.endSession()
+    }
+
+    @Test
+    fun endAwaitingALateDelta_showsTheWholeReplyOnceItArrives() {
+        val backend = FakeBackend()
+        val (session, lease) = openReady(backend, listOf(msg("m1", 1)))
+
+        deliver(backend, stream(2, seq = 0, text = "It is"), stream(2, seq = 2, kind = end, persisted = true))
+        awaitUntil(what = "hidden while a delta is missing") { readyIds(lease) == listOf("m1") && streamingReply(lease) == null }
+        deliver(backend, stream(2, seq = 1, text = " sunny"))
+        awaitUntil(what = "whole reply") {
+            streamingReply(lease) == ChatStreamingReply(turnSeq = 2, text = "It is sunny", isComplete = true)
+        }
+        session.endSession()
+    }
+
+    @Test
+    fun supersededRun_staysIgnoredAfterAReconnectClearsThePreview() {
+        val backend = FakeBackend()
+        val (session, lease) = openReady(backend, listOf(msg("m1", 1)))
+
+        deliver(backend, stream(2, run = 4, seq = 0, text = "abandoned"), stream(2, run = 5, seq = 0, text = "retry"))
+        awaitUntil(what = "retry shown") { streamingReply(lease)?.text == "retry" }
+        backend.handles[0].onEstablished(true)
+        awaitUntil(what = "preview cleared") { streamingReply(lease) == null }
+
+        deliver(backend, stream(2, run = 4, seq = 0, text = "abandoned"))
+        Thread.sleep(150)
+        assertNull("the superseded run came back after the reconnect", streamingReply(lease))
+        session.endSession()
+    }
+
+    @Test
+    fun streamFramesBeforeTheFirstLoad_appearWithIt() {
+        val backend = FakeBackend()
+        backend.count = 1
+        backend.pages = mapOf(1 to listOf(msg("m1", 1)))
+        val session = ConversationSession(key, backend)
+        val lease = session.newLease()!!
+
+        deliver(backend, stream(2, seq = 0, text = "early"))
+        Thread.sleep(100)
+        assertTrue("a stream must not publish before the history", lease.state.value is ConversationState.Loading)
+        backend.handles[0].onEstablished(false)
+        awaitUntil(what = "ready with the stream") { streamingReply(lease)?.text == "early" }
+        assertEquals(listOf("m1"), readyIds(lease))
+        session.endSession()
     }
 }

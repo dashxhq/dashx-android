@@ -1,5 +1,6 @@
 package com.dashx.android.realtime
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
@@ -32,6 +33,9 @@ sealed class DashXRealtimeMessage {
     /** Two-way chat message. Distinct from [InAppMessage], which is notification-style. */
     data class InAppChatMessage(val message: DashXRealtimeChatMessage) : DashXRealtimeMessage()
 
+    /** An agent reply while it is generated; the stored reply still arrives as [InAppChatMessage]. */
+    data class InAppChatStream(val stream: DashXRealtimeChatStream) : DashXRealtimeMessage()
+
     data class InAppMessage(val message: DashXRealtimeInAppMessage) : DashXRealtimeMessage()
 
     /** Read-state change for one notification; `readAt == null` means marked unread. */
@@ -60,6 +64,35 @@ data class DashXRealtimeChatMessage(
     val createdAt: String? = null,
     val sentAt: String? = null
 )
+
+/**
+ * One frame of a streamed agent reply, for a deployment that opted into streaming. Frames are
+ * ephemeral: a lost one costs only the early view of a reply that still arrives whole.
+ */
+@Serializable
+data class DashXRealtimeChatStream(
+    val conversationId: String,
+    /** The turn being answered: the visitor message's `turnSeq`, which the stored reply carries. */
+    val turnSeq: Long,
+    /** Ranks the turn's runs: a retry numbers above the run it replaced. Compare
+     * `(turnSeq, run)`, never `run` alone. */
+    val run: Long,
+    /** Order within one run, from 0; [Kind.END] takes the next number. */
+    val seq: Int,
+    val kind: Kind,
+    /** The model response a delta belongs to; only the run's last response is the reply. */
+    val responseId: String? = null,
+    val text: String? = null,
+    /** On [Kind.END]: whether a visible reply was stored, so an `IN_APP_CHAT_MESSAGE` is on its way. */
+    val persisted: Boolean? = null
+) {
+    @Serializable
+    enum class Kind {
+        @SerialName("DELTA") DELTA,
+        /** The run is over; sent once, after every delta of the run. */
+        @SerialName("END") END
+    }
+}
 
 @Serializable
 data class DashXRealtimeInAppMessage(
@@ -95,6 +128,8 @@ internal object DashXRealtimeCodec {
                 DashXRealtimeMessage.UnsubscriptionSucceeded(data.string("channel").orEmpty())
             "IN_APP_CHAT_MESSAGE" -> data.decodeAs(DashXRealtimeChatMessage.serializer())
                 ?.let(DashXRealtimeMessage::InAppChatMessage)
+            "IN_APP_CHAT_STREAM" -> data.decodeAs(DashXRealtimeChatStream.serializer())
+                ?.let(DashXRealtimeMessage::InAppChatStream)
             "IN_APP_MESSAGE" -> data.decodeAs(DashXRealtimeInAppMessage.serializer())
                 ?.let(DashXRealtimeMessage::InAppMessage)
             "IN_APP_MESSAGE_READ" -> DashXRealtimeMessage.InAppMessageRead(

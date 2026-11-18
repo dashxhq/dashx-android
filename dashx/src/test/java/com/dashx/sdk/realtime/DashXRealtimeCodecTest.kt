@@ -36,6 +36,44 @@ class DashXRealtimeCodecTest {
     }
 
     @Test
+    fun decodesChatStreamDeltaAndEndFrames() {
+        val delta = DashXRealtimeCodec.decode(
+            """{"type":"IN_APP_CHAT_STREAM","data":{
+                "conversationId":"c1","turnSeq":3,"run":12,"seq":0,"kind":"DELTA",
+                "responseId":"resp-1","text":"Hel","persisted":null
+            }}"""
+        )
+        assertEquals(
+            DashXRealtimeChatStream(
+                conversationId = "c1", turnSeq = 3, run = 12, seq = 0,
+                kind = DashXRealtimeChatStream.Kind.DELTA, responseId = "resp-1", text = "Hel"
+            ),
+            (delta as DashXRealtimeMessage.InAppChatStream).stream
+        )
+
+        val end = DashXRealtimeCodec.decode(
+            """{"type":"IN_APP_CHAT_STREAM","data":{
+                "conversationId":"c1","turnSeq":3,"run":12,"seq":4,"kind":"END",
+                "responseId":null,"text":null,"persisted":true
+            }}"""
+        )
+        val endFrame = (end as DashXRealtimeMessage.InAppChatStream).stream
+        assertEquals(DashXRealtimeChatStream.Kind.END, endFrame.kind)
+        assertEquals(true, endFrame.persisted)
+        assertNull(endFrame.text)
+    }
+
+    @Test
+    fun chatStreamFrameWithAnUnknownKindOrMissingRun_isDropped() {
+        assertNull(DashXRealtimeCodec.decode(
+            """{"type":"IN_APP_CHAT_STREAM","data":{"conversationId":"c1","turnSeq":1,"run":1,"seq":0,"kind":"TOOL"}}"""
+        ))
+        assertNull(DashXRealtimeCodec.decode(
+            """{"type":"IN_APP_CHAT_STREAM","data":{"conversationId":"c1","turnSeq":1,"seq":0,"kind":"DELTA"}}"""
+        ))
+    }
+
+    @Test
     fun unknownTypeDecodesToUnknown_notThrow() {
         val frame = DashXRealtimeCodec.decode("""{"type":"SOME_FUTURE_FRAME","data":{"x":1}}""")
         assertTrue(frame is DashXRealtimeMessage.Unknown)
