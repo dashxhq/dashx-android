@@ -304,8 +304,9 @@ internal class ConversationSession(
     /** The newest run any frame has named. Kept apart from [replyStream], which a reconnect
      * clears: a superseded run's delayed frames must not come back afterwards. */
     private var newestStreamRun: ReplyStreamRun? = null
-    /** The pending stream timeout; every stream frame reschedules it. */
-    private var streamTimeoutJob: Job? = null
+    /** Pending idle checks of unfinished runs. A frame of the same turn reschedules or cancels
+     * its turn's check and an `END` cancels its run's; a later turn's frames leave it to finish. */
+    private val idleChecks = HashMap<ReplyStreamRun, Job>()
 
     private var subscription: DashXRealtimeSubscription? = null
 
@@ -559,6 +560,13 @@ internal class ConversationSession(
      * current one. Published only while the state is [ConversationState.Ready]. */
     private fun mergeStream(frame: DashXRealtimeChatStream) {
         val run = ReplyStreamRun(frame.turnSeq, frame.run)
+        // Before the run checks, which drop a run a later turn or a newer run has ended: its
+        // `END` still replaces the idle fallback. Nothing was stored, or the stored reply is in
+        // history and fetched if its frame does not follow.
+        if (frame.kind == DashXRealtimeChatStream.Kind.END) {
+            idleChecks.remove(run)?.cancel()
+            if (frame.persisted == true) fetchStoredReplyIfMissing(run)
+        }
         settledStreamRun?.let { if (run <= it) return }
         newestStreamRun?.let { if (run < it) return }
         newestStreamRun = run
@@ -570,7 +578,7 @@ internal class ConversationSession(
             DashXRealtimeChatStream.Kind.END ->
                 if (frame.persisted == true) replyStream?.complete(deltaCount = frame.seq) else settleStream()
         }
-        armStreamTimeout()
+        armStreamTimeout(run)
         publishReadyIfShown()
     }
 
@@ -583,31 +591,54 @@ internal class ConversationSession(
     /**
      * A lost frame must not leave a preview up forever. An unfinished run that goes quiet is
      * hidden but kept, since a tool call sends nothing for a while and its answer may still
-     * stream; a finished one whose stored reply has not arrived is dropped. Either way history
-     * is reconciled, which fetches a stored reply whose frame was lost.
+     * stream, and history is reconciled in case its `END` was lost. A finished run is left to
+     * [fetchStoredReplyIfMissing].
+     *
+     * The check outlives the preview: a later turn ends the preview, but the run's reply may be
+     * in history with its `END` and stored frame both lost, as a lagging socket drops frames
+     * without reconnecting. Only hiding depends on the run still being shown.
      */
-    private fun armStreamTimeout() {
-        streamTimeoutJob?.cancel()
-        streamTimeoutJob = null
-        val stream = replyStream ?: return
-        val run = stream.run
-        val wait = if (stream.isComplete) streamTimeouts.storedReplyGraceMs else streamTimeouts.idleMs
-        streamTimeoutJob = scope.launch(syncLane) {
-            delay(wait)
-            if (replyStream?.run != run) return@launch
-            streamTimeoutJob = null
-            if (replyStream?.isComplete == true) settleStream() else replyStream?.hide()
-            // A first load still in flight may predate the stored reply, so it is followed by a
-            // reconcile too. One not yet started fetches everything when it runs.
-            if (snapshotDone || syncing) requestResync()
-            publishReadyIfShown()
+    private fun armStreamTimeout(run: ReplyStreamRun) {
+        idleChecks.keys.filter { it.turnSeq == run.turnSeq }
+            .forEach { idleChecks.remove(it)?.cancel() }
+        if (replyStream?.run != run || replyStream?.isComplete != false) return
+        idleChecks[run] = scope.launch(syncLane) {
+            delay(streamTimeouts.idleMs)
+            idleChecks.remove(run)
+            if (hasStoredReply(run.turnSeq)) return@launch
+            if (replyStream?.run == run) replyStream?.hide()
+            reconcileAfterStreamTimeout()
         }
     }
 
-    /** The stored reply replaces the stream, whether it arrived before the stream's frames or after. */
+    /**
+     * A finished run's reply is in history, so its fetch outlives the preview: a later turn or a
+     * newer run ends the preview, not this. Skipped once the stored reply has arrived; otherwise
+     * the preview, if still this run's, is dropped.
+     */
+    private fun fetchStoredReplyIfMissing(run: ReplyStreamRun) {
+        scope.launch(syncLane) {
+            delay(streamTimeouts.storedReplyGraceMs)
+            if (hasStoredReply(run.turnSeq)) return@launch
+            if (replyStream?.run == run) settleStream()
+            reconcileAfterStreamTimeout()
+        }
+    }
+
+    private fun reconcileAfterStreamTimeout() {
+        // A first load still in flight may predate the stored reply, so it is followed by a
+        // reconcile too. One not yet started fetches everything when it runs.
+        if (snapshotDone || syncing) requestResync()
+        publishReadyIfShown()
+    }
+
+    /** The stored reply replaces the stream, whether it arrived before the stream's frames or
+     * after. A later turn ends it too: the server stores a visible reply only while its turn is
+     * current. */
     private fun settleAnsweredStream() {
         val turnSeq = replyStream?.run?.turnSeq ?: return
-        if (hasStoredReply(turnSeq)) settleStream()
+        val overtaken = messages.lastOrNull()?.let { it.turnSeq > turnSeq } == true
+        if (overtaken || hasStoredReply(turnSeq)) settleStream()
     }
 
     private fun settleStream() {

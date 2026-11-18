@@ -725,6 +725,136 @@ class ConversationSessionTest {
     }
 
     @Test
+    fun laterTurn_endsTheOvertakenStreamAndIgnoresItsLateFrames() {
+        val backend = FakeBackend()
+        val (session, lease) = openReady(backend, listOf(msg("m1", 1)))
+
+        deliver(backend, stream(2, seq = 0, text = "stale"))
+        awaitUntil(what = "stream") { streamingReply(lease)?.text == "stale" }
+        deliver(backend, followUpFrame, stream(2, seq = 1, text = " answer"))
+        awaitUntil(what = "stream ended by the later turn") {
+            readyIds(lease) == listOf("m1", "v3") && streamingReply(lease) == null
+        }
+        Thread.sleep(150)
+        assertNull(streamingReply(lease))
+
+        deliver(backend, stream(3, seq = 0, text = "fresh"))
+        awaitUntil(what = "stream for the later turn") { streamingReply(lease)?.text == "fresh" }
+        session.endSession()
+    }
+
+    private val followUpRow = msg("v3", 3).copy(externalUid = "in_app_chat:abc", aiRole = "user")
+    private val followUpFrame = DashXRealtimeMessage.InAppChatMessage(
+        DashXRealtimeChatMessage(
+            id = "v3", externalUid = "in_app_chat:abc", conversationId = "c1",
+            aiRole = "user", turnSeq = 3
+        )
+    )
+
+    @Test
+    fun finishedRunOvertakenByALaterTurn_stillFetchesItsLostStoredReply() {
+        val backend = FakeBackend()
+        val (session, lease) = openReady(
+            backend, listOf(msg("m1", 1)), ReplyStreamTimeouts(idleMs = 5_000, storedReplyGraceMs = 300)
+        )
+        backend.after = { cursor -> if (cursor == "m1") listOf(msg("r2", 2), followUpRow) else emptyList() }
+
+        // r2's own frame is lost; the lease is not visible, so read marking reconciles nothing.
+        deliver(backend, stream(2, seq = 0, text = "Done"), stream(2, seq = 1, kind = end, persisted = true))
+        awaitUntil(what = "finished preview") { streamingReply(lease)?.isComplete == true }
+        deliver(backend, followUpFrame, stream(3, seq = 0, text = "next"))
+        awaitUntil(what = "later turn streaming") { streamingReply(lease)?.text == "next" }
+
+        awaitUntil(what = "stored reply fetched") { readyIds(lease) == listOf("m1", "r2", "v3") }
+        assertEquals(listOf("m1"), backend.fetchAfterCursors.toList())
+        assertEquals("next", streamingReply(lease)?.text)
+        session.endSession()
+    }
+
+    @Test
+    fun endArrivingAfterALaterTurn_stillFetchesItsLostStoredReply() {
+        val backend = FakeBackend()
+        val (session, lease) = openReady(
+            backend, listOf(msg("m1", 1)), ReplyStreamTimeouts(idleMs = 5_000, storedReplyGraceMs = 300)
+        )
+        backend.after = { cursor -> if (cursor == "m1") listOf(msg("r2", 2), followUpRow) else emptyList() }
+
+        deliver(backend, stream(2, seq = 0, text = "Done"), followUpFrame)
+        awaitUntil(what = "preview ended by the later turn") {
+            readyIds(lease) == listOf("m1", "v3") && streamingReply(lease) == null
+        }
+        deliver(backend, stream(2, seq = 1, kind = end, persisted = true))
+
+        awaitUntil(what = "stored reply fetched") { readyIds(lease) == listOf("m1", "r2", "v3") }
+        assertNull(streamingReply(lease))
+        session.endSession()
+    }
+
+    @Test
+    fun unfinishedRunOvertakenByALaterTurn_stillChecksHistoryWhenItGoesQuiet() {
+        val backend = FakeBackend()
+        val (session, lease) = openReady(
+            backend, listOf(msg("m1", 1)), ReplyStreamTimeouts(idleMs = 500, storedReplyGraceMs = 30_000)
+        )
+        backend.after = { cursor -> if (cursor == "m1") listOf(msg("r2", 2), followUpRow) else emptyList() }
+
+        // A lagging socket drops turn 2's END and its stored frame; the lease is not visible.
+        deliver(backend, stream(2, seq = 0, text = "Done"), followUpFrame)
+        awaitUntil(what = "preview ended by the later turn") {
+            readyIds(lease) == listOf("m1", "v3") && streamingReply(lease) == null
+        }
+        deliver(
+            backend,
+            stream(3, seq = 0, text = "next"),
+            stream(3, seq = 1, kind = end, persisted = true)
+        )
+
+        awaitUntil(what = "stored reply fetched") { readyIds(lease) == listOf("m1", "r2", "v3") }
+        assertEquals(listOf("m1"), backend.fetchAfterCursors.toList())
+        assertEquals(ChatStreamingReply(turnSeq = 3, text = "next", isComplete = true), streamingReply(lease))
+        session.endSession()
+    }
+
+    @Test
+    fun endWithoutAStoredReplyAfterALaterTurn_cancelsTheIdleCheck() {
+        val backend = FakeBackend()
+        val (session, lease) = openReady(
+            backend, listOf(msg("m1", 1)), ReplyStreamTimeouts(idleMs = 500, storedReplyGraceMs = 30_000)
+        )
+
+        deliver(backend, stream(2, seq = 0, text = "Done"), followUpFrame)
+        awaitUntil(what = "preview ended by the later turn") {
+            readyIds(lease) == listOf("m1", "v3") && streamingReply(lease) == null
+        }
+        // The server drops turn 2's reply once turn 3 is in, after turn 3 has started streaming.
+        deliver(
+            backend,
+            stream(3, seq = 0, text = "next"),
+            stream(3, seq = 1, kind = end, persisted = true),
+            stream(2, seq = 1, kind = end, persisted = false)
+        )
+        awaitUntil(what = "later turn finished") { streamingReply(lease)?.isComplete == true }
+        Thread.sleep(800)
+        assertTrue("an END without a stored reply still fetched", backend.fetchAfterCursors.isEmpty())
+        session.endSession()
+    }
+
+    @Test
+    fun storedReplyArrivingWithinTheGracePeriod_needsNoFetch() {
+        val backend = FakeBackend()
+        val (session, lease) = openReady(
+            backend, listOf(msg("m1", 1)), ReplyStreamTimeouts(idleMs = 5_000, storedReplyGraceMs = 200)
+        )
+
+        deliver(backend, stream(2, seq = 0, text = "Done"), stream(2, seq = 1, kind = end, persisted = true))
+        deliver(backend, frame("r2", 2))
+        awaitUntil(what = "stored reply") { readyIds(lease) == listOf("m1", "r2") }
+        Thread.sleep(400)
+        assertTrue("a delivered reply was fetched again", backend.fetchAfterCursors.isEmpty())
+        session.endSession()
+    }
+
+    @Test
     fun endWithoutAStoredReply_clearsTheStreamAndIgnoresItsLateFrames() {
         val backend = FakeBackend()
         val (session, lease) = openReady(backend, listOf(msg("m1", 1)))

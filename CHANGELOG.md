@@ -9,16 +9,19 @@ All notable changes to `dashx-android` are documented in this file. Format loose
 - **Streamed agent replies.** For a deployment that streams replies, `ConversationState.Ready`
   gains `streamingReply` (`ChatStreamingReply`: `turnSeq`, `text`, `isComplete`), the agent's
   reply while it is generated, built from `IN_APP_CHAT_STREAM` frames. It is null when no reply
-  is being generated. This matches dashx-ios 1.7.0:
+  is being generated. This matches dashx-ios 1.7.1:
   - A retried run replaces the one it superseded, and only the run's last model response is
     shown (earlier ones are text produced before a tool call).
   - Text stops at a missing frame rather than showing a hole, and a finished run missing a
     delta stays hidden rather than show truncated text as the whole reply.
   - The stream gives way to the stored reply once that reaches `messages`, whichever arrives
-    first. A run that ends without storing a reply, or is cut off by a reconnect, is dropped.
+    first. A run that ends without storing a reply, is cut off by a reconnect, or is overtaken
+    by a later turn in `messages`, is dropped.
   - A lost frame cannot strand a preview: an unfinished run quiet for 20 seconds is hidden
     until it streams again, a finished run whose stored reply has not arrived within 5 seconds
-    is dropped, and either one reconciles history.
+    is dropped, and either one reconciles history. Both checks still run after a later turn or
+    a newer run has dropped the preview, unless the stored reply has arrived. A run's `END`
+    replaces its quiet check, so a run that stored nothing fetches nothing.
   - A stream never replaces a `Loading` or `Error` state.
 - `DashXRealtimeMessage.InAppChatStream` and `DashXRealtimeChatStream`, the decoded frame.
 

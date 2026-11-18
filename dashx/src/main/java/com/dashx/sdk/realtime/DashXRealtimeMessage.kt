@@ -83,7 +83,8 @@ data class DashXRealtimeChatStream(
     /** The model response a delta belongs to; only the run's last response is the reply. */
     val responseId: String? = null,
     val text: String? = null,
-    /** On [Kind.END]: whether a visible reply was stored, so an `IN_APP_CHAT_MESSAGE` is on its way. */
+    /** On [Kind.END]: whether a visible reply is committed and available in history. Its
+     * `IN_APP_CHAT_MESSAGE` is not guaranteed; a missed one is fetched. */
     val persisted: Boolean? = null
 ) {
     @Serializable
