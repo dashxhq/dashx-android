@@ -57,7 +57,7 @@ data class DashXRealtimeChatMessage(
     val externalUid: String,
     val conversationId: String,
     val senderId: String? = null,
-    /** `USER` for the visitor's own message; anything else is an agent or AI reply. */
+    /** `user` for the visitor's own message; anything else is an agent or AI reply. */
     val aiRole: String? = null,
     val turnSeq: Long = 0,
     val renderedContent: JsonObject = JsonObject(emptyMap()),

@@ -33,7 +33,7 @@ private fun msg(id: String, seq: Long) = ChatMessage(
     conversationId = "c1",
     externalUid = null,
     senderId = null,
-    aiRole = "ASSISTANT",
+    aiRole = "assistant",
     turnSeq = seq,
     renderedContent = JsonObject(emptyMap()),
     createdAt = "2026-08-25 10:00:00",
@@ -715,7 +715,7 @@ class ConversationSessionTest {
     fun visitorMessageOfTheSameTurn_doesNotEndTheStream() {
         val backend = FakeBackend()
         val (session, lease) = openReady(backend, listOf(msg("m1", 1)))
-        backend.sendResult = { msg("v2", 2).copy(externalUid = "in_app_chat:abc", aiRole = "USER") }
+        backend.sendResult = { msg("v2", 2).copy(externalUid = "in_app_chat:abc", aiRole = "user") }
         lease.sendMessage(JsonObject(emptyMap()), {}, {})
         awaitUntil(what = "visitor row") { readyIds(lease) == listOf("m1", "v2") }
 

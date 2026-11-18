@@ -23,7 +23,7 @@ class DashXRealtimeCodecTest {
         val frame = DashXRealtimeCodec.decode(
             """{"type":"IN_APP_CHAT_MESSAGE","data":{
                 "id":"m1","externalUid":"ext-1","conversationId":"c1","senderId":null,
-                "aiRole":"USER","turnSeq":7,"renderedContent":{"text":"hi"},
+                "aiRole":"user","turnSeq":7,"renderedContent":{"text":"hi"},
                 "createdAt":"2026-08-25 10:00:00","sentAt":"2026-08-25 10:00:00"
             }}"""
         )

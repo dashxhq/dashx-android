@@ -13,7 +13,7 @@ data class ChatMessage(
     /** Raw server key. Prefer [clientMessageId] for reconciling a pending send. */
     val externalUid: String?,
     val senderId: String?,
-    /** `USER` for the visitor's own message; anything else is an agent or AI reply. */
+    /** `user` for the visitor's own message; anything else is an agent or AI reply. */
     val aiRole: String?,
     val turnSeq: Long,
     val renderedContent: JsonObject,
