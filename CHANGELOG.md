@@ -25,8 +25,8 @@ All notable changes to `dashx-android` are documented in this file. Format loose
 ### Changed
 
 - `ConversationState.Ready` has a third constructor parameter, `streamingReply`, defaulting to
-  null. Source that constructs or reads `Ready` compiles unchanged; a positional destructuring of
-  it, and code compiled against 1.5.x that constructs or copies it, must be recompiled.
+  null. Source that constructs, copies, reads or destructures `Ready` compiles unchanged; code
+  compiled against 1.5.x that constructs or copies it must be recompiled.
 - A listener is now called on every streamed delta while a reply is generated, with the same
   `messages` list instance when only the stream changed.
 
