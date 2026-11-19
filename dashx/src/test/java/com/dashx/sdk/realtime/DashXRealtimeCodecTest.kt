@@ -23,7 +23,7 @@ class DashXRealtimeCodecTest {
         val frame = DashXRealtimeCodec.decode(
             """{"type":"IN_APP_CHAT_MESSAGE","data":{
                 "id":"m1","externalUid":"ext-1","conversationId":"c1","senderId":null,
-                "aiRole":"USER","turnSeq":7,"renderedContent":{"text":"hi"},
+                "aiRole":"user","turnSeq":7,"renderedContent":{"text":"hi"},
                 "createdAt":"2026-08-25 10:00:00","sentAt":"2026-08-25 10:00:00"
             }}"""
         )
@@ -33,6 +33,44 @@ class DashXRealtimeCodecTest {
         assertEquals("c1", message.conversationId)
         assertEquals(7L, message.turnSeq)
         assertNull(message.senderId)
+    }
+
+    @Test
+    fun decodesChatStreamDeltaAndEndFrames() {
+        val delta = DashXRealtimeCodec.decode(
+            """{"type":"IN_APP_CHAT_STREAM","data":{
+                "conversationId":"c1","turnSeq":3,"run":12,"seq":0,"kind":"DELTA",
+                "responseId":"resp-1","text":"Hel","persisted":null
+            }}"""
+        )
+        assertEquals(
+            DashXRealtimeChatStream(
+                conversationId = "c1", turnSeq = 3, run = 12, seq = 0,
+                kind = DashXRealtimeChatStream.Kind.DELTA, responseId = "resp-1", text = "Hel"
+            ),
+            (delta as DashXRealtimeMessage.InAppChatStream).stream
+        )
+
+        val end = DashXRealtimeCodec.decode(
+            """{"type":"IN_APP_CHAT_STREAM","data":{
+                "conversationId":"c1","turnSeq":3,"run":12,"seq":4,"kind":"END",
+                "responseId":null,"text":null,"persisted":true
+            }}"""
+        )
+        val endFrame = (end as DashXRealtimeMessage.InAppChatStream).stream
+        assertEquals(DashXRealtimeChatStream.Kind.END, endFrame.kind)
+        assertEquals(true, endFrame.persisted)
+        assertNull(endFrame.text)
+    }
+
+    @Test
+    fun chatStreamFrameWithAnUnknownKindOrMissingRun_isDropped() {
+        assertNull(DashXRealtimeCodec.decode(
+            """{"type":"IN_APP_CHAT_STREAM","data":{"conversationId":"c1","turnSeq":1,"run":1,"seq":0,"kind":"TOOL"}}"""
+        ))
+        assertNull(DashXRealtimeCodec.decode(
+            """{"type":"IN_APP_CHAT_STREAM","data":{"conversationId":"c1","turnSeq":1,"seq":0,"kind":"DELTA"}}"""
+        ))
     }
 
     @Test

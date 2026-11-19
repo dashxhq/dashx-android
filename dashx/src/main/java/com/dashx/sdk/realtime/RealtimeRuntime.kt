@@ -252,6 +252,9 @@ internal class RealtimeRuntime(
                     is DashXRealtimeMessage.InAppChatMessage ->
                         subscriptions[chatChannelName(frame.message.conversationId)]
                             ?.forEach { it.onFrame(frame) }
+                    is DashXRealtimeMessage.InAppChatStream ->
+                        subscriptions[chatChannelName(frame.stream.conversationId)]
+                            ?.forEach { it.onFrame(frame) }
                     else -> Unit
                 }
                 onAnyFrame(frame)

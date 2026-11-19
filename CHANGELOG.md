@@ -2,6 +2,43 @@
 
 All notable changes to `dashx-android` are documented in this file. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
+## [1.6.0] — 2026-11-18
+
+### Added
+
+- **Streamed agent replies.** For a deployment that streams replies, `ConversationState.Ready`
+  gains `streamingReply` (`ChatStreamingReply`: `turnSeq`, `text`, `isComplete`), the agent's
+  reply while it is generated, built from `IN_APP_CHAT_STREAM` frames. It is null when no reply
+  is being generated. This matches dashx-ios 1.7.1:
+  - A retried run replaces the one it superseded, and only the run's last model response is
+    shown (earlier ones are text produced before a tool call).
+  - Text stops at a missing frame rather than showing a hole, and a finished run missing a
+    delta stays hidden rather than show truncated text as the whole reply.
+  - The stream gives way to the stored reply once that reaches `messages`, whichever arrives
+    first. A run that ends without storing a reply, is cut off by a reconnect, or is overtaken
+    by a later turn in `messages`, is dropped.
+  - A lost frame cannot strand a preview: an unfinished run quiet for 20 seconds is hidden
+    until it streams again, a finished run whose stored reply has not arrived within 5 seconds
+    is dropped, and either one reconciles history. Both checks still run after a later turn or
+    a newer run has dropped the preview, unless the stored reply has arrived. A run's `END`
+    replaces its quiet check, so a run that stored nothing fetches nothing.
+  - While such a history check runs on a loaded conversation, live messages keep appearing in
+    `messages` instead of waiting for the fetch, so a reply that arrives meanwhile shows at
+    once. They are still marked read only once the server confirms them. After a reconnect,
+    including one during that fetch, live messages wait until a fetch started after it
+    succeeds, so none shows past messages missed while disconnected.
+  - A stream never replaces a `Loading` or `Error` state.
+- `DashXRealtimeMessage.InAppChatStream` and `DashXRealtimeChatStream`, the decoded frame.
+
+### Changed
+
+- `ConversationState.Ready` has a third constructor parameter, `streamingReply`, defaulting to
+  null. Kotlin source that constructs, copies, reads or destructures `Ready` compiles unchanged.
+  Java source that constructs or copies it must pass `streamingReply`, and code compiled against
+  1.5.x that constructs or copies it must be recompiled.
+- A listener is now called on every streamed delta while a reply is generated, with the same
+  `messages` list instance when only the stream changed.
+
 ## [1.5.3] — 2026-10-30
 
 ### Fixed
