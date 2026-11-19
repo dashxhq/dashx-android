@@ -2,6 +2,22 @@
 
 All notable changes to `dashx-android` are documented in this file. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
+## [1.6.1] — 2026-11-19
+
+### Fixed
+
+- **The first load fills the screen.** When the newest page of history was short, only it was
+  shown: a conversation of 51 messages opened on a single one. The page before it is now
+  fetched too, as dashx-ios does.
+- **A closed lease, or one whose session has ended, no longer sends.** `sendMessage` now
+  reports `DashXError.SessionEnded` and sends nothing, as dashx-ios does. It used to send
+  regardless, and after a user switch the request carried the next user's token, which the
+  backend refused with a permission error.
+- **Older history loads one page at a time.** A `loadPreviousPage` made while another was in
+  flight fetched the same page twice, and the late copy could move paging back and set
+  `hasOlderMessages` again. Such a call is now ignored, and a page fetched before the history
+  was reloaded is discarded.
+
 ## [1.6.0] — 2026-11-18
 
 ### Added

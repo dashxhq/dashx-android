@@ -67,6 +67,10 @@ private class FakeBackend : ChatSessionBackend {
     @Volatile var after: (String) -> List<ChatMessage> = { emptyList() }
     /** When set, fetchPage suspends until completed — frames arriving meanwhile must buffer. */
     @Volatile var pageGate: CompletableDeferred<Unit>? = null
+    /** The pages [pageGate] holds back; null holds back every page. */
+    @Volatile var gatedPages: Set<Int>? = null
+    /** The identity session the fake account is in; a switch moves it. */
+    @Volatile var generation = 0L
     /** When set, fetchAfter suspends until completed — the cursor walk stalls mid-flight. */
     @Volatile var afterGate: CompletableDeferred<Unit>? = null
 
@@ -90,9 +94,11 @@ private class FakeBackend : ChatSessionBackend {
 
     override fun isAppForeground(): Boolean = foreground
 
+    override fun sessionGeneration(): Long = generation
+
     override suspend fun fetchPage(conversationId: String, limit: Int, page: Int): List<ChatMessage> {
         fetchPageCalls.add(page)
-        pageGate?.await()
+        if (gatedPages?.contains(page) != false) pageGate?.await()
         return pages[page] ?: emptyList()
     }
 
@@ -398,6 +404,52 @@ class ConversationSessionTest {
         assertEquals("k-1", msg("a", 1).copy(externalUid = "in_app_chat:k-1").clientMessageId)
     }
 
+    private fun sendExpectingSessionEnded(backend: FakeBackend, lease: DashXConversationLease) {
+        val error = AtomicReference<DashXError?>(null)
+        lease.sendMessage(
+            JsonObject(emptyMap()),
+            onSuccess = { fail("a refused send must not succeed") },
+            onError = { error.set(it) }
+        )
+        awaitUntil(what = "refusal reported") { error.get() != null }
+        assertTrue(error.get() is DashXError.SessionEnded)
+        assertTrue("nothing reaches the backend", backend.sentClientMessageIds.isEmpty())
+    }
+
+    @Test
+    fun sendMessage_afterClose_sendsNothing_andReportsSessionEnded() {
+        com.dashx.android.DashX.setCallbackDispatcher(kotlinx.coroutines.Dispatchers.Unconfined)
+        val backend = FakeBackend()
+        val (session, lease) = openReady(backend, listOf(msg("m1", 1)))
+        session.newLease()!! // keeps the session open: only this lease is closed
+        lease.close()
+
+        sendExpectingSessionEnded(backend, lease)
+        session.endSession()
+    }
+
+    @Test
+    fun sendMessage_afterTheSessionEnded_sendsNothing_andReportsSessionEnded() {
+        com.dashx.android.DashX.setCallbackDispatcher(kotlinx.coroutines.Dispatchers.Unconfined)
+        val backend = FakeBackend()
+        val (session, lease) = openReady(backend, listOf(msg("m1", 1)))
+        session.endSession()
+
+        sendExpectingSessionEnded(backend, lease)
+    }
+
+    @Test
+    fun sendMessage_afterAnIdentitySwitch_sendsNothing_andReportsSessionEnded() {
+        com.dashx.android.DashX.setCallbackDispatcher(kotlinx.coroutines.Dispatchers.Unconfined)
+        val backend = FakeBackend()
+        val (session, lease) = openReady(backend, listOf(msg("m1", 1)))
+        // The account moved to another identity session while this one was still open.
+        backend.generation += 1
+
+        sendExpectingSessionEnded(backend, lease)
+        session.endSession()
+    }
+
     @Test
     fun partialCursorWalkFailure_keepsTheStableCursor_andRetriesTheWholeWalk() {
         val backend = FakeBackend()
@@ -492,25 +544,117 @@ class ConversationSessionTest {
         assertEquals(listOf("m1"), readyIds(lease))
     }
 
+    private fun history(size: Int) = (1..size).map { msg("m%03d".format(it), it.toLong()) }
+
+    /** Server pages, oldest first: page 1 holds the oldest fifty rows, the last page the newest. */
+    private fun pagesOf(history: List<ChatMessage>): Map<Int, List<ChatMessage>> =
+        history.chunked(50).withIndex().associate { (index, rows) -> index + 1 to rows }
+
+    private fun hasOlderMessages(lease: DashXConversationLease): Boolean =
+        (lease.state.value as ConversationState.Ready).hasOlderMessages
+
     @Test
-    fun ready_reportsOlderHistory_untilTheFirstPageIsFetched() {
+    fun ready_shortTailPage_alsoLoadsThePageBefore() {
         val backend = FakeBackend()
         backend.count = 51
-        backend.pages = mapOf(2 to listOf(msg("m051", 51)), 1 to (1..50).map { msg("m%03d".format(it), it.toLong()) })
+        backend.pages = pagesOf(history(51))
         val session = ConversationSession(key, backend)
         val lease = session.newLease()!!
         backend.handles[0].onEstablished(false)
-        awaitUntil(what = "last page Ready") { readyIds(lease) == listOf("m051") }
-        assertTrue("one row on screen, fifty behind it", (lease.state.value as ConversationState.Ready).hasOlderMessages)
-
-        lease.loadPreviousPage()
-        awaitUntil(what = "first page prepended") { readyIds(lease)?.size == 51 }
-        assertEquals(false, (lease.state.value as ConversationState.Ready).hasOlderMessages)
+        awaitUntil(what = "both pages Ready") { readyIds(lease) == history(51).map { it.id } }
+        assertEquals(false, hasOlderMessages(lease))
 
         // Nothing left to page: another request is a no-op, not a fetch.
         lease.loadPreviousPage()
         Thread.sleep(200)
         assertEquals(listOf(2, 1), backend.fetchPageCalls)
+        session.endSession()
+    }
+
+    @Test
+    fun ready_reportsOlderHistory_untilTheFirstPageIsFetched() {
+        val backend = FakeBackend()
+        backend.count = 101
+        backend.pages = pagesOf(history(101))
+        val session = ConversationSession(key, backend)
+        val lease = session.newLease()!!
+        backend.handles[0].onEstablished(false)
+        awaitUntil(what = "tail and the page before Ready") { readyIds(lease) == history(101).takeLast(51).map { it.id } }
+        assertTrue("fifty rows behind the first screen", hasOlderMessages(lease))
+
+        lease.loadPreviousPage()
+        awaitUntil(what = "first page prepended") { readyIds(lease)?.size == 101 }
+        assertEquals(false, hasOlderMessages(lease))
+
+        lease.loadPreviousPage()
+        Thread.sleep(200)
+        assertEquals(listOf(3, 2, 1), backend.fetchPageCalls)
+        session.endSession()
+    }
+
+    @Test
+    fun loadPreviousPage_runsOneFetchAtATime() {
+        val backend = FakeBackend()
+        backend.count = 150
+        backend.pages = pagesOf(history(150))
+        val session = ConversationSession(key, backend)
+        val lease = session.newLease()!!
+        backend.handles[0].onEstablished(false)
+        awaitUntil(what = "newest page Ready") { readyIds(lease)?.size == 50 }
+
+        val gate = CompletableDeferred<Unit>()
+        backend.pageGate = gate
+        lease.loadPreviousPage()
+        lease.loadPreviousPage()
+        awaitUntil(what = "older page in flight") { backend.fetchPageCalls.toList() == listOf(3, 2) }
+        Thread.sleep(150)
+        assertEquals("a request while one is in flight is a no-op", listOf(3, 2), backend.fetchPageCalls.toList())
+
+        gate.complete(Unit)
+        awaitUntil(what = "page 2 prepended") { readyIds(lease)?.size == 100 }
+        lease.loadPreviousPage()
+        awaitUntil(what = "page 1 prepended") { readyIds(lease)?.size == 150 }
+        assertEquals(listOf(3, 2, 1), backend.fetchPageCalls.toList())
+        assertEquals(false, hasOlderMessages(lease))
+        session.endSession()
+    }
+
+    @Test
+    fun loadPreviousPage_fetchedAgainstAReplacedSnapshot_isDropped() {
+        val backend = FakeBackend()
+        backend.count = 150
+        backend.pages = pagesOf(history(150))
+        val session = ConversationSession(key, backend)
+        val lease = session.newLease()!!
+        backend.handles[0].onEstablished(false)
+        awaitUntil(what = "newest page Ready") { readyIds(lease)?.size == 50 }
+
+        val gate = CompletableDeferred<Unit>()
+        backend.pageGate = gate
+        backend.gatedPages = setOf(2)
+        lease.loadPreviousPage()
+        awaitUntil(what = "older page in flight") { backend.fetchPageCalls.toList() == listOf(3, 2) }
+
+        // Messages were deleted meanwhile: the reconnect's cursor is rejected and the rebuilt
+        // snapshot is a single page, so page 2 of the old numbering no longer exists.
+        val remaining = history(150).takeLast(40)
+        backend.after = {
+            throw DashXException(DashXError.GraphQLError(
+                "`after_message_id` is not a visible message of this conversation.",
+                DashXError.GraphQLError.UNPROCESSABLE_ENTITY
+            ))
+        }
+        backend.count = remaining.size
+        backend.pages = pagesOf(remaining)
+        backend.handles[0].onEstablished(true)
+        awaitUntil(what = "rebuilt Ready") { readyIds(lease) == remaining.map { it.id } }
+        assertEquals(false, hasOlderMessages(lease))
+
+        gate.complete(Unit)
+        Thread.sleep(200)
+        assertEquals(remaining.map { it.id }, readyIds(lease))
+        assertEquals("the stale page must not reopen paging", false, hasOlderMessages(lease))
+        session.endSession()
     }
 
     @Test
@@ -523,23 +667,21 @@ class ConversationSessionTest {
     @Test
     fun loadPreviousPage_neverMovesTheReconnectCursorBackward() {
         val backend = FakeBackend()
-        val newest = (51..60).map { msg("m%03d".format(it), it.toLong()) }
-        val oldest = (1..50).map { msg("m%03d".format(it), it.toLong()) }
-        backend.count = 60
-        backend.pages = mapOf(2 to newest, 1 to oldest)
+        backend.count = 100
+        backend.pages = pagesOf(history(100))
 
         val session = ConversationSession(key, backend)
         val lease = session.newLease()!!
         backend.handles[0].onEstablished(false)
-        awaitUntil(what = "newest page Ready") { readyIds(lease)?.size == 10 }
+        awaitUntil(what = "newest page Ready") { readyIds(lease)?.size == 50 }
 
         lease.loadPreviousPage()
-        awaitUntil(what = "older page prepended") { readyIds(lease)?.size == 60 }
+        awaitUntil(what = "older page prepended") { readyIds(lease)?.size == 100 }
 
         backend.after = { emptyList() }
         backend.handles[0].onEstablished(true)
         awaitUntil(what = "cursor fetch") { backend.fetchAfterCursors.size == 1 }
-        assertEquals("the mark is the newest message, not the last-fetched page's tail", "m060", backend.fetchAfterCursors[0])
+        assertEquals("the mark is the newest message, not the last-fetched page's tail", "m100", backend.fetchAfterCursors[0])
     }
 
     @Test
