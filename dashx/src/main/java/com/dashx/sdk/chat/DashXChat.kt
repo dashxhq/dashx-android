@@ -99,7 +99,8 @@ interface DashXConversationLease {
      * operation, and the committed row reports it back as [ChatMessage.clientMessageId].
      *
      * [content] must be `{"text": "<non-empty, at most 4096 characters>"}`; the backend rejects
-     * anything else with a `GraphQLError` (`UNPROCESSABLE_ENTITY`).
+     * anything else with a `GraphQLError` (`UNPROCESSABLE_ENTITY`). After [close], or once the
+     * session has ended, nothing is sent and [onError] receives [DashXError.SessionEnded].
      */
     fun sendMessage(
         content: JsonObject,
@@ -185,6 +186,8 @@ internal interface ChatSessionBackend {
     fun dismissConversationNotifications(conversationId: String)
     /** Read marking requires a foregrounded process, not just a visible lease. */
     fun isAppForeground(): Boolean = true
+    /** The identity session current now; a session opened under another one must not send. */
+    fun sessionGeneration(): Long
 }
 
 internal object DashXChatSessionBackend : ChatSessionBackend {
@@ -241,6 +244,8 @@ internal object DashXChatSessionBackend : ChatSessionBackend {
     }
 
     override fun isAppForeground(): Boolean = DashX.pushRuntime.get().isForeground
+
+    override fun sessionGeneration(): Long = DashX.currentSessionGeneration()
 }
 
 /**
@@ -269,6 +274,12 @@ internal class ConversationSession(
     private val leases = CopyOnWriteArrayList<Lease>()
     private var ended = false
     private val lock = Any()
+    /** The identity session this conversation was opened under. */
+    private val identityGeneration = backend.sessionGeneration()
+
+    /** Not ended, and the identity session it was opened under is still the current one. */
+    private fun canSend(): Boolean =
+        synchronized(lock) { !ended } && backend.sessionGeneration() == identityGeneration
 
     // ---- synchronizer state: confined to [syncLane] ----
     private val buffer = ArrayList<ChatMessage>()
@@ -282,6 +293,12 @@ internal class ConversationSession(
     /** Consecutive transient sync failures; a completed cycle or a fresh acknowledgement resets it. */
     private var syncAttempts = 0
     private var oldestFetchedPage = Int.MAX_VALUE
+    /** One older-page fetch at a time: a slow duplicate finishing late would move
+     * [oldestFetchedPage] back to a newer page. */
+    private var loadingPreviousPage = false
+    /** Advanced each time a snapshot replaces the list: an older page fetched against a replaced
+     * snapshot would leave a gap between it and the new pages. */
+    private var historyGeneration = 0
     /** Newest unconfirmed tail id a resync was already requested for — one request per tail. */
     private var resyncRequestedFor: String? = null
     /** Server-confirmed reconnect cursor: every message through this id is in [messages].
@@ -470,15 +487,23 @@ internal class ConversationSession(
             val acks = acknowledgements
             val count = backend.summarizeMessages(key.conversationId)
             val lastPage = maxOf(1, (count + PAGE_SIZE - 1) / PAGE_SIZE)
-            val candidate = backend.fetchPage(key.conversationId, PAGE_SIZE, lastPage)
-                .sortedWith(ChatMessage.ORDER)
+            var rows = backend.fetchPage(key.conversationId, PAGE_SIZE, lastPage)
+            var oldestPage = lastPage
+            // A short tail page can be a single row; the page before it fills the first screen.
+            if (rows.size < PAGE_SIZE && lastPage > 1) {
+                rows = rows + backend.fetchPage(key.conversationId, PAGE_SIZE, lastPage - 1)
+                oldestPage = lastPage - 1
+            }
+            // Keyed by id: a deletion between the two fetches shifts a row across the page boundary.
+            val candidate = mergeInto(emptyList(), rows)
             if (overtakenByReconnect(acks)) continue
             val (bufferSnapshot, overflowed) = drainBufferAndResumeLive()
             if (overflowed) continue // discard the candidate; repeat with a fresh buffer
             val replacement = mergeInto(candidate, bufferSnapshot)
             messages = replacement
             snapshotDone = true
-            oldestFetchedPage = lastPage
+            historyGeneration += 1
+            oldestFetchedPage = oldestPage
             // From the fetched candidate only: a buffered frame is not server-confirmed — its
             // out-of-order sibling may be missing, and a cursor set past that gap could never
             // recover it. The frames stay displayed and are re-fetched (deduped) on reconnect.
@@ -711,9 +736,13 @@ internal class ConversationSession(
     private fun loadPreviousPageInternal(onError: ((DashXError) -> Unit)?) {
         scope.launch(syncLane) {
             val page = oldestFetchedPage - 1
-            if (!snapshotDone || page < 1) return@launch
+            if (!snapshotDone || page < 1 || loadingPreviousPage) return@launch
+            loadingPreviousPage = true
+            val generation = historyGeneration
             try {
                 val rows = backend.fetchPage(key.conversationId, PAGE_SIZE, page)
+                // Numbered against the replaced snapshot; the next call pages from the new one.
+                if (historyGeneration != generation) return@launch
                 oldestFetchedPage = page
                 applyMerge(rows)
             } catch (t: Throwable) {
@@ -721,6 +750,8 @@ internal class ConversationSession(
                 val error = (t as? com.dashx.android.DashXException)?.error
                     ?: DashXError.NetworkError(t.message ?: "loadPreviousPage failed")
                 onError?.let { cb -> DashX.launchCallback { runCatching { cb(error) } } }
+            } finally {
+                loadingPreviousPage = false
             }
         }
     }
@@ -870,6 +901,12 @@ internal class ConversationSession(
             // Generated BEFORE the network attempt and returned synchronously: the idempotency key a
             // host-triggered retry must reuse.
             val clientMessageId = UUID.randomUUID().toString()
+            // A retained screen must not post into a conversation its lease or identity has left:
+            // the request would carry the next identity's token.
+            if (closed.get() || !canSend()) {
+                DashX.launchCallback { runCatching { onError(DashXError.SessionEnded()) } }
+                return clientMessageId
+            }
             backend.send(
                 identityId = key.chatIdentityId,
                 conversationId = key.conversationId,
