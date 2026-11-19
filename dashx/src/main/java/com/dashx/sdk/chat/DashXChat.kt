@@ -112,6 +112,11 @@ interface DashXConversationLease {
      * current list intact and reports through [onError]. */
     fun loadPreviousPage(onError: ((DashXError) -> Unit)? = null)
 
+    /** Like [loadPreviousPage], with [onComplete] called exactly once on the callback dispatcher,
+     * after [onError] on failure. Also completes when ignored (loading, no older history, closed
+     * or ended), discarded after a history rebuild, or cancelled when the session ends. */
+    fun loadPreviousPage(onError: ((DashXError) -> Unit)?, onComplete: () -> Unit)
+
     /** Declares whether this conversation is on screen: drives read-marking and push suppression. */
     fun setVisible(visible: Boolean)
 
@@ -733,8 +738,12 @@ internal class ConversationSession(
         leases.forEach { it.notifyStateListeners(state) }
     }
 
-    private fun loadPreviousPageInternal(onError: ((DashXError) -> Unit)?) {
-        scope.launch(syncLane) {
+    private fun loadPreviousPageInternal(
+        onError: ((DashXError) -> Unit)?,
+        onComplete: () -> Unit
+    ) {
+        var failure: DashXError? = null
+        val job = scope.launch(syncLane) {
             val page = oldestFetchedPage - 1
             if (!snapshotDone || page < 1 || loadingPreviousPage) return@launch
             loadingPreviousPage = true
@@ -747,11 +756,18 @@ internal class ConversationSession(
                 applyMerge(rows)
             } catch (t: Throwable) {
                 if (t is kotlinx.coroutines.CancellationException) throw t
-                val error = (t as? com.dashx.android.DashXException)?.error
+                failure = (t as? com.dashx.android.DashXException)?.error
                     ?: DashXError.NetworkError(t.message ?: "loadPreviousPage failed")
-                onError?.let { cb -> DashX.launchCallback { runCatching { cb(error) } } }
             } finally {
                 loadingPreviousPage = false
+            }
+        }
+        // A cancelled session may prevent the coroutine body from starting at all. Its completion
+        // hook still runs, and the SDK's callback scope survives session cancellation.
+        job.invokeOnCompletion {
+            DashX.launchCallback {
+                failure?.let { error -> onError?.let { cb -> runCatching { cb(error) } } }
+                runCatching { onComplete() }
             }
         }
     }
@@ -928,7 +944,15 @@ internal class ConversationSession(
         }
 
         override fun loadPreviousPage(onError: ((DashXError) -> Unit)?) {
-            loadPreviousPageInternal(onError)
+            loadPreviousPage(onError, {})
+        }
+
+        override fun loadPreviousPage(onError: ((DashXError) -> Unit)?, onComplete: () -> Unit) {
+            if (closed.get()) {
+                DashX.launchCallback { runCatching { onComplete() } }
+                return
+            }
+            loadPreviousPageInternal(onError, onComplete)
         }
 
         override fun setVisible(visible: Boolean) {

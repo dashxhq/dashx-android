@@ -69,6 +69,7 @@ private class FakeBackend : ChatSessionBackend {
     @Volatile var pageGate: CompletableDeferred<Unit>? = null
     /** The pages [pageGate] holds back; null holds back every page. */
     @Volatile var gatedPages: Set<Int>? = null
+    @Volatile var pageFailure: DashXError? = null
     /** The identity session the fake account is in; a switch moves it. */
     @Volatile var generation = 0L
     /** When set, fetchAfter suspends until completed — the cursor walk stalls mid-flight. */
@@ -99,6 +100,7 @@ private class FakeBackend : ChatSessionBackend {
     override suspend fun fetchPage(conversationId: String, limit: Int, page: Int): List<ChatMessage> {
         fetchPageCalls.add(page)
         if (gatedPages?.contains(page) != false) pageGate?.await()
+        pageFailure?.let { throw DashXException(it) }
         return pages[page] ?: emptyList()
     }
 
@@ -593,6 +595,114 @@ class ConversationSessionTest {
     }
 
     @Test
+    fun loadPreviousPage_completionReportsSuccess_andIgnoredCallsIndependently() {
+        com.dashx.android.DashX.setCallbackDispatcher(kotlinx.coroutines.Dispatchers.Unconfined)
+        val backend = FakeBackend()
+        backend.count = 100
+        backend.pages = pagesOf(history(100))
+        val session = ConversationSession(key, backend)
+        val lease = session.newLease()!!
+        backend.handles[0].onEstablished(false)
+        awaitUntil(what = "newest page Ready") { readyIds(lease)?.size == 50 }
+
+        val gate = CompletableDeferred<Unit>()
+        backend.pageGate = gate
+        val activeCompleted = AtomicInteger(0)
+        val ignoredCompleted = AtomicInteger(0)
+        lease.loadPreviousPage(onError = { fail("active request should succeed") },
+            onComplete = { activeCompleted.incrementAndGet() })
+        awaitUntil(what = "older page in flight") { backend.fetchPageCalls.toList() == listOf(2, 1) }
+        lease.loadPreviousPage(onError = { fail("ignored request cannot fail") },
+            onComplete = { ignoredCompleted.incrementAndGet() })
+        awaitUntil(what = "ignored call completed") { ignoredCompleted.get() == 1 }
+        assertEquals(0, activeCompleted.get())
+
+        gate.complete(Unit)
+        awaitUntil(what = "active call completed") { activeCompleted.get() == 1 }
+        assertEquals(100, readyIds(lease)?.size)
+        lease.loadPreviousPage(onError = null, onComplete = { ignoredCompleted.incrementAndGet() })
+        awaitUntil(what = "no older history completed") { ignoredCompleted.get() == 2 }
+        assertEquals(listOf(2, 1), backend.fetchPageCalls.toList())
+        session.endSession()
+    }
+
+    @Test
+    fun loadPreviousPage_completesEvenWhenTheStateDoesNotChange() {
+        com.dashx.android.DashX.setCallbackDispatcher(kotlinx.coroutines.Dispatchers.Unconfined)
+        val backend = FakeBackend()
+        backend.count = 150
+        backend.pages = pagesOf(history(150))
+        val session = ConversationSession(key, backend)
+        val lease = session.newLease()!!
+        backend.handles[0].onEstablished(false)
+        awaitUntil(what = "newest page Ready") { readyIds(lease)?.size == 50 }
+        val before = lease.state.value
+        // Nothing returned for this page; paging remains true and the displayed state is equal.
+        backend.pages = backend.pages + (2 to emptyList())
+        val completed = AtomicInteger(0)
+        lease.loadPreviousPage(onError = { fail("empty page should not fail") },
+            onComplete = { completed.incrementAndGet() })
+        awaitUntil(what = "unchanged request completed") { completed.get() == 1 }
+        assertSame(before, lease.state.value)
+        assertEquals(listOf(3, 2), backend.fetchPageCalls.toList())
+        session.endSession()
+    }
+
+    @Test
+    fun loadPreviousPage_reportsErrorBeforeCompletion_evenIfTheErrorHandlerThrows() {
+        com.dashx.android.DashX.setCallbackDispatcher(kotlinx.coroutines.Dispatchers.Unconfined)
+        val backend = FakeBackend()
+        backend.count = 100
+        backend.pages = pagesOf(history(100))
+        val session = ConversationSession(key, backend)
+        val lease = session.newLease()!!
+        backend.handles[0].onEstablished(false)
+        awaitUntil(what = "newest page Ready") { readyIds(lease)?.size == 50 }
+
+        backend.pageFailure = DashXError.NetworkError("offline")
+        val events = CopyOnWriteArrayList<String>()
+        lease.loadPreviousPage(onError = { error ->
+            assertTrue(error is DashXError.NetworkError)
+            events.add("error")
+            throw IllegalStateException("host callback threw")
+        }, onComplete = { events.add("complete") })
+        awaitUntil(what = "failure completed") { events.size == 2 }
+        assertEquals(listOf("error", "complete"), events.toList())
+        assertEquals(50, readyIds(lease)?.size)
+        session.endSession()
+    }
+
+    @Test
+    fun loadPreviousPage_completesWhenCancelled_andWhenCalledAfterSessionEnd() {
+        com.dashx.android.DashX.setCallbackDispatcher(kotlinx.coroutines.Dispatchers.Unconfined)
+        val backend = FakeBackend()
+        backend.count = 100
+        backend.pages = pagesOf(history(100))
+        val session = ConversationSession(key, backend)
+        val lease = session.newLease()!!
+        backend.handles[0].onEstablished(false)
+        awaitUntil(what = "newest page Ready") { readyIds(lease)?.size == 50 }
+
+        backend.pageGate = CompletableDeferred()
+        val completed = AtomicInteger(0)
+        val errors = AtomicInteger(0)
+        lease.loadPreviousPage(onError = { errors.incrementAndGet() },
+            onComplete = { completed.incrementAndGet() })
+        awaitUntil(what = "older page in flight") { backend.fetchPageCalls.toList() == listOf(2, 1) }
+        session.endSession()
+        awaitUntil(what = "cancelled request completed") { completed.get() == 1 }
+        lease.loadPreviousPage(onError = { errors.incrementAndGet() },
+            onComplete = { completed.incrementAndGet() })
+        awaitUntil(what = "already ended request completed") { completed.get() == 2 }
+        lease.close()
+        lease.loadPreviousPage(onError = { errors.incrementAndGet() },
+            onComplete = { completed.incrementAndGet() })
+        awaitUntil(what = "closed request completed") { completed.get() == 3 }
+        assertEquals(0, errors.get())
+        assertEquals(listOf(2, 1), backend.fetchPageCalls.toList())
+    }
+
+    @Test
     fun loadPreviousPage_runsOneFetchAtATime() {
         val backend = FakeBackend()
         backend.count = 150
@@ -632,7 +742,9 @@ class ConversationSessionTest {
         val gate = CompletableDeferred<Unit>()
         backend.pageGate = gate
         backend.gatedPages = setOf(2)
-        lease.loadPreviousPage()
+        val completed = AtomicInteger(0)
+        lease.loadPreviousPage(onError = { fail("discarded request should not fail") },
+            onComplete = { completed.incrementAndGet() })
         awaitUntil(what = "older page in flight") { backend.fetchPageCalls.toList() == listOf(3, 2) }
 
         // Messages were deleted meanwhile: the reconnect's cursor is rejected and the rebuilt
@@ -651,7 +763,7 @@ class ConversationSessionTest {
         assertEquals(false, hasOlderMessages(lease))
 
         gate.complete(Unit)
-        Thread.sleep(200)
+        awaitUntil(what = "discarded request completed") { completed.get() == 1 }
         assertEquals(remaining.map { it.id }, readyIds(lease))
         assertEquals("the stale page must not reopen paging", false, hasOlderMessages(lease))
         session.endSession()
