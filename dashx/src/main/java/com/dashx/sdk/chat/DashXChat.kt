@@ -7,6 +7,7 @@ import com.dashx.android.graphql.generated.FetchInAppChatConversationQuery
 import com.dashx.android.graphql.generated.FetchInAppChatConversationsQuery
 import com.dashx.android.graphql.generated.FetchInAppChatMessagesQuery
 import com.dashx.android.graphql.generated.ResolveInAppChatConversationMutation
+import com.dashx.android.realtime.DashXRealtimeChatStream
 import com.dashx.android.realtime.DashXRealtimeMessage
 import com.dashx.android.realtime.DashXRealtimeSubscription
 import com.dashx.android.realtime.RealtimeRuntime
@@ -255,7 +256,8 @@ internal object DashXChatSessionBackend : ChatSessionBackend {
  */
 internal class ConversationSession(
     private val key: ChatSessionKey,
-    private val backend: ChatSessionBackend = DashXChatSessionBackend
+    private val backend: ChatSessionBackend = DashXChatSessionBackend,
+    private val streamTimeouts: ReplyStreamTimeouts = ReplyStreamTimeouts()
 ) {
 
     private val scope = CoroutineScope(SupervisorJob(DashX.chatSessionJob) + Dispatchers.IO)
@@ -287,11 +289,35 @@ internal class ConversationSession(
      * arrive out of order, and a frame-advanced cursor would leap past a lost sibling that no
      * `afterMessageId` walk could ever return. */
     private var lastKnownMessageId: String? = null
+    /** An acknowledgement's sync has not completed: frames sent while disconnected may be
+     * missing, so live messages wait for it rather than show past the gap. */
+    private var reconnectGap = false
+    /** A stream timeout's sync is running on a loaded conversation. Live messages keep showing
+     * meanwhile, so a reply that arrives over the socket is not held back behind the fetch. */
+    private var showLiveDuringSync = false
+    /** Channel acknowledgements so far; a pass that sees this change during its fetch was
+     * overtaken by a reconnect. */
+    private var acknowledgements = 0
+    /** Set by a pass a reconnect overtook: its buffer carries, unshown, into the pass after. */
+    private var carryBuffer = false
 
     // ---- read marking ----
     private var markedMessageId: String? = null
     private val markInFlight = AtomicBoolean(false)
     private var pendingMarkJob: Job? = null
+
+    // ---- streamed reply: confined to [syncLane] ----
+    /** The agent reply being streamed, at most one: a later turn or a retried run replaces it. */
+    private var replyStream: ReplyStreamAccumulator? = null
+    /** The newest run already settled, by its stored reply or an `END` that stored none; its late
+     * frames, and any older run's, are ignored. */
+    private var settledStreamRun: ReplyStreamRun? = null
+    /** The newest run any frame has named. Kept apart from [replyStream], which a reconnect
+     * clears: a superseded run's delayed frames must not come back afterwards. */
+    private var newestStreamRun: ReplyStreamRun? = null
+    /** Pending idle checks of unfinished runs. A frame of the same turn reschedules or cancels
+     * its turn's check and an `END` cancels its run's; a later turn's frames leave it to finish. */
+    private val idleChecks = HashMap<ReplyStreamRun, Job>()
 
     private var subscription: DashXRealtimeSubscription? = null
 
@@ -316,14 +342,30 @@ internal class ConversationSession(
     // ---- realtime ingress (actor thread → lane) ----
 
     private fun onFrame(frame: DashXRealtimeMessage) {
-        val message = (frame as? DashXRealtimeMessage.InAppChatMessage)?.message ?: return
-        val chatMessage = ChatMessage.from(message)
-        scope.launch(syncLane) { mergeLive(chatMessage) }
+        when (frame) {
+            is DashXRealtimeMessage.InAppChatMessage -> {
+                val chatMessage = ChatMessage.from(frame.message)
+                scope.launch(syncLane) { mergeLive(chatMessage) }
+            }
+            is DashXRealtimeMessage.InAppChatStream ->
+                scope.launch(syncLane) { mergeStream(frame.stream) }
+            else -> Unit
+        }
     }
 
     private fun onEstablished(isResubscribe: Boolean) {
         DashXLog.d(TAG, "Channel acknowledged for ${key.conversationId} (isResubscribe=$isResubscribe)")
         scope.launch(syncLane) {
+            // Frames sent while disconnected are gone, an `END` that stored nothing among them,
+            // so an unfinished reply could otherwise stay on screen. A finished one waits for its
+            // stored reply, which the reconcile below fetches if its frame was lost too.
+            if (isResubscribe && replyStream?.isComplete == false) {
+                replyStream = null
+                // Now, not after the reconcile: a failing fetch would otherwise keep it on screen.
+                publishReadyIfShown()
+            }
+            reconnectGap = true
+            acknowledgements += 1
             syncAttempts = 0
             if (syncing) {
                 // A reconnect acknowledged mid-cycle: the running fetch may predate the gap, so
@@ -353,11 +395,17 @@ internal class ConversationSession(
     private fun mergeLive(message: ChatMessage) {
         if (buffering) {
             if (buffer.size >= BUFFER_LIMIT) bufferOverflowed = true else buffer.add(message)
+            // Shown as well as buffered: the fetch still merges it by id. Read marking waits for
+            // the cycle, which marks only through the server-confirmed cursor.
+            if (showsLiveDuringSync()) applyMerge(listOf(message))
             return
         }
         applyMerge(listOf(message))
         maybeMarkRead()
     }
+
+    private fun showsLiveDuringSync() =
+        showLiveDuringSync && !reconnectGap && mutableState.value is ConversationState.Ready
 
     private suspend fun runSync() {
         syncing = true
@@ -368,6 +416,8 @@ internal class ConversationSession(
                 if (!snapshotDone || lastKnownMessageId == null) snapshotAndReplace() else cursorReconcile()
             } while (resyncPending)
             syncAttempts = 0
+            reconnectGap = false
+            showLiveDuringSync = false
         } catch (t: Throwable) {
             if (t is kotlinx.coroutines.CancellationException) throw t
             val error = (t as? com.dashx.android.DashXException)?.error
@@ -417,10 +467,12 @@ internal class ConversationSession(
     private suspend fun snapshotAndReplace() {
         while (true) {
             startBuffering()
+            val acks = acknowledgements
             val count = backend.summarizeMessages(key.conversationId)
             val lastPage = maxOf(1, (count + PAGE_SIZE - 1) / PAGE_SIZE)
             val candidate = backend.fetchPage(key.conversationId, PAGE_SIZE, lastPage)
                 .sortedWith(ChatMessage.ORDER)
+            if (overtakenByReconnect(acks)) continue
             val (bufferSnapshot, overflowed) = drainBufferAndResumeLive()
             if (overflowed) continue // discard the candidate; repeat with a fresh buffer
             val replacement = mergeInto(candidate, bufferSnapshot)
@@ -442,6 +494,7 @@ internal class ConversationSession(
     private suspend fun cursorReconcile() {
         while (true) {
             startBuffering()
+            val acks = acknowledgements
             var cursor = lastKnownMessageId ?: run { snapshotAndReplace(); return }
             val fetched = ArrayList<ChatMessage>()
             try {
@@ -467,6 +520,7 @@ internal class ConversationSession(
                 snapshotAndReplace()
                 return
             }
+            if (overtakenByReconnect(acks)) continue
             val (bufferSnapshot, overflowed) = drainBufferAndResumeLive()
             if (overflowed) continue // restart from the unchanged cursor
             applyMerge(fetched + bufferSnapshot)
@@ -482,8 +536,25 @@ internal class ConversationSession(
     private fun cursorRetryDelay(attempt: Int): Long =
         (CURSOR_RETRY_BASE_MS shl (attempt - 1).coerceAtMost(5)).coerceAtMost(CURSOR_RETRY_MAX_MS)
 
+    /**
+     * A reconnect acknowledged during this pass's fetch: the fetch may predate messages the drop
+     * lost, so neither its rows nor the buffer is shown. The pass repeats from a fetch started
+     * after the acknowledgement, which is the rerun it queued, and the buffer carries into it,
+     * since frames can hold rows a cursor walk does not return.
+     */
+    private fun overtakenByReconnect(acksAtStart: Int): Boolean {
+        if (acknowledgements == acksAtStart) return false
+        carryBuffer = true
+        resyncPending = false
+        return true
+    }
+
     private fun startBuffering() {
         buffering = true
+        if (carryBuffer) {
+            carryBuffer = false
+            return
+        }
         buffer.clear()
         bufferOverflowed = false
     }
@@ -513,11 +584,119 @@ internal class ConversationSession(
         return byId.values.sortedWith(ChatMessage.ORDER)
     }
 
-    /** Publishes the current list and paging flag; a no-op when neither changed. */
+    /** Publishes the current list, paging flag and streamed reply; a no-op when none changed. */
     private fun publishReady() {
-        val next = ConversationState.Ready(messages, hasOlderMessages = oldestFetchedPage > 1)
+        settleAnsweredStream()
+        val next = ConversationState.Ready(
+            messages,
+            hasOlderMessages = oldestFetchedPage > 1,
+            streamingReply = replyStream?.reply
+        )
         if (mutableState.value == next) return
         publishState(next)
+    }
+
+    // ---- streamed reply (all lane-confined) ----
+
+    /** Frames of one run in order; a later turn or a retried run of the same turn replaces the
+     * current one. Published only while the state is [ConversationState.Ready]. */
+    private fun mergeStream(frame: DashXRealtimeChatStream) {
+        val run = ReplyStreamRun(frame.turnSeq, frame.run)
+        // Before the run checks, which drop a run a later turn or a newer run has ended: its
+        // `END` still replaces the idle fallback. Nothing was stored, or the stored reply is in
+        // history and fetched if its frame does not follow.
+        if (frame.kind == DashXRealtimeChatStream.Kind.END) {
+            idleChecks.remove(run)?.cancel()
+            if (frame.persisted == true) fetchStoredReplyIfMissing(run)
+        }
+        settledStreamRun?.let { if (run <= it) return }
+        newestStreamRun?.let { if (run < it) return }
+        newestStreamRun = run
+        if (replyStream?.run != run) replyStream = ReplyStreamAccumulator(run)
+
+        when (frame.kind) {
+            DashXRealtimeChatStream.Kind.DELTA ->
+                replyStream?.add(frame.seq, frame.responseId, frame.text.orEmpty())
+            DashXRealtimeChatStream.Kind.END ->
+                if (frame.persisted == true) replyStream?.complete(deltaCount = frame.seq) else settleStream()
+        }
+        armStreamTimeout(run)
+        publishReadyIfShown()
+    }
+
+    /** A conversation showing `Loading` or `Error` keeps it: a stream change alone must not
+     * replace an error with a stale list. */
+    private fun publishReadyIfShown() {
+        if (mutableState.value is ConversationState.Ready) publishReady()
+    }
+
+    /**
+     * A lost frame must not leave a preview up forever. An unfinished run that goes quiet is
+     * hidden but kept, since a tool call sends nothing for a while and its answer may still
+     * stream, and history is reconciled in case its `END` was lost. A finished run is left to
+     * [fetchStoredReplyIfMissing].
+     *
+     * The check outlives the preview: a later turn ends the preview, but the run's reply may be
+     * in history with its `END` and stored frame both lost, as a lagging socket drops frames
+     * without reconnecting. Only hiding depends on the run still being shown.
+     */
+    private fun armStreamTimeout(run: ReplyStreamRun) {
+        idleChecks.keys.filter { it.turnSeq == run.turnSeq }
+            .forEach { idleChecks.remove(it)?.cancel() }
+        if (replyStream?.run != run || replyStream?.isComplete != false) return
+        idleChecks[run] = scope.launch(syncLane) {
+            delay(streamTimeouts.idleMs)
+            idleChecks.remove(run)
+            if (hasStoredReply(run.turnSeq)) return@launch
+            if (replyStream?.run == run) replyStream?.hide()
+            reconcileAfterStreamTimeout()
+        }
+    }
+
+    /**
+     * A finished run's reply is in history, so its fetch outlives the preview: a later turn or a
+     * newer run ends the preview, not this. Skipped once the stored reply has arrived; otherwise
+     * the preview, if still this run's, is dropped.
+     */
+    private fun fetchStoredReplyIfMissing(run: ReplyStreamRun) {
+        scope.launch(syncLane) {
+            delay(streamTimeouts.storedReplyGraceMs)
+            if (hasStoredReply(run.turnSeq)) return@launch
+            if (replyStream?.run == run) settleStream()
+            reconcileAfterStreamTimeout()
+        }
+    }
+
+    private fun reconcileAfterStreamTimeout() {
+        if (mutableState.value is ConversationState.Ready) showLiveDuringSync = true
+        // A first load still in flight may predate the stored reply, so it is followed by a
+        // reconcile too. One not yet started fetches everything when it runs.
+        if (snapshotDone || syncing) requestResync()
+        publishReadyIfShown()
+    }
+
+    /** The stored reply replaces the stream, whether it arrived before the stream's frames or
+     * after. A later turn ends it too: the server stores a visible reply only while its turn is
+     * current. */
+    private fun settleAnsweredStream() {
+        val turnSeq = replyStream?.run?.turnSeq ?: return
+        val overtaken = messages.lastOrNull()?.let { it.turnSeq > turnSeq } == true
+        if (overtaken || hasStoredReply(turnSeq)) settleStream()
+    }
+
+    private fun settleStream() {
+        val run = replyStream?.run ?: return
+        settledStreamRun = maxOf(settledStreamRun ?: run, run)
+        replyStream = null
+    }
+
+    /** [messages] is ordered by turn, so the scan stops at the first earlier turn. */
+    private fun hasStoredReply(turnSeq: Long): Boolean {
+        for (message in messages.asReversed()) {
+            if (message.turnSeq < turnSeq) return false
+            if (message.turnSeq == turnSeq && !message.isFromVisitor) return true
+        }
+        return false
     }
 
     private fun publishState(state: ConversationState) {
@@ -742,4 +921,63 @@ internal class ConversationSession(
         private const val CURSOR_RETRY_BASE_MS = 1_000L
         private const val CURSOR_RETRY_MAX_MS = 30_000L
     }
+}
+
+/** Identifies one reply run: the turn it answers, then the run number a retry raises. */
+internal data class ReplyStreamRun(val turnSeq: Long, val run: Long) : Comparable<ReplyStreamRun> {
+    override fun compareTo(other: ReplyStreamRun): Int =
+        compareValuesBy(this, other, { it.turnSeq }, { it.run })
+}
+
+internal class ReplyStreamTimeouts(
+    /** Quiet time after which an unfinished run is hidden. */
+    val idleMs: Long = 20_000L,
+    /** Time a finished run waits for its stored reply before it is dropped. */
+    val storedReplyGraceMs: Long = 5_000L
+)
+
+/**
+ * The deltas of one reply run. Text is read up to the first missing `seq`, so a lost frame never
+ * shows as a hole, and only the run's last model response counts: earlier ones are text produced
+ * before a tool call.
+ */
+internal class ReplyStreamAccumulator(val run: ReplyStreamRun) {
+    private class Delta(val responseId: String?, val text: String)
+
+    private val deltas = HashMap<Int, Delta>()
+    var isComplete = false
+        private set
+    /** Deltas the run sent, from its `END`'s `seq`; fewer received means one was lost. */
+    private var expectedDeltaCount: Int? = null
+    /** Gone quiet; a new delta or its `END` shows it again. */
+    private var isHidden = false
+
+    fun add(seq: Int, responseId: String?, text: String) {
+        if (deltas.containsKey(seq)) return
+        deltas[seq] = Delta(responseId, text)
+        isHidden = false
+    }
+
+    fun complete(deltaCount: Int) {
+        isComplete = true
+        expectedDeltaCount = deltaCount
+        isHidden = false
+    }
+
+    fun hide() {
+        isHidden = true
+    }
+
+    val reply: ChatStreamingReply?
+        get() {
+            if (isHidden) return null
+            val contiguous = ArrayList<Delta>()
+            while (true) contiguous += deltas[contiguous.size] ?: break
+            // A finished run missing a delta would present truncated text as the whole reply; it
+            // stays hidden until the delta arrives or the stored reply replaces it.
+            expectedDeltaCount?.let { if (contiguous.size < it) return null }
+            val last = contiguous.lastOrNull() ?: return null
+            val text = contiguous.filter { it.responseId == last.responseId }.joinToString("") { it.text }
+            return if (text.isEmpty()) null else ChatStreamingReply(run.turnSeq, text, isComplete)
+        }
 }
